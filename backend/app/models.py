@@ -113,3 +113,13 @@ class ResearchCache(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+class CostLog(Base):
+    __tablename__ = "cost_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    generation_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("generations.id"), nullable=True)
+    operation: Mapped[str] = mapped_column(String(50)) # e.g., 'pattern_extraction', 'draft_generation', 'quality_check'
+    prompt_tokens: Mapped[int] = mapped_column(default=0)
+    completion_tokens: Mapped[int] = mapped_column(default=0)
+    estimated_cost_usd: Mapped[float] = mapped_column(default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

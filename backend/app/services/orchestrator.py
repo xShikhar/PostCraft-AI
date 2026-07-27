@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models import Generation, StyleProfile
+from app.models import Generation, StyleProfile, CostLog
 from app.schemas.orchestrator import PipelineState, ExtractedPattern, GeneratedDrafts
 from app.services.research import cascading_search
 from app.services.vector import vector_service
@@ -40,6 +40,23 @@ class PostGenerationPipeline:
         self.session = session
         self.settings = get_settings()
         self.client = genai.Client(api_key=self.settings.GEMINI_API_KEY) if self.settings.GEMINI_API_KEY else None
+
+    async def _log_cost(self, operation: str, response, generation_id=None):
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            prompt_tokens = response.usage_metadata.prompt_token_count
+            completion_tokens = response.usage_metadata.candidates_token_count
+            # Gemini 1.5 Flash pricing: $0.075 / 1M prompt, $0.30 / 1M completion
+            cost = (prompt_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.30)
+            
+            cost_log = CostLog(
+                generation_id=generation_id,
+                operation=operation,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                estimated_cost_usd=cost
+            )
+            self.session.add(cost_log)
+            # Commit will happen during node_save_generation or natural flow
 
     async def run(self, state: PipelineState) -> PipelineState:
         """Executes the pipeline using a dynamic state machine loop."""
@@ -164,6 +181,7 @@ class PostGenerationPipeline:
             contents=prompt,
             config=types.GenerateContentConfig(tools=[extract_tool])
         )
+        await self._log_cost("pattern_extraction", response, state.generation_id)
 
         extracted = None
         if response.function_calls:
@@ -249,6 +267,7 @@ class PostGenerationPipeline:
                 response_schema=GeneratedDrafts,
             )
         )
+        await self._log_cost("draft_generation", response, state.generation_id)
         
         # Log Tokens/Cost
         if response.usage_metadata:
@@ -296,6 +315,7 @@ class PostGenerationPipeline:
             model="gemini-2.5-flash",
             contents=prompt
         )
+        await self._log_cost("quality_check", response, state.generation_id)
         
         if response.text and response.text.startswith("FAIL"):
             state.quality_results = response.text.strip()
