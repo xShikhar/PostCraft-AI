@@ -1,0 +1,28 @@
+[project]
+name = "postcraft-backend"
+version = "0.1.0"
+description = "FastAPI backend for PostCraft AI"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "httpx",
+    "chromadb>=0.4.24",
+    "google-genai>=0.1.2",
+    "passlib[argon2]>=1.7.4",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.9"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx"
+]

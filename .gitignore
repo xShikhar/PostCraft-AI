@@ -1,0 +1,49 @@
+# PostCraft AI — Root .gitignore
+
+# ─── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# ─── Node / Next.js ─────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+
+# ─── Environment ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── IDE ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Docker ──────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Testing / Coverage ─────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ─── Misc ────────────────────────────────────────────
+*.log
+*.bak
