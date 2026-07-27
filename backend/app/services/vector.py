@@ -7,9 +7,20 @@ logger = logging.getLogger(__name__)
 
 class VectorService:
     def __init__(self):
-        settings = get_settings()
-        self.client = chromadb.PersistentClient(path="./chroma_db")
-        self.collection = self.client.get_or_create_collection(name="style_profiles")
+        self._client = None
+        self._collection = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = chromadb.PersistentClient(path="./chroma_db")
+        return self._client
+
+    @property
+    def collection(self):
+        if self._collection is None:
+            self._collection = self.client.get_or_create_collection(name="style_profiles")
+        return self._collection
 
     def save_style_profile(self, profile_id: str, user_id: str, platform: str, style_text: str):
         try:

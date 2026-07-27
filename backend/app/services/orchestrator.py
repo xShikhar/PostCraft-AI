@@ -45,8 +45,8 @@ class PostGenerationPipeline:
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             prompt_tokens = response.usage_metadata.prompt_token_count
             completion_tokens = response.usage_metadata.candidates_token_count
-            # Gemini 1.5 Flash pricing: $0.075 / 1M prompt, $0.30 / 1M completion
-            cost = (prompt_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.30)
+            # Gemini 2.5 Flash pricing: $0.30 / 1M prompt, $2.50 / 1M completion
+            cost = (prompt_tokens / 1_000_000 * 0.30) + (completion_tokens / 1_000_000 * 2.50)
             
             cost_log = CostLog(
                 generation_id=generation_id,

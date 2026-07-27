@@ -83,34 +83,34 @@ async def _search_tavily(query: str, api_key: str) -> List[str]:
             logger.error(f"Tavily search failed: {response.text}")
             return []
 
-async def _search_brave(query: str, api_key: str) -> List[str]:
+async def _search_serp_api(query: str, api_key: str) -> List[str]:
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            params={"q": query, "count": 5},
-            headers={
-                "Accept": "application/json",
-                "X-Subscription-Token": api_key
+            "https://serpapi.com/search",
+            params={
+                "q": query,
+                "api_key": api_key,
+                "engine": "google"
             },
             timeout=15.0
         )
         if response.status_code == 200:
             data = response.json()
             results = []
-            for r in data.get("web", {}).get("results", []):
-                snippet = r.get("description") or r.get("snippet", "")
+            for r in data.get("organic_results", [])[:5]:
+                snippet = r.get("snippet") or r.get("title", "")
                 if snippet:
                     results.append(snippet)
             return results
         else:
-            logger.error(f"Brave search failed: {response.text}")
+            logger.error(f"SerpApi search failed: {response.text}")
             return []
 
 async def _perform_search(query: str, settings) -> List[str]:
     if settings.TAVILY_API_KEY:
         return await _search_tavily(query, settings.TAVILY_API_KEY)
-    elif settings.BRAVE_SEARCH_API_KEY:
-        return await _search_brave(query, settings.BRAVE_SEARCH_API_KEY)
+    elif settings.SERP_API_KEY:
+        return await _search_serp_api(query, settings.SERP_API_KEY)
     return []
 
 async def _generate_synthetic_structure(topic: str, platform: str, settings) -> List[str]:
@@ -145,7 +145,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
     if cached_result:
         return cached_result
 
-    has_search_keys = bool(settings.TAVILY_API_KEY or settings.BRAVE_SEARCH_API_KEY)
+    has_search_keys = bool(settings.TAVILY_API_KEY or settings.SERP_API_KEY)
     
     snippets = []
     source = None

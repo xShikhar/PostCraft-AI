@@ -11,7 +11,13 @@ import os
 # Set environment variables for tests to avoid "API Key missing" short circuits
 os.environ["GEMINI_API_KEY"] = "mock_gemini_key"
 os.environ["TAVILY_API_KEY"] = "mock_tavily_key"
-os.environ["BRAVE_SEARCH_API_KEY"] = "mock_brave_key"
+os.environ["SERP_API_KEY"] = "mock_serp_key"
+
+import unittest.mock as mock
+
+# Globally mock chromadb to prevent downloading the embedding model
+patcher = mock.patch("app.services.vector.chromadb")
+mock_chromadb = patcher.start()
 
 from app.config import get_settings
 get_settings.cache_clear()
