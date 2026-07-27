@@ -129,24 +129,6 @@ postcraft-ai/
     └── src/
 ```
 
----
-
-## Build Phases
-
-- [x] **Phase 0** — Foundation (monorepo, Docker Compose, hello-world)
-- [ ] **Phase 1** — Database & Schema
-- [ ] **Phase 2** — Research Tool
-- [ ] **Phase 3** — Style Extractor
-- [ ] **Phase 4** — Writer Tool
-- [ ] **Phase 5** — Orchestrator Agent
-- [ ] **Phase 6** — Quality Checker + Editor
-- [ ] **Phase 7** — Memory
-- [ ] **Phase 8** — Frontend (Next.js)
-- [ ] **Phase 9** — Auth & Multi-user
-- [ ] **Phase 10** — Deployment
-- [ ] **Phase 11** — Testing & Hardening
-
----
 
 ## License
 
