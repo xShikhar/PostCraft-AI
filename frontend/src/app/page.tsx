@@ -7,6 +7,28 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type SourceItem = { title: string; snippet: string; url: string };
 
 export default function Home() {
+  // Markdown to HTML renderer
+  const renderMarkdown = (text: string): string => {
+    if (!text) return '';
+    let html = text
+      // Escape HTML entities
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // Headings (### h3, ## h2, # h1)
+      .replace(/^### (.+)$/gm, '<h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary); font-size: 1rem;">$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3 style="margin: 1.2rem 0 0.5rem; color: var(--text-primary); font-size: 1.1rem;">$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2 style="margin: 1.2rem 0 0.5rem; color: var(--text-primary); font-size: 1.2rem;">$1</h2>')
+      // Bold: **text**
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color: var(--text-primary);">$1</strong>')
+      // Italic: *text*
+      .replace(/(?<![*])\*(?![*])(.+?)(?<![*])\*(?![*])/g, '<em>$1</em>')
+      // Bullet points: * item or - item
+      .replace(/^[*\-] (.+)$/gm, '<li style="margin: 0.25rem 0; margin-left: 1.5rem; list-style: disc;">$1</li>')
+      // Line breaks
+      .replace(/\n/g, '<br/>');
+    return html;
+  };
   // Auth State
   const [token, setToken] = useState<string | null>(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -329,7 +351,7 @@ export default function Home() {
                       <button type="button" className="btn-copy" onClick={() => copyToClipboard(text)}>Copy</button>
                     </div>
                   </div>
-                  <div className="draft-content">{text}</div>
+                  <div className="draft-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
                 </div>
               );
             })}
@@ -349,7 +371,7 @@ export default function Home() {
                     <button type="button" className="btn-copy" onClick={() => copyToClipboard(drafts[`draft_${activeDraftIndex}` as keyof Drafts])}>Copy</button>
                   </div>
                 </div>
-                <div className="draft-content">{drafts[`draft_${activeDraftIndex}` as keyof Drafts]}</div>
+                <div className="draft-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(drafts[`draft_${activeDraftIndex}` as keyof Drafts]) }} />
                 
                 {!isFinalized && (
                   <button type="button" className="btn-success" onClick={handleFinalize} disabled={loading}>
