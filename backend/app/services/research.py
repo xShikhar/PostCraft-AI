@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models import ResearchCache
-from app.schemas.research import ResearchResult
+from app.schemas.research import ResearchResult, SourceItem
 from app.config import get_settings
 
 from google import genai
@@ -57,7 +57,7 @@ async def _save_cache(topic: str, platform: str, snippets: List[str], session: A
     session.add(cache_entry)
     await session.commit()
 
-async def _search_tavily(query: str, api_key: str) -> List[str]:
+async def _search_tavily(query: str, api_key: str) -> tuple[List[str], List[SourceItem]]:
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "https://api.tavily.com/search",
@@ -73,17 +73,23 @@ async def _search_tavily(query: str, api_key: str) -> List[str]:
         )
         if response.status_code == 200:
             data = response.json()
-            results = []
+            snippets = []
+            sources = []
             for r in data.get("results", []):
                 content = r.get("raw_content") or r.get("content", "")
                 if content:
-                    results.append(content)
-            return results
+                    snippets.append(content)
+                    sources.append(SourceItem(
+                        title=r.get("title", ""),
+                        snippet=r.get("content", content[:200]),
+                        url=r.get("url", "")
+                    ))
+            return snippets, sources
         else:
             logger.error(f"Tavily search failed: {response.text}")
-            return []
+            return [], []
 
-async def _search_serp_api(query: str, api_key: str) -> List[str]:
+async def _search_serp_api(query: str, api_key: str) -> tuple[List[str], List[SourceItem]]:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             "https://serpapi.com/search",
@@ -96,22 +102,28 @@ async def _search_serp_api(query: str, api_key: str) -> List[str]:
         )
         if response.status_code == 200:
             data = response.json()
-            results = []
+            snippets = []
+            sources = []
             for r in data.get("organic_results", [])[:5]:
                 snippet = r.get("snippet") or r.get("title", "")
                 if snippet:
-                    results.append(snippet)
-            return results
+                    snippets.append(snippet)
+                    sources.append(SourceItem(
+                        title=r.get("title", ""),
+                        snippet=snippet[:200],
+                        url=r.get("link", "")
+                    ))
+            return snippets, sources
         else:
             logger.error(f"SerpApi search failed: {response.text}")
-            return []
+            return [], []
 
-async def _perform_search(query: str, settings) -> List[str]:
+async def _perform_search(query: str, settings) -> tuple[List[str], List[SourceItem]]:
     if settings.TAVILY_API_KEY:
         return await _search_tavily(query, settings.TAVILY_API_KEY)
     elif settings.SERP_API_KEY:
         return await _search_serp_api(query, settings.SERP_API_KEY)
-    return []
+    return [], []
 
 async def _generate_synthetic_structure(topic: str, platform: str, settings) -> List[str]:
     if not settings.GEMINI_API_KEY:
@@ -148,6 +160,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
     has_search_keys = bool(settings.TAVILY_API_KEY or settings.SERP_API_KEY)
     
     snippets = []
+    sources = []
     source = None
     confidence = "low"
 
@@ -159,7 +172,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
             site_modifier = "site:linkedin.com/in/" if platform.lower() == "linkedin" else "site:x.com/"
             creator_query = " OR ".join([f"{site_modifier}{c.replace(' ', '').lower()}" for c in creators[:3]])
             query = f"{topic} ({creator_query})"
-            snippets = await _perform_search(query, settings)
+            snippets, sources = await _perform_search(query, settings)
             if snippets:
                 source = "curated_search"
                 confidence = "high"
@@ -167,7 +180,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
         # 3. General Search Fallback
         if not snippets:
             query = f"{topic} {platform} post examples"
-            snippets = await _perform_search(query, settings)
+            snippets, sources = await _perform_search(query, settings)
             if snippets:
                 source = "general_search"
                 confidence = "medium"
@@ -175,6 +188,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
     # 4. Model Synthetic Structure
     if not snippets:
         snippets = await _generate_synthetic_structure(topic, platform, settings)
+        sources = []  # No URLs for synthetic content
         if snippets:
             source = "synthetic_structure"
             confidence = "low"
@@ -186,6 +200,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
             topic=topic,
             platform=platform,
             content_snippets=snippets,
+            sources=sources,
             confidence=confidence,
             source=source
         )
@@ -195,6 +210,7 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
         topic=topic,
         platform=platform,
         content_snippets=["No data could be retrieved from search or model."],
+        sources=[],
         confidence="low",
         source="synthetic_structure"
     )

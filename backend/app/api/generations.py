@@ -55,11 +55,24 @@ async def generate_post(req: GenerateRequest, session: AsyncSession = Depends(ge
     pipeline = PostGenerationPipeline(session)
     final_state = await pipeline.run(state)
 
+    # Build sources list from research result
+    sources = []
+    research_confidence = None
+    research_source = None
+    if final_state.research_result:
+        research_confidence = final_state.research_result.confidence
+        research_source = final_state.research_result.source
+        for s in final_state.research_result.sources:
+            sources.append({"title": s.title, "snippet": s.snippet, "url": s.url})
+
     return GenerateResponse(
         generation_id=final_state.generation_id,
         status=final_state.error if final_state.error else ("needs_review" if final_state.quality_results and not final_state.quality_results.startswith("PASS") else "editing"),
         draft_1=final_state.drafts.draft_1 if final_state.drafts else None,
         draft_2=final_state.drafts.draft_2 if final_state.drafts else None,
         draft_3=final_state.drafts.draft_3 if final_state.drafts else None,
+        sources=sources,
+        research_confidence=research_confidence,
+        research_source=research_source,
         error=final_state.error
     )

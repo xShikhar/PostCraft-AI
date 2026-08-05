@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 
 type Drafts = { draft_1: string; draft_2: string; draft_3: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type SourceItem = { title: string; snippet: string; url: string };
 
 export default function Home() {
   // Auth State
@@ -30,6 +31,11 @@ export default function Home() {
   const [editInstruction, setEditInstruction] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isFinalized, setIsFinalized] = useState(false);
+
+  // Sources State
+  const [sources, setSources] = useState<SourceItem[]>([]);
+  const [researchConfidence, setResearchConfidence] = useState<string | null>(null);
+  const [researchSource, setResearchSource] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("postcraft_token");
@@ -91,6 +97,9 @@ export default function Home() {
     setActiveDraftIndex(null);
     setChatHistory([]);
     setIsFinalized(false);
+    setSources([]);
+    setResearchConfidence(null);
+    setResearchSource(null);
 
     try {
       const response = await fetch("http://localhost:8000/api/generations", {
@@ -115,6 +124,9 @@ export default function Home() {
         draft_2: data.draft_2,
         draft_3: data.draft_3,
       });
+      setSources(data.sources || []);
+      setResearchConfidence(data.research_confidence || null);
+      setResearchSource(data.research_source || null);
       
     } catch (err: any) {
       setError(err.message);
@@ -249,6 +261,58 @@ export default function Home() {
             </button>
             {error && <div className="error-message">{error}</div>}
           </form>
+        )}
+
+        {drafts && !activeDraftIndex && sources.length > 0 && (
+          <div className="card" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>📎 Research Sources</h3>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {researchConfidence && (
+                  <span className="finalized-badge" style={{
+                    background: researchConfidence === 'high' ? 'rgba(34, 197, 94, 0.2)' : researchConfidence === 'medium' ? 'rgba(250, 204, 21, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                    color: researchConfidence === 'high' ? '#22c55e' : researchConfidence === 'medium' ? '#facc15' : '#ef4444',
+                  }}>
+                    {researchConfidence} confidence
+                  </span>
+                )}
+                {researchSource && (
+                  <span className="finalized-badge" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8' }}>
+                    {researchSource.replace('_', ' ')}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {sources.map((src, i) => (
+                <div key={i} style={{
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  borderLeft: '3px solid var(--accent-primary)',
+                }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+                    {src.title || `Source ${i + 1}`}
+                  </div>
+                  {src.snippet && (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.4rem', lineHeight: '1.4' }}>
+                      {src.snippet}
+                    </div>
+                  )}
+                  {src.url && (
+                    <a href={src.url} target="_blank" rel="noopener noreferrer" style={{
+                      color: 'var(--accent-primary)',
+                      fontSize: '0.8rem',
+                      textDecoration: 'none',
+                      wordBreak: 'break-all',
+                    }}>
+                      {src.url}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {drafts && !activeDraftIndex && (
