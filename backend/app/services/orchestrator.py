@@ -253,7 +253,7 @@ class PostGenerationPipeline:
         
         CRITICAL INSTRUCTIONS FOR NATIVE {state.platform.upper()} FORMATTING:
         1. Write a real social media post, NOT a corporate blog article.
-        2. Use short, punchy paragraphs (1-3 sentences max). Use line breaks generously to create whitespace.
+        2. If the user does not specify a word limit or sentence count, keep the post concise (around 4-5 lines). Otherwise, strictly follow their requested length. Use line breaks to create whitespace.
         3. DO NOT use markdown headings like # or ## or ###.
         4. NEVER add promotional CTAs like "Contact sales", "Click the link", or "Book a demo" unless specifically requested in the raw thoughts. If a CTA is needed, end with a conversational question to drive engagement.
         5. Keep it authentic, human, and relatable. Avoid corporate jargon.
