@@ -14,14 +14,21 @@ export function useAuth() {
     }
     setIsInitializing(false);
 
-    // Listen for custom expiration event from api client
     const handleAuthExpired = () => {
       setToken(null);
       toast.error("Session expired. Please log in again.");
     };
 
+    const handleAuthChanged = () => {
+      setToken(localStorage.getItem("postcraft_token"));
+    };
+
     window.addEventListener("auth-expired", handleAuthExpired);
-    return () => window.removeEventListener("auth-expired", handleAuthExpired);
+    window.addEventListener("auth-changed", handleAuthChanged);
+    return () => {
+      window.removeEventListener("auth-expired", handleAuthExpired);
+      window.removeEventListener("auth-changed", handleAuthChanged);
+    };
   }, []);
 
   const login = async (username: string, password: string) => {
@@ -30,6 +37,7 @@ export function useAuth() {
       const data = await apiLogin(username, password);
       localStorage.setItem("postcraft_token", data.access_token);
       setToken(data.access_token);
+      window.dispatchEvent(new Event("auth-changed"));
       toast.success("Welcome back!");
       return true;
     } catch (err: any) {
@@ -46,6 +54,7 @@ export function useAuth() {
       const data = await apiSignup(username, password);
       localStorage.setItem("postcraft_token", data.access_token);
       setToken(data.access_token);
+      window.dispatchEvent(new Event("auth-changed"));
       toast.success("Account created successfully!");
       return true;
     } catch (err: any) {
@@ -59,6 +68,7 @@ export function useAuth() {
   const logout = () => {
     localStorage.removeItem("postcraft_token");
     setToken(null);
+    window.dispatchEvent(new Event("auth-changed"));
     toast("Logged out successfully");
   };
 
