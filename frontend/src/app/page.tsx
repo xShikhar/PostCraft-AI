@@ -11,24 +11,19 @@ export default function Home() {
   const renderMarkdown = (text: string): string => {
     if (!text) return '';
     let html = text
-      // Escape HTML entities
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      // Headings (### h3, ## h2, # h1)
       .replace(/^### (.+)$/gm, '<h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary); font-size: 1rem;">$1</h4>')
       .replace(/^## (.+)$/gm, '<h3 style="margin: 1.2rem 0 0.5rem; color: var(--text-primary); font-size: 1.1rem;">$1</h3>')
       .replace(/^# (.+)$/gm, '<h2 style="margin: 1.2rem 0 0.5rem; color: var(--text-primary); font-size: 1.2rem;">$1</h2>')
-      // Bold: **text**
       .replace(/\*\*(.+?)\*\*/g, '<strong style="color: var(--text-primary);">$1</strong>')
-      // Italic: *text*
       .replace(/(?<![*])\*(?![*])(.+?)(?<![*])\*(?![*])/g, '<em>$1</em>')
-      // Bullet points: * item or - item
       .replace(/^[*\-] (.+)$/gm, '<li style="margin: 0.25rem 0; margin-left: 1.5rem; list-style: disc;">$1</li>')
-      // Line breaks
       .replace(/\n/g, '<br/>');
     return html;
   };
+
   // Auth State
   const [token, setToken] = useState<string | null>(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -43,6 +38,7 @@ export default function Home() {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingStep, setLoadingStep] = useState(0);
   
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Drafts | null>(null);
@@ -58,11 +54,29 @@ export default function Home() {
   const [sources, setSources] = useState<SourceItem[]>([]);
   const [researchConfidence, setResearchConfidence] = useState<string | null>(null);
   const [researchSource, setResearchSource] = useState<string | null>(null);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("postcraft_token");
     if (saved) setToken(saved);
   }, []);
+
+  // Cycling loading text
+  useEffect(() => {
+    if (loading) {
+      const steps = [
+        "Researching...",
+        "Analyzing Patterns...",
+        "Generating Drafts...",
+        "Quality Check..."
+      ];
+      setLoadingStep(0);
+      const interval = setInterval(() => {
+        setLoadingStep(prev => (prev + 1) % steps.length);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loading]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +86,6 @@ export default function Home() {
     try {
       let body, headers;
       if (isLoginMode) {
-        // OAuth2PasswordRequestForm requires x-www-form-urlencoded
         body = new URLSearchParams();
         body.append("username", username);
         body.append("password", password);
@@ -149,6 +162,7 @@ export default function Home() {
       setSources(data.sources || []);
       setResearchConfidence(data.research_confidence || null);
       setResearchSource(data.research_source || null);
+      setSourcesExpanded(data.sources && data.sources.length > 0);
       
     } catch (err: any) {
       setError(err.message);
@@ -221,12 +235,18 @@ export default function Home() {
 
   if (!token) {
     return (
-      <div className="container" style={{ maxWidth: '400px', marginTop: '10vh' }}>
-        <div className="header">
-          <h1>PostCraft AI</h1>
-          <p>{isLoginMode ? "Log in to your account" : "Create a new account"}</p>
-        </div>
-        <form className="card" onSubmit={handleAuth}>
+      <div className="login-page">
+        <div className="orb orb-1"></div>
+        <div className="orb orb-2"></div>
+        <div className="orb orb-3"></div>
+        
+        <h1 className="glowing-logo">PostCraft AI</h1>
+        <p className="login-tagline">AI-Powered Content That Sounds Like You</p>
+        
+        <form className="card login-card" onSubmit={handleAuth}>
+          <h2 style={{ marginBottom: '1.5rem', textAlign: 'center', fontSize: '1.5rem', fontWeight: '600' }}>
+            {isLoginMode ? "Welcome Back" : "Join PostCraft AI"}
+          </h2>
           <div className="form-group">
             <label>Username</label>
             <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} required />
@@ -235,160 +255,219 @@ export default function Home() {
             <label>Password</label>
             <input type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
-          <button type="submit" className="btn-primary" style={{ width: '100%', marginBottom: '1rem' }}>
+          <button type="submit" className="btn-primary" style={{ marginBottom: '1rem' }}>
             {isLoginMode ? "Log In" : "Sign Up"}
           </button>
           {authError && <div className="error-message" style={{ marginBottom: '1rem' }}>{authError}</div>}
           <div style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
             {isLoginMode ? "Don't have an account? " : "Already have an account? "}
-            <a href="#" onClick={(e) => { e.preventDefault(); setIsLoginMode(!isLoginMode); setAuthError(""); }} style={{ color: 'var(--accent-primary)' }}>
+            <a href="#" onClick={(e) => { e.preventDefault(); setIsLoginMode(!isLoginMode); setAuthError(""); }} style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontWeight: '500' }}>
               {isLoginMode ? "Sign up" : "Log in"}
             </a>
           </div>
         </form>
+
+        <div className="features-list">
+          <div className="feature-item">
+            <div className="feature-icon">✨</div>
+            <span>Smart Formatting</span>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon">🎯</div>
+            <span>Platform specific</span>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon">⚡</div>
+            <span>Instant Drafts</span>
+          </div>
+        </div>
       </div>
     );
   }
 
+  const steps = [
+    "Researching...",
+    "Analyzing Patterns...",
+    "Generating Drafts...",
+    "Quality Check..."
+  ];
+
   return (
-    <div className="container">
-      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>PostCraft AI</h1>
-          <p>Transform your raw thoughts into high-performing social posts.</p>
-        </div>
-        <button onClick={handleLogout} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>Log Out</button>
-      </div>
+    <>
+      <div className="orb orb-1"></div>
+      <div className="orb orb-2"></div>
+      
+      <div className="dashboard">
+        <nav className="navbar">
+          <div className="logo-area">
+            <h1 className="logo-title">PostCraft AI</h1>
+            <p className="logo-tagline">Transform your raw thoughts into high-performing social posts.</p>
+          </div>
+          <button onClick={handleLogout} className="btn-secondary">Log Out</button>
+        </nav>
 
-      <div className="main-content">
-        {!activeDraftIndex && (
-          <form className="card" onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="platform">Target Platform</label>
-              <select id="platform" className="form-control" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-                <option value="linkedin">LinkedIn</option>
-                <option value="x">X (Twitter)</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="topic">Main Topic / Theme</label>
-              <input type="text" id="topic" className="form-control" placeholder="e.g. B2B SaaS Growth Strategies" value={topic} onChange={(e) => setTopic(e.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label htmlFor="rawThoughts">Your Raw Thoughts (The Substance)</label>
-              <textarea id="rawThoughts" className="form-control" placeholder="Brain dump your core ideas here..." value={rawThoughts} onChange={(e) => setRawThoughts(e.target.value)} required />
-            </div>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? <><div className="spinner"></div>Crafting Posts...</> : "Generate Drafts"}
-            </button>
-            {error && <div className="error-message">{error}</div>}
-          </form>
-        )}
-
-        {drafts && !activeDraftIndex && sources.length > 0 && (
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>📎 Research Sources</h3>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {researchConfidence && (
-                  <span className="finalized-badge" style={{
-                    background: researchConfidence === 'high' ? 'rgba(34, 197, 94, 0.2)' : researchConfidence === 'medium' ? 'rgba(250, 204, 21, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                    color: researchConfidence === 'high' ? '#22c55e' : researchConfidence === 'medium' ? '#facc15' : '#ef4444',
-                  }}>
-                    {researchConfidence} confidence
-                  </span>
-                )}
-                {researchSource && (
-                  <span className="finalized-badge" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8' }}>
-                    {researchSource.replace('_', ' ')}
-                  </span>
-                )}
+        <main>
+          {!activeDraftIndex && (
+            <form className="card" onSubmit={handleSubmit} style={{ marginBottom: '2rem' }}>
+              <div className="form-group">
+                <label>Target Platform</label>
+                <div className="pill-group">
+                  <div 
+                    className={`pill-btn ${platform === 'linkedin' ? 'active' : ''}`}
+                    onClick={() => setPlatform('linkedin')}
+                  >
+                    LinkedIn
+                  </div>
+                  <div 
+                    className={`pill-btn ${platform === 'x' ? 'active' : ''}`}
+                    onClick={() => setPlatform('x')}
+                  >
+                    X (Twitter)
+                  </div>
+                </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {sources.map((src, i) => (
-                <div key={i} style={{
-                  padding: '0.75rem 1rem',
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid var(--accent-primary)',
-                }}>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-                    {src.title || `Source ${i + 1}`}
+              
+              <div className="form-group">
+                <label htmlFor="topic">Main Topic / Theme</label>
+                <input type="text" id="topic" className="form-control" placeholder="e.g. B2B SaaS Growth Strategies" value={topic} onChange={(e) => setTopic(e.target.value)} required />
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="rawThoughts">Your Raw Thoughts (The Substance)</label>
+                <textarea id="rawThoughts" className="form-control" placeholder="Brain dump your core ideas here..." value={rawThoughts} onChange={(e) => setRawThoughts(e.target.value)} required />
+              </div>
+              
+              <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '1rem' }}>
+                {loading ? (
+                  <div className="progress-container">
+                    <div className="morph-loader"></div>
+                    <span>{steps[loadingStep]}</span>
                   </div>
-                  {src.snippet && (
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.4rem', lineHeight: '1.4' }}>
-                      {src.snippet}
-                    </div>
-                  )}
-                  {src.url && (
-                    <a href={src.url} target="_blank" rel="noopener noreferrer" style={{
-                      color: 'var(--accent-primary)',
-                      fontSize: '0.8rem',
-                      textDecoration: 'none',
-                      wordBreak: 'break-all',
+                ) : (
+                  "✨ Generate Drafts"
+                )}
+              </button>
+              {error && <div className="error-message">{error}</div>}
+            </form>
+          )}
+
+          {drafts && !activeDraftIndex && sources.length > 0 && (
+            <div className="card sources-panel" style={{ padding: '0', overflow: 'hidden' }}>
+              <div 
+                className="sources-header" 
+                onClick={() => setSourcesExpanded(!sourcesExpanded)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>📎 Research Sources</h3>
+                  {researchConfidence && (
+                    <span className="finalized-badge" style={{
+                      background: researchConfidence === 'high' ? 'rgba(34, 197, 94, 0.1)' : researchConfidence === 'medium' ? 'rgba(250, 204, 21, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: researchConfidence === 'high' ? '#22c55e' : researchConfidence === 'medium' ? '#facc15' : '#ef4444',
                     }}>
-                      {src.url}
-                    </a>
+                      {researchConfidence} confidence
+                    </span>
+                  )}
+                  {researchSource && (
+                    <span className="finalized-badge" style={{ background: 'rgba(6, 182, 212, 0.1)', color: 'var(--accent-cyan)' }}>
+                      {researchSource.replace('_', ' ')}
+                    </span>
                   )}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {drafts && !activeDraftIndex && (
-          <div className="results-container">
-            {[1, 2, 3].map((num) => {
-              const text = drafts[`draft_${num}` as keyof Drafts];
-              if (!text) return null;
-              return (
-                <div className="draft-card" key={num}>
-                  <div className="draft-header">
-                    <h3>Draft Variation {num}</h3>
-                    <div>
-                      <button type="button" className="btn-copy" onClick={() => handleSelectDraft(num)} style={{ marginRight: "0.5rem" }}>Select & Edit</button>
-                      <button type="button" className="btn-copy" onClick={() => copyToClipboard(text)}>Copy</button>
+                <div>{sourcesExpanded ? '▲' : '▼'}</div>
+              </div>
+              
+              {sourcesExpanded && (
+                <div className="sources-content" style={{ padding: '0 1.5rem 1.5rem' }}>
+                  {sources.map((src, i) => (
+                    <div key={i} className="source-item">
+                      <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+                        {src.title || `Source ${i + 1}`}
+                      </div>
+                      {src.snippet && (
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.4rem', lineHeight: '1.4' }}>
+                          {src.snippet}
+                        </div>
+                      )}
+                      {src.url && (
+                        <a href={src.url} target="_blank" rel="noopener noreferrer" style={{
+                          color: 'var(--accent-cyan)',
+                          fontSize: '0.8rem',
+                          textDecoration: 'none',
+                          wordBreak: 'break-all',
+                        }}>
+                          {src.url}
+                        </a>
+                      )}
                     </div>
-                  </div>
-                  <div className="draft-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {activeDraftIndex && drafts && (
-          <div className="results-container">
-             <div className="draft-card" style={{ borderColor: 'var(--accent-primary)', borderWidth: '2px' }}>
-                <div className="draft-header">
-                  <h3>
-                    Active Draft (Variation {activeDraftIndex})
+          {drafts && !activeDraftIndex && (
+            <div className="drafts-grid">
+              {[1, 2, 3].map((num) => {
+                const text = drafts[`draft_${num}` as keyof Drafts];
+                if (!text) return null;
+                return (
+                  <div className="draft-card" key={num}>
+                    <div className="draft-badge">0{num}</div>
+                    <div className="draft-header" style={{ paddingLeft: '2rem' }}>
+                      <h3 style={{ margin: 0 }}>Option {num}</h3>
+                      <div className="draft-actions">
+                        <button type="button" className="btn-pill-small" onClick={() => handleSelectDraft(num)}>Edit</button>
+                        <button type="button" className="btn-pill-small" onClick={() => copyToClipboard(text)}>Copy</button>
+                      </div>
+                    </div>
+                    <div className="draft-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeDraftIndex && drafts && (
+            <>
+              <div className="draft-card active">
+                <div className="draft-badge">0{activeDraftIndex}</div>
+                <div className="draft-header" style={{ paddingLeft: '2rem' }}>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    Active Draft
                     {isFinalized && <span className="finalized-badge">Finalized</span>}
                   </h3>
-                  <div>
-                    {!isFinalized && <button type="button" className="btn-copy" onClick={() => setActiveDraftIndex(null)} style={{ marginRight: "0.5rem" }}>Back to Options</button>}
-                    <button type="button" className="btn-copy" onClick={() => copyToClipboard(drafts[`draft_${activeDraftIndex}` as keyof Drafts])}>Copy</button>
+                  <div className="draft-actions">
+                    {!isFinalized && <button type="button" className="btn-pill-small" onClick={() => setActiveDraftIndex(null)}>Back</button>}
+                    <button type="button" className="btn-pill-small" onClick={() => copyToClipboard(drafts[`draft_${activeDraftIndex}` as keyof Drafts])}>Copy</button>
                   </div>
                 </div>
                 <div className="draft-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(drafts[`draft_${activeDraftIndex}` as keyof Drafts]) }} />
                 
                 {!isFinalized && (
-                  <button type="button" className="btn-success" onClick={handleFinalize} disabled={loading}>
-                    {loading ? "Finalizing..." : "Finalize & Save Preferences"}
+                  <button type="button" className="btn-primary" onClick={handleFinalize} disabled={loading} style={{ marginTop: '1.5rem' }}>
+                    {loading ? "Finalizing..." : "🚀 Finalize & Save Preferences"}
                   </button>
                 )}
-             </div>
+              </div>
 
-             {!isFinalized && (
-               <div className="editor-container">
+              {!isFinalized && (
+                <div className="editor-container">
                   <div className="chat-history">
+                    {chatHistory.length === 0 && (
+                      <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '1rem' }}>
+                        Suggest edits to this draft below...
+                      </div>
+                    )}
                     {chatHistory.map((msg, i) => (
                       <div key={i} className={`chat-bubble ${msg.role}`}>
                         {msg.content}
                       </div>
                     ))}
-                    {isEditing && <div className="chat-bubble assistant"><div className="spinner" style={{width: 15, height: 15, borderWidth: 2}}></div></div>}
+                    {isEditing && (
+                      <div className="chat-bubble assistant">
+                        <div className="morph-loader" style={{ width: 12, height: 12 }}></div>
+                      </div>
+                    )}
                   </div>
                   
                   <form onSubmit={handleEditSubmit} className="chat-input-group">
@@ -402,11 +481,12 @@ export default function Home() {
                     />
                     <button type="submit" className="btn-secondary" disabled={isEditing || !editInstruction.trim()}>Send</button>
                   </form>
-               </div>
-             )}
-          </div>
-        )}
+                </div>
+              )}
+            </>
+          )}
+        </main>
       </div>
-    </div>
+    </>
   );
 }
