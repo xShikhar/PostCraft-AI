@@ -237,7 +237,7 @@ class PostGenerationPipeline:
             """
 
         prompt = f"""
-        You are an expert ghostwriter for {state.platform}.
+        You are an expert ghostwriter creating highly engaging {state.platform} posts.
         
         USER'S RAW THOUGHTS (The Substance):
         "{state.raw_thoughts}"
@@ -251,9 +251,15 @@ class PostGenerationPipeline:
         - CTA: {pattern.cta_style}
         {feedback_injection}
         
-        INSTRUCTIONS:
+        CRITICAL INSTRUCTIONS FOR NATIVE {state.platform.upper()} FORMATTING:
+        1. Write a real social media post, NOT a corporate blog article.
+        2. Use short, punchy paragraphs (1-3 sentences max). Use line breaks generously to create whitespace.
+        3. DO NOT use markdown headings like # or ## or ###.
+        4. NEVER add promotional CTAs like "Contact sales", "Click the link", or "Book a demo" unless specifically requested in the raw thoughts. If a CTA is needed, end with a conversational question to drive engagement.
+        5. Keep it authentic, human, and relatable. Avoid corporate jargon.
+        6. Use a strong hook in the first line to grab attention.
+        
         Write exactly 3 distinct draft variations combining the User's Substance with the Style Constraints.
-        Ensure they feel authentic to the user's raw thoughts but perfectly mirror the provided structure and tone.
         DO NOT hallucinate facts not provided by the user.
         DO NOT copy exact phrases from the style constraints.
         """
