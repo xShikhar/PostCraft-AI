@@ -91,7 +91,6 @@ graph TB
     VS --> CR
     API --> PG
     PIPE --> PG
-end
 ```
 
 ### The Four Pillars
