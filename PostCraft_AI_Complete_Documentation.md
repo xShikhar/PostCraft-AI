@@ -523,7 +523,15 @@ sequenceDiagram
 
 ## 12. Frontend (User Interface)
 
-The frontend is a **Single Page Application (SPA)** built with Next.js and React, featuring a dark-mode glassmorphic design.
+The frontend is a **Single Page Application (SPA)** built with Next.js and React, employing a strict **Feature-Based Architecture** and a premium, production-grade design system.
+
+### Architecture
+To avoid monolithic components, the frontend is strictly divided by domain features:
+- `src/features/auth`: Encapsulates authentication screens and hooks.
+- `src/features/generation`: Handles the post generation form and pipeline interactions.
+- `src/features/editor`: Manages the chat-based draft editor and finalization flow.
+- `src/components/ui`: Houses all reusable **shadcn/ui** primitive components.
+- `src/lib/api`: A centralized API layer that intercepts requests, injects JWT tokens, and globally handles 401 expiries.
 
 ### User Interface Modes
 
@@ -532,13 +540,13 @@ The frontend operates in 4 sequential modes:
 1. **Authentication Mode**
    - Toggle between Login and Signup forms
    - Username + Password input fields
-   - JWT token stored on successful authentication
+   - JWT token stored in `localStorage` and managed by `useAuth` hook
 
 2. **Generation Form**
    - Platform selector (LinkedIn / X)
    - Topic input field
    - Raw Thoughts textarea (your unstructured ideas)
-   - "Generate" button triggers the full AI pipeline
+   - Intelligent loading states tracking backend pipeline progress
 
 3. **Draft Selection Grid**
    - Displays 3 generated draft cards side-by-side
@@ -551,12 +559,13 @@ The frontend operates in 4 sequential modes:
    - Text input for sending edit instructions
    - "Finalize & Save Preferences" button to complete the workflow
 
-### Design System
-- **Theme**: Full dark mode (`#0a0a0b` background)
-- **Accent Color**: Indigo (`#6366f1`)
-- **Style**: Glassmorphic cards with backdrop blur
-- **Animations**: `fadeInUp`, `fadeInDown` keyframe transitions
-- **Typography**: Geist Sans and Geist Mono (Google Fonts)
+### Design System & Polish
+- **Component Library**: **shadcn/ui** (built on Radix UI) for robust, accessible, and unstyled base primitives (Dialogs, Cards, Inputs).
+- **Styling Engine**: **Tailwind CSS v3** with strict semantic variables defined in `globals.css` (`--primary`, `--background`, `--card`) ensuring pixel-perfect dark mode.
+- **Theme**: Premium dark mode (`#0b0d17` backgrounds, `#6366f1` Indigo accents) mimicking top-tier SaaS products like Linear and Vercel.
+- **Micro-Interactions**: Tailwind's `animate-in`, `fade-in`, and `slide-in-from-bottom` utilities provide fluid, hardware-accelerated transitions.
+- **Typography**: `Inter` (Google Fonts) for optimal readability and a modern aesthetic.
+- **Notifications**: Sleek, animated toast notifications powered by `sonner`.
 
 ---
 
@@ -655,9 +664,13 @@ The cost summary is accessible via `GET /api/admin/cost-summary`.
 ### Frontend
 | Technology | Version | Purpose |
 |---|---|---|
-| Next.js | 15 | React framework |
+| Next.js | 16 | React framework (App Router) |
 | React | 19 | UI library |
 | TypeScript | 5 | Type-safe JavaScript |
+| Tailwind CSS | 3.4 | Utility-first CSS styling |
+| shadcn/ui | Latest | Accessible, unstyled UI components |
+| Radix UI | Latest | Headless component foundations |
+| Sonner | 2.0 | Toast notifications |
 
 ### Infrastructure
 | Technology | Purpose |
