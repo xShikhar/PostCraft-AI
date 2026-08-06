@@ -7,6 +7,7 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type SourceItem = { title: string; snippet: string; url: string };
 
 export default function Home() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   // Markdown to HTML renderer
   const renderMarkdown = (text: string): string => {
     if (!text) return '';
@@ -95,7 +96,7 @@ export default function Home() {
         headers = { "Content-Type": "application/json" };
       }
 
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
         headers,
         body
@@ -137,7 +138,7 @@ export default function Home() {
     setResearchSource(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/generations", {
+      const response = await fetch(`${API_URL}/api/generations`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ topic, platform, raw_thoughts: rawThoughts }),
@@ -185,7 +186,7 @@ export default function Home() {
     setChatHistory(prev => [...prev, { role: "user", content: newInstruction }]);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/generations/${generationId}/edit`, {
+      const response = await fetch(`${API_URL}/api/generations/${generationId}/edit`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ instruction: newInstruction, draft_index: activeDraftIndex }),
@@ -215,7 +216,7 @@ export default function Home() {
     if (!generationId || activeDraftIndex === null) return;
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/generations/${generationId}/finalize`, {
+      const response = await fetch(`${API_URL}/api/generations/${generationId}/finalize`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ final_draft_index: activeDraftIndex }),
