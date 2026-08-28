@@ -1,5 +1,5 @@
 import pytest
-from app.services.orchestrator import check_originality
+from app.services.pipeline.nodes import check_originality
 
 def test_check_originality():
     # 1. Flag exact 6+ word matches

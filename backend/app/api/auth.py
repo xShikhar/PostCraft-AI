@@ -7,9 +7,9 @@ from sqlalchemy.future import select
 from pydantic import BaseModel
 from jose import jwt, JWTError
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import User
-from app.services.auth import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
+from app.core.security import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")

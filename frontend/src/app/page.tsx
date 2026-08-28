@@ -6,6 +6,7 @@ import { AuthScreen } from "@/features/auth/components/auth-screen";
 import { AppLayout } from "@/components/layout/app-layout";
 import { TopNavigation } from "@/components/layout/top-navigation";
 import { GenerationForm } from "@/features/generation/components/generation-form";
+import { ProfileSettingsModal } from "@/features/generation/components/profile-settings-modal";
 import { DraftEditor } from "@/features/editor/components/draft-editor";
 
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
@@ -39,8 +40,10 @@ export default function Home() {
   const [topic, setTopic] = useState("");
   const [platform, setPlatform] = useState("linkedin");
   const [rawThoughts, setRawThoughts] = useState("");
+  const [profileContext, setProfileContext] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Drafts | null>(null);
@@ -86,7 +89,7 @@ export default function Home() {
     setResearchSource(null);
 
     try {
-      const data = await generateDrafts({ topic, platform, raw_thoughts: rawThoughts });
+      const data = await generateDrafts({ topic, platform, raw_thoughts: rawThoughts, profile_context: profileContext || undefined });
 
       if (data.status === "needs_review") {
         toast.warning("The quality checker flagged these drafts. They may need manual editing.");
@@ -168,7 +171,8 @@ export default function Home() {
   return (
     <AppLayout>
       <Toaster theme="dark" position="top-center" />
-      <TopNavigation onLogout={logout} />
+      <TopNavigation onLogout={logout} onProfileSettings={() => setIsProfileModalOpen(true)} />
+      <ProfileSettingsModal open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen} />
       
       <main className="w-full max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         
@@ -180,6 +184,8 @@ export default function Home() {
             setPlatform={setPlatform}
             rawThoughts={rawThoughts}
             setRawThoughts={setRawThoughts}
+            profileContext={profileContext}
+            setProfileContext={setProfileContext}
             loading={loading}
             loadingStepText={steps[loadingStep]}
             onSubmit={handleGenerate}

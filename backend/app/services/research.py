@@ -10,9 +10,9 @@ from sqlalchemy.future import select
 
 from app.models import ResearchCache
 from app.schemas.research import ResearchResult, SourceItem
-from app.config import get_settings
+from app.core.config import get_settings
 
-from google import genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 logger = logging.getLogger(__name__)
 
@@ -130,22 +130,22 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings) -> 
         logger.warning("No Gemini API Key found for fallback.")
         return []
     
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=settings.GEMINI_API_KEY
+    )
     prompt = (
         f"Provide 3 distinct examples of high-quality structural patterns for {platform} posts about '{topic}'. "
         "Do not provide advice, just provide the raw simulated post texts so we can analyze their structure, pacing, and formatting."
     )
     
-    # Since google-genai is sync by default unless async is configured, let's use the sync client wrapped if needed,
-    # or just use it synchronously since this is a fallback in a prototype
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-    
-    if response.text:
-        # Split by obvious dividers if any, otherwise return as one block
-        return [response.text]
+    try:
+        response = await client.ainvoke(prompt)
+        if response.content:
+            return [str(response.content)]
+    except Exception as e:
+        logger.error(f"Fallback generation failed: {e}")
+        
     return []
 
 

@@ -11,6 +11,8 @@ interface GenerationFormProps {
   setPlatform: (v: string) => void;
   rawThoughts: string;
   setRawThoughts: (v: string) => void;
+  profileContext: string;
+  setProfileContext: (v: string) => void;
   loading: boolean;
   loadingStepText: string;
   onSubmit: (e: React.FormEvent) => void;
@@ -23,6 +25,8 @@ export function GenerationForm({
   setPlatform,
   rawThoughts,
   setRawThoughts,
+  profileContext,
+  setProfileContext,
   loading,
   loadingStepText,
   onSubmit,
@@ -78,6 +82,17 @@ export function GenerationForm({
               onChange={e => setRawThoughts(e.target.value)} 
               required 
               className="min-h-[120px] bg-background/50 resize-y"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-sm font-medium" htmlFor="profileContext">Profile Context (Optional - Overrides settings)</label>
+            <Textarea 
+              id="profileContext" 
+              placeholder="Your bio, expertise, or what you are selling..." 
+              value={profileContext} 
+              onChange={e => setProfileContext(e.target.value)} 
+              className="min-h-[80px] bg-background/50 resize-y"
             />
           </div>
         </CardContent>

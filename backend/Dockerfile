@@ -25,12 +25,14 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Put venv on PATH
 ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Copy application code
+# Copy application code and ensure start script is executable
 COPY . .
+RUN chmod +x /app/start.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/start.sh"]

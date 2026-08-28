@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
-    
     @field_validator('DATABASE_URL')
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
@@ -22,6 +21,20 @@ class Settings(BaseSettings):
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+    
+    @field_validator('CORS_ORIGINS', mode='before')
+    @classmethod
+    def assemble_cors_origins(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                import json
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v_str.split(",") if origin.strip()]
+        return v  # type: ignore
     
     model_config = SettingsConfigDict(env_file='.env')
 

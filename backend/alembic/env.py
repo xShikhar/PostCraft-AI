@@ -7,8 +7,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-from app.database import Base
-from app.config import get_settings
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.core.database import Base
+from app.core.config import get_settings
 import app.models  # Import models so Base.metadata is populated
 
 # Alembic Config object

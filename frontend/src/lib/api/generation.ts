@@ -4,6 +4,7 @@ export type GenerationParams = {
   topic: string;
   platform: string;
   raw_thoughts: string;
+  profile_context?: string;
 };
 
 export type Drafts = {

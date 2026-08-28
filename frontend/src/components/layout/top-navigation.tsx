@@ -3,9 +3,10 @@ import { LogOut, PenTool } from "lucide-react";
 
 interface TopNavigationProps {
   onLogout: () => void;
+  onProfileSettings: () => void;
 }
 
-export function TopNavigation({ onLogout }: TopNavigationProps) {
+export function TopNavigation({ onLogout, onProfileSettings }: TopNavigationProps) {
   return (
     <header className="w-full flex items-center justify-between pb-6 mb-6 border-b border-border/40">
       <div className="flex items-center gap-3">
@@ -19,6 +20,14 @@ export function TopNavigation({ onLogout }: TopNavigationProps) {
       </div>
       
       <div className="flex items-center gap-4">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onProfileSettings}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          Profile
+        </Button>
         <Button 
           variant="ghost" 
           size="sm" 

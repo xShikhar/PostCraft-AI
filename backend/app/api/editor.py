@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import Generation, ChatHistory, StyleProfile, Preference, Project, User
 from app.schemas.editor import EditRequest, EditResponse, FinalizeRequest
-from app.config import get_settings
+from app.core.config import get_settings
 from app.api.auth import get_current_user
 
 from google import genai

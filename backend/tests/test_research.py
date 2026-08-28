@@ -16,17 +16,15 @@ async def test_cascading_search_cache_miss_and_hit(db_session: AsyncSession):
     mock_snippets = ["Tavily Snippet 1", "Tavily Snippet 2"]
 
     with patch("app.services.research._search_tavily", new_callable=AsyncMock) as mock_tavily, \
-         patch("app.services.research._search_brave", new_callable=AsyncMock) as mock_brave, \
-         patch("app.services.research.genai.Client", new_callable=AsyncMock) as mock_genai:
+         patch("app.services.research.ChatGoogleGenerativeAI", new_callable=AsyncMock) as mock_llm:
         
-        mock_tavily.return_value = mock_snippets
+        mock_tavily.return_value = (mock_snippets, [])
         
         # 1. First call: Cache miss. Should call Tavily and save to DB.
         res1 = await cascading_search(topic, platform, db_session)
         assert res1.source == "curated_search"
         assert len(res1.content_snippets) == 2
         mock_tavily.assert_called_once()
-        mock_brave.assert_not_called()
         
         # Check DB
         stmt = select(ResearchCache).where(ResearchCache.topic == topic)
@@ -36,7 +34,6 @@ async def test_cascading_search_cache_miss_and_hit(db_session: AsyncSession):
         
         # Reset mocks
         mock_tavily.reset_mock()
-        mock_brave.reset_mock()
 
         # 2. Second call: Cache hit. Should NOT call Tavily.
         res2 = await cascading_search(topic, platform, db_session)

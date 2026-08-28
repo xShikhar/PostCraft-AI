@@ -7,7 +7,8 @@ from app.api.auth import router as auth_router
 from app.api.generations import router as generations_router
 from app.api.editor import router as editor_router
 from app.api.admin import router as admin_router
-from app.config import get_settings
+from app.api.users import router as users_router
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -37,3 +38,4 @@ app.include_router(auth_router)
 app.include_router(generations_router)
 app.include_router(editor_router)
 app.include_router(admin_router)
+app.include_router(users_router)

@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import Project, Generation, User
-from app.schemas.api import GenerateRequest, GenerateResponse
-from app.schemas.orchestrator import PipelineState
-from app.services.orchestrator import PostGenerationPipeline
+from app.schemas.api import GenerateRequest, GenerateResponse, SourceItemResponse
+from app.services.pipeline.state import PipelineState
+from app.services.pipeline import PostGenerationPipeline
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/generations", tags=["generations"])
@@ -42,13 +42,18 @@ async def generate_post(req: GenerateRequest, session: AsyncSession = Depends(ge
     await session.refresh(gen)
 
     # Initialize Pipeline State
+    profile_ctx = req.profile_context
+    if not profile_ctx and current_user.profile_context:
+        profile_ctx = current_user.profile_context
+
     state = PipelineState(
         generation_id=gen.id,
         project_id=project.id,
         user_id=current_user.id,
         platform=req.platform,
         topic=req.topic,
-        raw_thoughts=req.raw_thoughts
+        raw_thoughts=req.raw_thoughts,
+        profile_context=profile_ctx,
     )
 
     # Run Pipeline

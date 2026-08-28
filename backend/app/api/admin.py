@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import CostLog, User
 from app.api.auth import get_current_user
 

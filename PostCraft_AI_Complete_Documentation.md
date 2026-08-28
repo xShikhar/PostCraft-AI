@@ -1,6 +1,6 @@
 # PostCraft AI — Complete Project Documentation
 
-> **A comprehensive guide covering the concept, architecture, and technical implementation of PostCraft AI — an AI-powered social media content generation platform.**
+> **A comprehensive guide covering the concept, architecture, and technical implementation of PostCraft AI — an AI-powered social media content generation platform powered by LangGraph and Google Gemini 2.5 Flash.**
 
 ---
 
@@ -10,7 +10,7 @@
 2. [The Problem It Solves](#2-the-problem-it-solves)
 3. [High-Level Architecture](#3-high-level-architecture)
 4. [How Everything Connects — The Big Picture](#4-how-everything-connects--the-big-picture)
-5. [The AI Content Generation Pipeline](#5-the-ai-content-generation-pipeline)
+5. [The AI Content Generation Pipeline (LangGraph)](#5-the-ai-content-generation-pipeline-langgraph)
 6. [The Research Engine](#6-the-research-engine)
 7. [The Style Learning System (ChromaDB)](#7-the-style-learning-system-chromadb)
 8. [The Conversational Editor](#8-the-conversational-editor)
@@ -27,327 +27,257 @@
 
 ## 1. What is PostCraft AI?
 
-PostCraft AI is an intelligent social media content generation platform that helps users create high-quality, platform-specific posts for LinkedIn and X (formerly Twitter). Unlike generic AI writing tools that produce cookie-cutter content, PostCraft AI:
+PostCraft AI is an intelligent social media content generation platform that helps creators, founders, and professionals produce high-converting, platform-specific posts for LinkedIn and X (formerly Twitter). Unlike generic AI writing tools that produce cookie-cutter content, PostCraft AI:
 
-- **Researches real-world content** from top creators on each platform before writing
-- **Learns your personal writing style** over time and biases future generations toward it
-- **Generates 3 draft variations** for every request, giving you creative options
-- **Runs automated quality control** to ensure originality and structural completeness
-- **Provides a conversational editor** where you can iteratively refine drafts with AI assistance
-- **Remembers your preferences** so every future post gets better
+- **Orchestrates workflows via LangGraph**: Uses a typed, resilient state machine with automated quality control and feedback-driven retry loops.
+- **Prioritizes Lead-Gen CTAs**: Replaces generic engagement bait ("Thoughts?", "Agree?") with conversion mechanisms tailored to the user's bio, business offering, or career goals.
+- **Researches real-world content**: Discovers top creator patterns and live trends before generating drafts.
+- **Learns your personal writing style**: Indexes your preferred structures in ChromaDB to bias future generations toward your voice.
+- **Provides a conversational editor**: Enables fine-grained, iterative refinement of drafts with AI assistance.
+- **Remembers preferences**: Extracts patterns from your manual edits to improve future generations.
 
-The core philosophy is: **the AI doesn't just write for you — it learns to write like you.**
+The core philosophy: **the AI doesn't just write for you — it learns to write like you, while optimizing for real-world conversion.**
 
 ---
 
 ## 2. The Problem It Solves
 
-Content creators face three main challenges:
+Content creators and founders face four primary hurdles when publishing online:
 
 | Challenge | How PostCraft AI Solves It |
 |---|---|
-| **Writer's block** | You provide raw thoughts and a topic; the AI structures them into polished posts |
-| **Platform mismatch** | The AI researches platform-specific best practices (LinkedIn vs X have very different styles) |
-| **Generic AI output** | The style learning system ensures output progressively matches YOUR unique voice |
+| **Writer's block** | You provide raw thoughts and a topic; the AI structures them into 3 distinct, polished posts. |
+| **Generic Engagement Bait** | Enforces a strict lead-generation priority framework, generating CTAs that drive DMs, profile visits, or qualified conversations. |
+| **Platform Mismatch** | The AI tailors formatting, whitespace, and pacing specifically for LinkedIn vs. X. |
+| **Impersonal AI Output** | Vector-based style learning ensures outputs match your unique voice and past preferences over time. |
 
 ---
 
 ## 3. High-Level Architecture
 
-PostCraft AI follows a **split architecture** with four core components:
+PostCraft AI follows a modern, decoupled architecture:
 
 ```mermaid
 graph TB
     subgraph "User's Browser"
-        FE["Next.js Frontend<br/>(React UI)"]
+        FE["Next.js Frontend<br/>(React 19 + TypeScript)"]
     end
 
     subgraph "Backend Server"
-        API["FastAPI Backend<br/>(Python)"]
-        PIPE["AI Pipeline<br/>(Orchestrator)"]
+        API["FastAPI REST API<br/>(Python 3.12)"]
+        PIPE["LangGraph Pipeline<br/>(app.services.pipeline)"]
         RS["Research Service"]
         VS["Vector Service"]
+        ED["Editor Service"]
     end
 
     subgraph "Databases"
-        PG["PostgreSQL<br/>(Relational Data)"]
+        PG["PostgreSQL 16<br/>(Relational State + Users + Logs)"]
         CR["ChromaDB<br/>(Vector Embeddings)"]
     end
 
-    subgraph "External APIs"
-        GEM["Google Gemini 2.5 Flash<br/>(AI Model)"]
-        SERP["SerpApi<br/>(Web Search)"]
-        TAV["Tavily<br/>(Web Search Fallback)"]
+    subgraph "External AI & Search Services"
+        GEM["Google Gemini 2.5 Flash<br/>(langchain-google-genai)"]
+        SERP["SerpApi / Tavily<br/>(Live Web Search)"]
     end
 
     FE -->|"HTTP REST API"| API
     API --> PIPE
+    API --> ED
     PIPE --> RS
     PIPE --> VS
     PIPE --> GEM
+    ED --> GEM
     RS --> SERP
-    RS --> TAV
     RS --> GEM
     VS --> CR
     API --> PG
     PIPE --> PG
 ```
 
-### The Four Pillars
+### Core Architecture Pillars
 
 | Component | Technology | Purpose |
 |---|---|---|
-| **Frontend** | Next.js (React + TypeScript) | The user interface — login, create posts, edit drafts, finalize |
-| **Backend** | FastAPI (Python) | REST API server — handles requests, runs the AI pipeline, manages data |
-| **PostgreSQL** | PostgreSQL 16 | Stores all structured data — users, projects, generations, preferences, costs |
-| **ChromaDB** | ChromaDB 0.5 | Vector database — stores and retrieves writing style embeddings for similarity matching |
+| **Frontend** | Next.js 16 (React 19, Tailwind CSS, shadcn/ui) | User interface for authentication, post creation, profile management, and chat editing. |
+| **Backend API** | FastAPI (async Python 3.12) | High-performance asynchronous REST endpoints, JWT security, and route handling. |
+| **Generation Engine** | LangGraph (`StateGraph`) | Stateful generation pipeline with conditional branching, retry caps, and quality gates. |
+| **LLM Interface** | `langchain-google-genai` + Gemini 2.5 Flash | Structured outputs, function calling, pattern extraction, and automated content auditing. |
+| **Vector Memory** | ChromaDB (0.5.23) | Vector embeddings of writing styles for user-specific semantic retrieval. |
+| **Relational DB** | PostgreSQL 16 + SQLAlchemy (Async) | Stores users, projects, generations, chat logs, preferences, and token cost tracking. |
 
 ---
 
 ## 4. How Everything Connects — The Big Picture
 
-Here is the complete data flow from the moment a user types a topic to when they get their finished post:
-
 ```mermaid
 sequenceDiagram
-    participant U as User (Browser)
-    participant F as Frontend (Next.js)
-    participant B as Backend (FastAPI)
-    participant P as Pipeline (Orchestrator)
-    participant R as Research Service
-    participant G as Gemini AI
-    participant S as SerpApi
+    autonumber
+    actor User as User
+    participant Frontend as Next.js UI
+    participant API as FastAPI Backend
+    participant Graph as LangGraph Pipeline
+    participant Gemini as Gemini 2.5 Flash
+    participant Chroma as ChromaDB
     participant DB as PostgreSQL
-    participant V as ChromaDB
 
-    U->>F: Types topic + raw thoughts
-    F->>B: POST /api/generations
-    B->>DB: Create Generation record
-    B->>P: Start Pipeline
-
-    Note over P: Step 1: Research
-    P->>R: cascading_search(topic, platform)
-    R->>DB: Check research_cache
-    alt Cache Miss
-        R->>S: Search web for top creator content
-        S-->>R: Return search snippets
-        R->>DB: Cache results (24hr expiry)
+    User->>Frontend: Enter Topic, Raw Thoughts, (Optional Profile Context)
+    Frontend->>API: POST /api/generations
+    API->>DB: Fetch user profile_context fallback (if omitted)
+    API->>DB: Create Generation record (status: "generating")
+    API->>Graph: Execute PostGenerationPipeline.run(initial_state)
+    
+    rect rgb(30, 40, 60)
+        Note over Graph,Gemini: LangGraph State Machine Execution
+        Graph->>Graph: node_research (DB Cache -> Web Search -> Synthetic fallback)
+        Graph->>Chroma: Query historical style vector for user
+        Graph->>Gemini: node_pattern_extraction (Extract Scaffold: Hook, Tone, Pacing, CTA)
+        Graph->>Gemini: node_draft_generation (Generate 3 Drafts with Lead-Gen Rules)
+        Graph->>Gemini: node_quality_check (Validate Originality, Structure, Lead-Gen CTA)
+        alt Quality Check Failed & retry_count < 2
+            Graph->>Graph: node_increment_retry (Inject failure feedback)
+            Graph->>Gemini: node_draft_generation (Regenerate Drafts)
+        end
+        Graph->>DB: node_save_generation (Save Drafts & status: "editing")
     end
-    R-->>P: Return ResearchResult
-
-    Note over P: Step 2: Pattern Extraction
-    P->>V: Query ChromaDB for user's past style
-    V-->>P: Return historical style (if exists)
-    P->>G: Extract style patterns (with function calling)
-    G-->>P: Return structure, tone, pacing, etc.
-    P->>DB: Save StyleProfile
-    P->>V: Index style vector in ChromaDB
-
-    Note over P: Step 3: Draft Generation
-    P->>G: Generate 3 drafts using style + research
-    G-->>P: Return draft_1, draft_2, draft_3
-
-    Note over P: Step 4: Quality Control
-    P->>P: Check originality (n-gram overlap)
-    P->>P: Check structure (Hook/Body/CTA)
-    alt Quality FAIL (retry ≤ 2)
-        P->>G: Regenerate with feedback
-    end
-
-    Note over P: Step 5: Save Results
-    P->>DB: Update Generation with drafts
-    P-->>B: Return final state
-    B-->>F: Return 3 drafts
-    F-->>U: Display draft selection grid
-
-    Note over U: User selects a draft and edits it
-
-    U->>F: "Make it more casual"
-    F->>B: POST /api/generations/{id}/edit
-    B->>G: Edit draft with instruction
-    G-->>B: Return revised draft
-    B->>DB: Save chat history
-    B-->>F: Return revised draft
-
-    Note over U: User finalizes the post
-
-    U->>F: Click "Finalize"
-    F->>B: POST /api/generations/{id}/finalize
-    B->>G: Compare original style vs final draft
-    G-->>B: Extract learned preferences
-    B->>DB: Save Preference for future use
-    B-->>F: Confirmation
+    
+    Graph-->>API: Return final PipelineState
+    API-->>Frontend: Return 3 Generated Drafts + Sources
+    Frontend-->>User: Display Draft Selection Grid
 ```
 
 ---
 
-## 5. The AI Content Generation Pipeline
+## 5. The AI Content Generation Pipeline (LangGraph)
 
-The heart of PostCraft AI is the `PostGenerationPipeline` — a dynamic state machine that orchestrates the entire content creation process. It lives in `backend/app/services/orchestrator.py`.
+The post generation pipeline is built entirely on **LangGraph** (`backend/app/services/pipeline/`), replacing legacy imperative while-loops with a typed, observable state machine.
 
-### Pipeline Nodes (Steps)
+### Pipeline Package Structure
 
-The pipeline executes these nodes in sequence:
+```
+backend/app/services/pipeline/
+├── __init__.py          # Exports PostGenerationPipeline
+├── deps.py              # PipelineDeps (AsyncSession, ChatGoogleGenerativeAI, Settings)
+├── state.py             # GraphState TypedDict + Pydantic models (ExtractedPattern, GeneratedDrafts, QualityVerdict)
+├── prompts.py           # Lead-Gen & Engagement prompt templates and builder functions
+├── nodes.py             # 6 async worker functions (node_research, node_pattern_extraction, etc.)
+├── graph.py             # StateGraph definition, async bind closures, and conditional router logic
+├── pipeline.py          # PostGenerationPipeline runtime entrypoint & state mapper
+└── README.md            # Architecture & LangGraph learning guide
+```
+
+### Graph Topology
 
 ```mermaid
 graph TD
-    A["🔍 node_research"] --> B["🎨 node_pattern_extraction"]
-    B --> C["✍️ node_draft_generation"]
-    C --> D["✅ node_quality_check"]
-    D -->|"FAIL & retries ≤ 2"| C
-    D -->|"PASS"| E["💾 node_save_generation"]
+    Start[START] --> Research[node_research]
+    
+    Research -->|skip_extraction=True / Cache Hit| DraftGen[node_draft_generation]
+    Research -->|error| SaveGen[node_save_generation]
+    Research -->|default| Extract[node_pattern_extraction]
+    
+    Extract --> DraftGen
+    Extract -->|error| SaveGen
+    
+    DraftGen --> QC[node_quality_check]
+    DraftGen -->|error| SaveGen
+    
+    QC -->|PASS| SaveGen
+    QC -->|FAIL & retries < MAX_RETRIES| IncrementRetry[node_increment_retry]
+    QC -->|FAIL & retries >= MAX_RETRIES| SaveGen
+    
+    IncrementRetry --> DraftGen
+    
+    SaveGen --> End[END]
 ```
 
-### Detailed Node Descriptions
+### Detailed Node Specifications
 
-#### Node 1: Research (`node_research`)
-- Calls the Research Service to find real-world examples of successful posts on the target platform about the given topic
-- Returns content snippets that will guide the AI's writing style and structure
+#### 1. `node_research`
+- Checks the `research_cache` table for recent unexpired results (24-hour TTL).
+- If cached, retrieves the most recent `StyleProfile` and sets `skip_extraction = True` to bypass unnecessary LLM extraction calls.
+- If un-cached, executes a cascading web search (Curated Creators → General Web Search → Synthetic generation).
 
-#### Node 2: Pattern Extraction (`node_pattern_extraction`)
-- **Checks ChromaDB** for the user's historical writing style preferences
-- Calls **Gemini 2.5 Flash** with a special "function calling" tool named `extract_style_patterns`
-- The AI analyzes the research snippets and extracts 6 style dimensions:
-  - **Structure**: e.g., "Hook → Story → CTA"
-  - **Tone**: e.g., "Inspirational", "Conversational"
-  - **Pacing**: e.g., "Fast", "Measured"
-  - **Storytelling Technique**: e.g., "Hero's journey", "Data-driven"
-  - **Formatting**: e.g., "Short paragraphs", "Bullet points"
-  - **CTA Style**: e.g., "Direct question", "Soft invitation"
-- Saves the extracted profile to **PostgreSQL** and indexes it in **ChromaDB** for future similarity searches
-- Logs token usage and cost
+#### 2. `node_pattern_extraction`
+- Queries ChromaDB for the user's historical writing styles matching the topic context.
+- Invokes Gemini 2.5 Flash with structured output to extract 6 stylistic dimensions:
+  - **Structure**: Underlying framework (e.g. "Hook → 3 Bullets → 1-Line Takeaway → CTA").
+  - **Tone**: Voice characteristics (e.g. "Direct, authoritative, contrarian").
+  - **Pacing**: Rhythm (e.g. "Punchy 1-2 sentence paragraphs").
+  - **Storytelling Technique**: Narrative mechanics (e.g. "Data-backed personal experience").
+  - **Formatting**: Spacing and styling (e.g. "Aggressive whitespace, bullet points").
+  - **CTA Style**: Historical baseline CTA framing.
+- Saves the style to PostgreSQL (`StyleProfile`) and indexes it in ChromaDB.
 
-#### Node 3: Draft Generation (`node_draft_generation`)
-- Constructs a detailed prompt combining:
-  - The user's raw thoughts and topic
-  - The extracted style patterns
-  - Research snippets from real creators
-  - Any historical style bias from ChromaDB
-  - Quality feedback from previous failed attempts (if retrying)
-- Calls **Gemini 2.5 Flash** requesting a structured JSON response with exactly 3 draft variations
-- Each draft is a complete, ready-to-post piece of content
+#### 3. `node_draft_generation`
+- Combines the topic, user raw thoughts, `profile_context`, research snippets, and extracted pattern.
+- **Strict Content Priority Hierarchy**:
+  1. **Priority #1 — Lead-Generation CTA (Dominant Constraint)**: The post MUST end with a conversion mechanism (e.g., DM invite, discovery call invitation, qualification question). Generic fillers like "Thoughts?" or "Agree?" are strictly forbidden.
+  2. **Priority #2 — Engagement & Reply-Worthiness**: Concrete numbers, contrarian claims, and open loops in the hook.
+  3. **Priority #3 — Style Seasoning (Soft Preference)**: Emulates extracted patterns without overriding Priorities #1 & #2.
+- Generates exactly 3 distinct draft variations.
 
-#### Node 4: Quality Check (`node_quality_check`)
-Two automated quality gates:
+#### 4. `node_quality_check`
+- **Gate 1 (Originality)**: Evaluates 6-word n-gram overlap against research snippets to prevent plagiarism.
+- **Gate 2 & 3 (Structural Completeness & Lead-Gen Quality)**: An LLM-judged audit validating that all 3 drafts possess distinct Hooks, substantive Bodies, and valid Lead-Gen CTAs.
+- Returns a structured `QualityVerdict` (`passed`, `failed_check`, `failed_drafts`).
 
-1. **Originality Check**: Computes 6-word n-gram overlap between the generated drafts and the research snippets. If too much text is copied directly from sources, the draft fails
-2. **Structural Completeness**: Validates that each draft contains a proper Hook (opening), Body (main content), and CTA (call-to-action)
+#### 5. `node_increment_retry`
+- Increments `retry_count` (capped by `MAX_RETRIES = 2`) and re-enters `node_draft_generation` with specific feedback injected from the previous failure.
 
-If a draft fails quality control:
-- The retry counter increments (maximum 2 retries)
-- Specific feedback about what failed is injected into the prompt
-- The pipeline loops back to `node_draft_generation`
-
-If it passes (or exhausts retries):
-- Proceeds to save the results
-
-#### Node 5: Save Generation (`node_save_generation`)
-- Updates the `Generation` record in PostgreSQL with `draft_1`, `draft_2`, `draft_3`
-- Sets status to `"editing"` (success), `"needs_review"` (failed after retries), or `"failed"` (error)
+#### 6. `node_save_generation`
+- Updates the database `Generation` record with final drafts and sets status to `"editing"` (pass) or `"needs_review"` (retries exhausted).
 
 ---
 
 ## 6. The Research Engine
 
-The Research Service (`backend/app/services/research.py`) implements a **4-tier cascading fallback strategy** to ensure the AI always has context, even when external APIs are unavailable.
+The Research Service (`backend/app/services/research.py`) guarantees relevant context through a 4-tier cascading search:
 
 ```mermaid
 graph TD
-    A["Start: cascading_search()"] --> B{"Check DB Cache?"}
-    B -->|"Hit (not expired)"| C["✅ Return cached snippets<br/>confidence: high"]
-    B -->|"Miss"| D{"API Keys Available?"}
+    A["cascading_search()"] --> B{"Check DB Cache?"}
+    B -->|"Hit"| C["Return cached snippets<br/>confidence: high"]
+    B -->|"Miss"| D{"Search API Keys?"}
     D -->|"Yes"| E["Curated Creator Search"]
-    D -->|"No"| H["Gemini Synthetic Generation"]
-    E -->|"Results found"| F["✅ Return curated snippets<br/>confidence: high"]
+    D -->|"No"| H["LangChain Synthetic Fallback"]
+    E -->|"Results found"| F["Return curated snippets<br/>confidence: high"]
     E -->|"No results"| G["General Web Search"]
-    G -->|"Results found"| I["✅ Return general snippets<br/>confidence: medium"]
+    G -->|"Results found"| I["Return general snippets<br/>confidence: medium"]
     G -->|"No results"| H
-    H --> J["✅ Return synthetic examples<br/>confidence: low"]
-    F --> K["Cache results (24hr)"]
-    I --> K
-    J --> K
+    H --> J["Return synthetic structure<br/>confidence: low"]
 ```
 
-### Tier 1: Database Cache
-- Checks PostgreSQL `research_cache` table for unexpired results matching the topic and platform
-- Cache entries expire after 24 hours
-
-### Tier 2: Curated Creator Search
-- Loads a curated list of top creators for each platform from JSON files:
-  - **LinkedIn**: Justin Welsh, Sahil Bloom, Nicolas Cole, Dickie Bush, Alex Hormozi
-  - **X (Twitter)**: Naval, Paul Graham, Sahil Lavingia, Dan Koe, Shreyas Doshi
-- Constructs a search query biased toward these creators' content
-- Uses **SerpApi** (primary) or **Tavily** (fallback) for web search
-
-### Tier 3: General Web Search
-- If curated search returns nothing, falls back to a broader search query: `{topic} {platform} post examples`
-
-### Tier 4: Gemini Synthetic Generation
-- If no search API keys are configured or all web searches fail, asks **Gemini 2.5 Flash** to generate 3 synthetic structural examples
-- This ensures the pipeline never completely fails — it always has some structure to work with
+1. **Database Cache (Tier 1)**: Returns cached snippets within 24 hours.
+2. **Curated Creator Search (Tier 2)**: Targets top influencers from `backend/creators/linkedin.json` and `x.json` (e.g., Justin Welsh, Sahil Bloom, Naval, Paul Graham) via SerpApi/Tavily.
+3. **General Search (Tier 3)**: Broader web search queries when curated lists yield no matches.
+4. **Synthetic Structure (Tier 4)**: Uses `ChatGoogleGenerativeAI` to simulate 3 structural examples when external search keys are unavailable.
 
 ---
 
 ## 7. The Style Learning System (ChromaDB)
 
-This is what makes PostCraft AI unique. ChromaDB is a **vector database** that stores mathematical representations (embeddings) of text, allowing the system to find semantically similar content.
+PostCraft AI uses ChromaDB to maintain long-term memory of a user's writing style:
 
-### How It Works
-
-```mermaid
-graph LR
-    subgraph "Generation 1 (First Use)"
-        A1["User writes about 'Leadership'"] --> B1["AI extracts style:<br/>Hook→Story→CTA<br/>Inspirational tone"]
-        B1 --> C1["Style saved to ChromaDB<br/>as vector embedding"]
-    end
-
-    subgraph "Generation 2 (Later)"
-        A2["User writes about 'Productivity'"] --> B2["ChromaDB searched:<br/>'Find similar past styles'"]
-        C1 -.->|"Semantic similarity match"| B2
-        B2 --> D2["Past style injected into prompt:<br/>'User historically prefers<br/>Hook→Story→CTA with<br/>Inspirational tone'"]
-        D2 --> E2["AI generates new post<br/>biased toward user's style"]
-    end
-```
-
-### Technical Details
-- **Storage**: Each `StyleProfile` is converted to a text string (e.g., `"Structure: Hook→Story→CTA | Tone: Inspirational | Pacing: Fast | ..."`)
-- **Embedding**: ChromaDB automatically converts this text into a high-dimensional vector using its built-in embedding model
-- **Retrieval**: When generating a new post, the system queries ChromaDB with the current research snippets and filters by `user_id` and `platform`
-- **Effect**: The closest matching historical style is injected into the Gemini prompt as "historical preferred style", gently biasing the output
-
-The more posts a user generates and finalizes, the better the system understands their preferences.
+1. **Indexing**: Extracted style profiles are serialized into feature strings and stored with the user's ID and platform tag.
+2. **Vector Similarity**: When a new post is generated, ChromaDB performs a cosine similarity lookup against past styles.
+3. **Prompt Injection**: Closely matching past styles are injected as historical biases into the pattern extraction prompt.
 
 ---
 
 ## 8. The Conversational Editor
 
-After receiving 3 draft variations, the user can select one and refine it through a **chat-based editing interface**.
+Following generation, users refine their chosen draft through an inline chat interface (`/api/generations/{id}/edit`):
 
-### How It Works
-
-1. User selects a draft (e.g., Draft 2)
-2. User types an instruction like *"Make it more casual and add a personal anecdote"*
-3. The system sends the current draft + instruction + full chat history to **Gemini 2.5 Flash**
-4. The AI returns a revised version of the draft
-5. Both the user's instruction and the AI's revision are saved to `ChatHistory` in PostgreSQL
-6. The user can continue editing with more instructions, building on previous changes
-
-### Finalization
-
-When the user is satisfied:
-1. They click **"Finalize & Save Preferences"**
-2. The system compares the **original AI-generated draft** with the **user's final edited version**
-3. Gemini analyzes the differences and extracts what the user changed — their preferences
-4. These preferences are saved to the `Preference` table
-5. Future generations will incorporate these learned preferences
-
-This creates a **feedback loop**: Generate → Edit → Finalize → Learn → Generate Better.
+1. **Iterative Refinement**: Users issue natural-language revision instructions (e.g., *"Shorten the hook and emphasize ROI"*).
+2. **Context-Aware Editing**: The LLM edits the draft while maintaining conversation history.
+3. **Preference Learning on Finalization**: Upon clicking "Finalize", the system diffs the initial draft against the final user-approved text, extracts stylistic preferences, and saves them to the `Preference` table for future generations.
 
 ---
 
 ## 9. Database Schema
 
-PostCraft AI uses **PostgreSQL** with 8 tables managed through **Alembic** migrations.
+PostgreSQL relational schema managed via Alembic:
 
 ```mermaid
 erDiagram
@@ -362,6 +292,7 @@ erDiagram
         uuid id PK
         string username UK
         string password_hash
+        text profile_context
         datetime created_at
     }
 
@@ -436,136 +367,75 @@ erDiagram
     }
 ```
 
-### Table Purposes
-
-| Table | Purpose |
-|---|---|
-| `users` | Registered user accounts with Argon2-hashed passwords |
-| `projects` | Groups generations by user and platform (e.g., "My LinkedIn Project") |
-| `generations` | Each post generation attempt — stores topic, thoughts, and 3 draft outputs |
-| `style_profiles` | Extracted writing style patterns (structure, tone, pacing, etc.) |
-| `chat_history` | Conversation log between user and AI during draft editing |
-| `preferences` | Learned user preferences extracted during finalization |
-| `research_cache` | Cached web search results (24-hour TTL) to reduce API calls |
-| `cost_logs` | Token usage and USD cost tracking for every Gemini API call |
-
 ---
 
 ## 10. API Reference
 
 ### Authentication Endpoints
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/auth/signup` | Create a new account. Returns JWT token |
-| `POST` | `/api/auth/login` | Log in with credentials. Returns JWT token |
+| `POST` | `/api/auth/signup` | Register new user account. Returns JWT access token. |
+| `POST` | `/api/auth/login` | Authenticate with credentials. Returns JWT access token. |
 
-### Generation Endpoints
+### User Profile Endpoints
 
-| Method | Path | Auth | Description |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/generations` | ✅ Bearer | Generate 3 post drafts from a topic and raw thoughts |
-| `POST` | `/api/generations/{id}/edit` | ✅ Bearer | Send an edit instruction to refine a selected draft |
-| `POST` | `/api/generations/{id}/finalize` | ✅ Bearer | Finalize a draft and save learned preferences |
+| `GET` | `/api/users/me` | ✅ Bearer | Retrieve authenticated user details and saved `profile_context`. |
+| `PATCH` | `/api/users/me` | ✅ Bearer | Update user's persistent `profile_context` (bio, target audience, business goals). |
 
-### Administrative Endpoints
+### Content Generation Endpoints
 
-| Method | Path | Auth | Description |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/admin/cost-summary` | ✅ Bearer | View total token usage and costs, broken down by operation |
+| `POST` | `/api/generations` | ✅ Bearer | Generate 3 draft posts. Accepts `topic`, `platform`, `raw_thoughts`, and optional `profile_context`. |
+| `POST` | `/api/generations/{id}/edit` | ✅ Bearer | Submit natural-language edit instruction for an active draft. |
+| `POST` | `/api/generations/{id}/finalize` | ✅ Bearer | Finalize draft, save preferences, and complete generation cycle. |
 
-### Health Check Endpoints
+### Administration & Health Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/health` | Returns backend status, version, and environment |
-| `GET` | `/api/health/db` | Tests database connectivity |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/admin/cost-summary` | ✅ Bearer | Aggregated token usage and estimated USD cost breakdown. |
+| `GET` | `/api/health` | Public | System status, version, and environment. |
+| `GET` | `/api/health/db` | Public | Database connection health check. |
 
 ---
 
 ## 11. Authentication System
 
-PostCraft AI uses industry-standard authentication:
-
-- **Password Hashing**: Argon2 algorithm (winner of the Password Hashing Competition, considered the gold standard)
-- **Token Format**: JSON Web Tokens (JWT) signed with HS256
-- **Token Lifetime**: 7 days
-- **Token Storage**: Frontend stores the JWT in `localStorage`
-- **API Protection**: Every protected endpoint requires `Authorization: Bearer <token>` header
-
-### Auth Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant B as Backend
-    participant DB as PostgreSQL
-
-    Note over U,DB: Registration
-    U->>F: Enter username + password
-    F->>B: POST /api/auth/signup
-    B->>B: Hash password (Argon2)
-    B->>DB: INSERT into users
-    B->>B: Generate JWT (sub: user_id)
-    B-->>F: Return {access_token, token_type}
-    F->>F: Store token in localStorage
-
-    Note over U,DB: Subsequent API Calls
-    U->>F: Create a post
-    F->>B: POST /api/generations + Bearer token
-    B->>B: Decode JWT, extract user_id
-    B->>DB: Verify user exists
-    B->>B: Process request as authenticated user
-```
+- **Password Hashing**: Argon2 algorithm via `passlib[argon2]`.
+- **JWT Token**: Signed with HS256, 7-day expiration.
+- **Interceptors**: Frontend API client automatically attaches Bearer tokens and redirects on 401 unauthenticated responses.
 
 ---
 
 ## 12. Frontend (User Interface)
 
-The frontend is a **Single Page Application (SPA)** built with Next.js and React, employing a strict **Feature-Based Architecture** and a premium, production-grade design system.
+Built with Next.js 16 (React 19) and structured around domain features:
 
-### Architecture
-To avoid monolithic components, the frontend is strictly divided by domain features:
-- `src/features/auth`: Encapsulates authentication screens and hooks.
-- `src/features/generation`: Handles the post generation form and pipeline interactions.
-- `src/features/editor`: Manages the chat-based draft editor and finalization flow.
-- `src/components/ui`: Houses all reusable **shadcn/ui** primitive components.
-- `src/lib/api`: A centralized API layer that intercepts requests, injects JWT tokens, and globally handles 401 expiries.
+```
+frontend/src/
+├── app/                              # Next.js App Router
+│   ├── layout.tsx                    # Root layout with fonts & theme provider
+│   ├── page.tsx                      # Main workspace orchestrating view states
+│   └── globals.css                   # Tailwind semantic color variables
+├── components/
+│   ├── layout/                       # AppLayout, TopNavigation
+│   └── ui/                           # shadcn/ui primitives (Button, Card, Dialog, Textarea, Badge)
+├── features/
+│   ├── auth/                         # AuthScreen, Login/Signup forms, useAuth hook
+│   ├── generation/                   # GenerationForm, ProfileSettingsModal
+│   └── editor/                       # DraftEditor, chat message components
+└── lib/
+    └── api/                          # client.ts, auth.ts, generation.ts, user.ts
+```
 
-### User Interface Modes
-
-The frontend operates in 4 sequential modes:
-
-1. **Authentication Mode**
-   - Toggle between Login and Signup forms
-   - Username + Password input fields
-   - JWT token stored in `localStorage` and managed by `useAuth` hook
-
-2. **Generation Form**
-   - Platform selector (LinkedIn / X)
-   - Topic input field
-   - Raw Thoughts textarea (your unstructured ideas)
-   - Intelligent loading states tracking backend pipeline progress
-
-3. **Draft Selection Grid**
-   - Displays 3 generated draft cards side-by-side
-   - Each card has a "Copy to Clipboard" button
-   - Clicking a draft selects it for editing
-
-4. **Interactive Editor & Chat**
-   - Selected draft displayed in an editable workspace
-   - Chat interface with user/assistant message bubbles
-   - Text input for sending edit instructions
-   - "Finalize & Save Preferences" button to complete the workflow
-
-### Design System & Polish
-- **Component Library**: **shadcn/ui** (built on Radix UI) for robust, accessible, and unstyled base primitives (Dialogs, Cards, Inputs).
-- **Styling Engine**: **Tailwind CSS v3** with strict semantic variables defined in `globals.css` (`--primary`, `--background`, `--card`) ensuring pixel-perfect dark mode.
-- **Theme**: Premium dark mode (`#0b0d17` backgrounds, `#6366f1` Indigo accents) mimicking top-tier SaaS products like Linear and Vercel.
-- **Micro-Interactions**: Tailwind's `animate-in`, `fade-in`, and `slide-in-from-bottom` utilities provide fluid, hardware-accelerated transitions.
-- **Typography**: `Inter` (Google Fonts) for optimal readability and a modern aesthetic.
-- **Notifications**: Sleek, animated toast notifications powered by `sonner`.
+### Key UI Features
+- **Profile Settings Modal**: Accessible from the top navigation bar to persist global profile context.
+- **Per-Generation Override**: Textarea on the main creation form allows temporary override of profile context for specific post angles.
+- **Interactive Editor**: Side-by-side post viewer and chat sidebar for natural-language post revisions.
 
 ---
 
@@ -573,151 +443,77 @@ The frontend operates in 4 sequential modes:
 
 ### Local Development (Docker Compose)
 
-When running locally, Docker Compose orchestrates 4 containers:
+The local development stack orchestrates 3 core services:
+- **`postcraft-postgres`**: PostgreSQL 16 on port `5432`
+- **`postcraft-chromadb`**: ChromaDB on port `8100` (mapped from 8000)
+- **`postcraft-backend`**: FastAPI application on port `8000` with hot reloading
 
-```mermaid
-graph TB
-    subgraph "Docker Network (aipost_default)"
-        FE["📱 Frontend Container<br/>postcraft-frontend<br/>Port 3000"]
-        BE["⚙️ Backend Container<br/>postcraft-backend<br/>Port 8000"]
-        PG["🗄️ PostgreSQL Container<br/>postcraft-postgres<br/>Port 5432"]
-        CH["🔮 ChromaDB Container<br/>postcraft-chromadb<br/>Port 8100"]
-    end
+### Production Multi-Stage Backend Dockerfile
 
-    subgraph "Persistent Volumes"
-        V1["postgres_data"]
-        V2["chroma_data"]
-    end
+```dockerfile
+# Stage 1: Dependency builder
+FROM python:3.12-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+WORKDIR /app
+COPY pyproject.toml ./
+RUN uv venv /app/.venv && VIRTUAL_ENV=/app/.venv uv pip install -r pyproject.toml
 
-    FE -->|"API calls"| BE
-    BE -->|"SQL queries"| PG
-    BE -->|"Vector queries"| CH
-    PG --- V1
-    CH --- V2
+# Stage 2: Minimal runtime
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
-
-### Production Deployment
-
-| Component | Platform | Details |
-|---|---|---|
-| **Frontend** | Vercel | Automatic CI/CD from GitHub. Every push rebuilds and deploys |
-| **Backend** | Railway | Docker-based deployment with auto-scaling |
-| **PostgreSQL** | Railway Plugin | Managed database with automatic backups |
-| **ChromaDB** | Railway Service | Docker image `chromadb/chroma:0.5.23` with persistent volume |
-
-### Backend Dockerfile (Multi-Stage Build)
-
-```
-Stage 1 (Builder):
-  python:3.12-slim → Install uv → Create virtualenv → Install all Python dependencies
-
-Stage 2 (Runtime):
-  python:3.12-slim → Copy only the virtualenv + app code → Run uvicorn
-```
-
-This produces a **minimal, production-ready image** without build tools or package managers, keeping it fast and secure.
 
 ---
 
 ## 14. Cost Tracking
 
-Every call to Gemini 2.5 Flash is logged with token counts and estimated USD costs.
+Every LLM operation is tracked in PostgreSQL `cost_logs` using Gemini 2.5 Flash pricing:
+- **Input Tokens**: $0.30 per 1,000,000 tokens
+- **Output Tokens**: $2.50 per 1,000,000 tokens
 
-### Pricing (Gemini 2.5 Flash)
-
-| Metric | Rate |
-|---|---|
-| Input tokens | $0.30 per 1M tokens |
-| Output tokens | $2.50 per 1M tokens |
-
-### Tracked Operations
-
-| Operation | When It Happens |
-|---|---|
-| `pattern_extraction` | Style analysis using function calling |
-| `draft_generation` | Generating 3 post variations |
-| `quality_check` | Originality and structural validation |
-| `edit` | Each conversational edit instruction |
-| `finalize` | Preference extraction during finalization |
-
-The cost summary is accessible via `GET /api/admin/cost-summary`.
+Operations logged: `pattern_extraction`, `draft_generation`, `quality_check`, `edit`, `finalize`.
 
 ---
 
 ## 15. Technology Stack Summary
 
 ### Backend
-| Technology | Version | Purpose |
+| Package | Version | Purpose |
 |---|---|---|
-| Python | 3.12 | Core language |
-| FastAPI | Latest | Web framework (async) |
-| SQLAlchemy | 2.0 | ORM (async) |
+| Python | 3.12 | Core runtime |
+| FastAPI | Latest | Asynchronous REST framework |
+| LangGraph | >=1.2.0 | Pipeline workflow state machine |
+| langchain-google-genai | 2.1+ | Structured LLM outputs with Gemini 2.5 Flash |
+| SQLAlchemy | 2.0+ | Asynchronous ORM |
 | PostgreSQL | 16 | Relational database |
-| ChromaDB | 0.5.23 | Vector database |
-| Alembic | Latest | Database migrations |
-| Google Gemini | 2.5 Flash | AI language model |
-| SerpApi | - | Web search |
-| Argon2 | - | Password hashing |
-| python-jose | - | JWT tokens |
-| uv | Latest | Python package manager |
+| ChromaDB | 0.5.23 | Vector database for style memory |
+| Alembic | Latest | Schema migrations |
+| google-genai | Latest | Retained specifically for conversational `editor.py` |
 
 ### Frontend
-| Technology | Version | Purpose |
+| Package | Version | Purpose |
 |---|---|---|
-| Next.js | 16 | React framework (App Router) |
-| React | 19 | UI library |
-| TypeScript | 5 | Type-safe JavaScript |
-| Tailwind CSS | 3.4 | Utility-first CSS styling |
-| shadcn/ui | Latest | Accessible, unstyled UI components |
-| Radix UI | Latest | Headless component foundations |
+| Next.js | 16 (App Router) | React application framework |
+| React | 19 | UI rendering library |
+| TypeScript | 5 | Type safety |
+| Tailwind CSS | 3.4 | Utility-first styling |
+| shadcn/ui | Latest | Accessible UI components |
+| Lucide React | Latest | Iconography |
 | Sonner | 2.0 | Toast notifications |
-
-### Infrastructure
-| Technology | Purpose |
-|---|---|
-| Docker | Containerization |
-| Docker Compose | Multi-container orchestration |
-| Vercel | Frontend hosting (CI/CD) |
-| Railway | Backend + database hosting |
 
 ---
 
 ## 16. End-to-End User Journey
 
-Here is the complete story of what happens when someone uses PostCraft AI:
-
-### First Time User
-
-1. **Sign Up**: User creates an account. Password is hashed with Argon2 and stored. JWT token issued.
-
-2. **Create First Post**: User enters topic "5 Leadership Lessons from My Startup" for LinkedIn, along with some raw thoughts.
-
-3. **Research Phase**: The system searches the web for how top LinkedIn creators (Justin Welsh, Sahil Bloom, etc.) write about leadership. Results are cached for 24 hours.
-
-4. **Style Extraction**: Since this is the first generation, there's no historical style in ChromaDB. The AI analyzes the research snippets and extracts the dominant style patterns (structure, tone, pacing, etc.).
-
-5. **Draft Generation**: Using the extracted style + research + user's raw thoughts, Gemini generates 3 unique draft variations.
-
-6. **Quality Control**: Each draft is checked for originality (no plagiarism from sources) and structural completeness (Hook/Body/CTA). If any draft fails, it's regenerated with specific feedback.
-
-7. **User Reviews Drafts**: The 3 drafts appear in the UI. The user reads them and selects Draft 2.
-
-8. **Conversational Editing**: The user says "Make the opening hook more attention-grabbing and add a personal failure story." The AI revises Draft 2 accordingly. The user continues with "Shorten the CTA to one sentence." The AI complies.
-
-9. **Finalization**: The user clicks "Finalize." The system compares the original Draft 2 with the final edited version, extracts what the user changed (preferences), and saves them.
-
-10. **Style Profile Saved**: The extracted style is saved to both PostgreSQL and ChromaDB as a vector embedding.
-
-### Returning User (The Magic)
-
-11. **Create Second Post**: Same user, new topic: "Why Remote Work is the Future."
-
-12. **ChromaDB Bias**: During pattern extraction, the system queries ChromaDB and finds the user's previous style profile. It injects this into the prompt as "historical preferred style."
-
-13. **Better Output**: The new drafts are naturally biased toward the user's proven style — same structure, similar tone, matching pacing — but applied to the new topic.
-
-14. **Continuous Learning**: With every generation → edit → finalize cycle, the system builds a richer understanding of the user's preferences.
-
----
-
-> **PostCraft AI doesn't just generate content — it builds a personalized AI writing partner that gets better with every use.**
+1. **User Profile Setup**: User signs in and configures their `profile_context` in Profile Settings (e.g. *"Founder of SaaS analytics tool. Target audience: Growth leads. Goal: Book demo calls"*).
+2. **Topic & Thought Input**: User submits a topic (*"Why open source beats proprietary code"*) and raw thoughts.
+3. **Research & Style Extraction**: The LangGraph pipeline retrieves top creator posts, checks ChromaDB for the user's historical style, and extracts writing mechanics.
+4. **Draft Generation**: Gemini produces 3 distinct drafts enforcing the Lead-Gen CTA priority framework.
+5. **Automated Quality Control**: The pipeline verifies originality against search snippets and validates that CTAs drive qualified actions rather than generic engagement bait.
+6. **Selection & Conversational Edit**: User selects Draft 1 and asks the AI to *"Add a specific failure case in paragraph 2"*.
+7. **Finalization & Continuous Learning**: User finalizes the draft. The system extracts user preferences, indexes the post style into ChromaDB, and updates PostgreSQL.

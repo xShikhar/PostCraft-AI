@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
 
-from app.database import Base, get_db
+from app.core.database import Base, get_db
 from app.main import app
 import os
 
@@ -19,7 +19,7 @@ import unittest.mock as mock
 patcher = mock.patch("app.services.vector.chromadb")
 mock_chromadb = patcher.start()
 
-from app.config import get_settings
+from app.core.config import get_settings
 get_settings.cache_clear()
 
 # Use an in-memory SQLite DB for tests
