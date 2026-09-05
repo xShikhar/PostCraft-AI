@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { login as apiLogin, signup as apiSignup } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 import { toast } from "sonner";
 
 export function useAuth() {
@@ -41,7 +42,14 @@ export function useAuth() {
       toast.success("Welcome back!");
       return true;
     } catch (err: any) {
-      toast.error(err.message || "Failed to log in");
+      // 429 already has a rate-limit specific message from fetchApi; surface
+      // it as-is so the user understands what's happening. Other errors just
+      // pass through whatever the server sent.
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err?.message || "Failed to log in";
+      toast.error(message);
       return false;
     } finally {
       setIsLoading(false);
@@ -58,7 +66,11 @@ export function useAuth() {
       toast.success("Account created successfully!");
       return true;
     } catch (err: any) {
-      toast.error(err.message || "Failed to sign up");
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err?.message || "Failed to sign up";
+      toast.error(message);
       return false;
     } finally {
       setIsLoading(false);

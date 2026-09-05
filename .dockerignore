@@ -1,0 +1,64 @@
+# ─── Secrets & Environment ────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+
+# ─── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ─── Node / Next.js / TypeScript ──────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+dist/
+build/
+
+# ─── IDE & OS ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Logs ─────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Local Databases & Storage ────────────────────────
+*.sqlite3
+*.db
+**/chroma_db/
+backend/chroma_db/
+backend/postcraft.db
+backend/postcraft.db-journal
+
+# ─── Design references (Stitch HTML exports, kept locally only) ───
+design-reference/
+
+# ─── Git & CI ─────────────────────────────────────────
+.git/
+.gitignore
+.github/
+*.yml
+!docker-compose*.yml
+!backend/.github/workflows/*.yml

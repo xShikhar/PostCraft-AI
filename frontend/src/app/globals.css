@@ -1,40 +1,205 @@
+/* ─── PostCraft AI — Design Token Foundation ─────────────────────────────────
+   Light: Luminous Editorial AI (from /design-reference/light/luminous_editorial_ai/DESIGN.md)
+   Dark:  Warm Editorial Charcoal (from /design-reference/dark/warm_editorial_charcoal/DESIGN.md)
+   ─────────────────────────────────────────────────────────────────────────── */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* ─── LIGHT MODE — Luminous Editorial AI ─────────────────────────────── */
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Surface layers */
+    --surface: #fdf8ff;
+    --surface-dim: #ddd6f8;
+    --surface-bright: #fdf8ff;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f7f1ff;
+    --surface-container: #f1ebff;
+    --surface-container-high: #ebe5ff;
+    --surface-container-highest: #e5deff;
+    --surface-subtle: #f9f8fe;
+    --surface-variant: #e5deff;
+    --surface-card: #ffffff;
+    --surface-tint: #5d3be8;
+    --canvas-base: #f3f2fa;
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    /* Text */
+    --text-display: #0e091f;
+    --text-body: #2d2843;
+    --text-muted: #756f91;
+    --on-surface: #1c1832;
+    --on-surface-variant: #484555;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* Primary */
+    --primary: #4412d1;
+    --on-primary: #ffffff;
+    --primary-container: #5d3be8;
+    --on-primary-container: #dbd3ff;
+    --primary-foreground: #ffffff;
+    --primary-fixed: #e5deff;
+    --primary-fixed-dim: #c9bfff;
+    --on-primary-fixed: #1a0063;
+    --on-primary-fixed-variant: #4411d1;
+    --inverse-primary: #c9bfff;
 
-    --primary: 243 75% 59%; /* Indigo-500 */
-    --primary-foreground: 0 0% 98%;
+    /* Secondary */
+    --secondary: #b80b5e;
+    --on-secondary: #ffffff;
+    --secondary-container: #fd4d91;
+    --on-secondary-container: #59002a;
+    --secondary-fixed: #ffd9e1;
+    --secondary-fixed-dim: #ffb1c6;
+    --on-secondary-fixed: #3f001b;
+    --on-secondary-fixed-variant: #8e0047;
 
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    /* Tertiary */
+    --tertiary: #474649;
+    --on-tertiary: #ffffff;
+    --tertiary-container: #5f5e60;
+    --on-tertiary-container: #dbd8da;
+    --tertiary-fixed: #e5e1e4;
+    --tertiary-fixed-dim: #c8c6c8;
+    --on-tertiary-fixed: #1c1b1d;
+    --on-tertiary-fixed-variant: #474649;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    /* Borders / outline */
+    --border-subtle: #e4e0f4;
+    --border-hover: #d2cbed;
+    --outline: #797587;
+    --outline-variant: #c9c4d8;
 
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    /* Inverse */
+    --inverse-surface: #312d48;
+    --inverse-on-surface: #f4eeff;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    /* Error */
+    --error: #ba1a1a;
+    --on-error: #ffffff;
+    --error-container: #ffdad6;
+    --on-error-container: #93000a;
 
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 98%;
+    /* Hover inversion (used on draft cards, history items, etc.) */
+    --surface-card-hover-start: #2b125b;
+    --surface-card-hover-end: #160a33;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    /* shadcn/ui compatibility aliases (point to design tokens) */
+    --background: #fdf8ff;
+    --foreground: #1c1832;
+    --card: #ffffff;
+    --card-foreground: #1c1832;
+    --popover: #ffffff;
+    --popover-foreground: #1c1832;
+    --muted: #f1ebff;
+    --muted-foreground: #756f91;
+    --accent: #ebe5ff;
+    --accent-foreground: #1c1832;
+    --destructive: #ba1a1a;
+    --destructive-foreground: #ffffff;
+    --success: #10b981;
+    --success-foreground: #ffffff;
+    --border: #e4e0f4;
+    --input: #e4e0f4;
+    --ring: #5d3be8;
+    --radius: 0.5rem;
+  }
 
+  /* ─── DARK MODE — Warm Editorial Charcoal ────────────────────────────── */
+  .dark {
+    /* Surface layers */
+    --surface: #131312;
+    --surface-dim: #131312;
+    --surface-bright: #3a3938;
+    --surface-container-lowest: #0e0e0d;
+    --surface-container-low: #1c1c1a;
+    --surface-container: #20201e;
+    --surface-container-high: #2a2a29;
+    --surface-container-highest: #353533;
+    --surface-subtle: #1c1c1a;
+    --surface-variant: #353533;
+    --surface-card: #1c1c1a;
+    --surface-tint: #ffb4aa;
+    --canvas-base: #141413;
+
+    /* Text */
+    --text-display: #edebe8;
+    --text-body: #d4d1cc;
+    --text-muted: #9b9994;
+    --on-surface: #e5e2e0;
+    --on-surface-variant: #e2beba;
+
+    /* Primary (warm coral red in dark) */
+    --primary: #e85042;
+    --on-primary: #ffffff;
+    --primary-container: #f85c4c;
+    --on-primary-container: #5c0002;
+    --primary-foreground: #ffffff;
+    --primary-fixed: #ffdad5;
+    --primary-fixed-dim: #ffb4aa;
+    --on-primary-fixed: #410001;
+    --on-primary-fixed-variant: #900d0c;
+    --inverse-primary: #b32921;
+
+    /* Secondary (warm amber) */
+    --secondary: #d4973b;
+    --on-secondary: #452b00;
+    --secondary-container: #966200;
+    --on-secondary-container: #ffeddb;
+    --secondary-fixed: #ffddb4;
+    --secondary-fixed-dim: #fcba5b;
+    --on-secondary-fixed: #291800;
+    --on-secondary-fixed-variant: #633f00;
+
+    /* Tertiary */
+    --tertiary: #c8c6c2;
+    --on-tertiary: #31302d;
+    --tertiary-container: #92918c;
+    --on-tertiary-container: #2a2a27;
+    --tertiary-fixed: #e5e2dd;
+    --tertiary-fixed-dim: #c8c6c2;
+    --on-tertiary-fixed: #1c1c19;
+    --on-tertiary-fixed-variant: #474743;
+
+    /* Borders / outline */
+    --border-subtle: #2c2c29;
+    --border-hover: #383733;
+    --outline: #a98985;
+    --outline-variant: #5a413d;
+
+    /* Inverse */
+    --inverse-surface: #e5e2e0;
+    --inverse-on-surface: #31302f;
+
+    /* Error */
+    --error: #ffb4ab;
+    --on-error: #690005;
+    --error-container: #93000a;
+    --on-error-container: #ffdad6;
+
+    /* Hover inversion — keep the same deep violet gradient for parity.
+       Dark mode cards hover to a subtle dark gradient instead. */
+    --surface-card-hover-start: #f85c4c;
+    --surface-card-hover-end: #b32921;
+
+    /* shadcn/ui compatibility */
+    --background: #131312;
+    --foreground: #e5e2e0;
+    --card: #1c1c1a;
+    --card-foreground: #e5e2e0;
+    --popover: #20201e;
+    --popover-foreground: #e5e2e0;
+    --muted: #2a2a29;
+    --muted-foreground: #9b9994;
+    --accent: #2a2a29;
+    --accent-foreground: #e5e2e0;
+    --destructive: #ffb4ab;
+    --destructive-foreground: #690005;
+    --success: #10b981;
+    --success-foreground: #ffffff;
+    --border: #2c2c29;
+    --input: #2c2c29;
+    --ring: #e85042;
     --radius: 0.5rem;
   }
 }
@@ -44,11 +209,28 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
+    @apply bg-canvas-base text-text-body font-sans antialiased;
   }
 }
 
-/* Fallback for the current old classes so the app doesn't break entirely before Phase 4 */
-.login-page, .dashboard, .card, .btn-primary, .btn-secondary, .btn-pill-small, .form-control {
-  /* Temporary placeholders to keep it somewhat usable during migration */
+/* ─── Editorial caret / selection ──────────────────────────────────────── */
+::selection {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+/* ─── Scrollbar (light + dark tuned) ───────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--outline);
 }

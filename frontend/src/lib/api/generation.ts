@@ -5,6 +5,7 @@ export type GenerationParams = {
   platform: string;
   raw_thoughts: string;
   profile_context?: string;
+  use_context?: boolean;
 };
 
 export type Drafts = {
@@ -30,6 +31,7 @@ export type GenerationResponse = {
   research_confidence?: "low" | "medium" | "high";
   research_source?: string;
   status: "editing" | "needs_review" | "failed";
+  substance_score?: number;
   error?: string;
 };
 

@@ -36,7 +36,7 @@ class PostGenerationPipeline:
     async def run(self, state: PipelineState) -> PipelineState:
         """
         Execute the LangGraph pipeline.
-        
+
         Accepts and returns PipelineState for API compatibility.
         Internally maps to GraphState (TypedDict) for LangGraph execution.
         """
@@ -48,11 +48,13 @@ class PostGenerationPipeline:
             "topic": state.topic,
             "raw_thoughts": state.raw_thoughts,
             "profile_context": state.profile_context or "",
+            "use_context": state.use_context,
             "research_result": None,
             "extracted_pattern": None,
             "drafts": None,
             "retry_count": 0,
             "quality_results": "",
+            "substance_score": None,
             "error": "",
             "skip_extraction": False,
         }
@@ -86,5 +88,6 @@ class PostGenerationPipeline:
         original.drafts = graph_output.get("drafts")
         original.retry_count = graph_output.get("retry_count", 0)
         original.quality_results = graph_output.get("quality_results") or None
+        original.substance_score = graph_output.get("substance_score")
         original.error = graph_output.get("error") or None
         return original

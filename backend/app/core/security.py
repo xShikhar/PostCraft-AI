@@ -1,10 +1,28 @@
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 
-# Hardcoded secret key for prototype, usually from env
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "b39dc1d3fc144f808f1b40212fbd65b2")
+# JWT secret — REQUIRED. Fail closed if not set. Never use a hardcoded fallback
+# in production: a leaked fallback lets anyone forge tokens for any user.
+_secret_key_env = os.getenv("JWT_SECRET_KEY")
+if not _secret_key_env:
+    print(
+        "FATAL: JWT_SECRET_KEY is not set. "
+        "Generate one with `openssl rand -hex 32` and add it to backend/.env.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+if len(_secret_key_env) < 32:
+    print(
+        "FATAL: JWT_SECRET_KEY is too short (must be at least 32 chars). "
+        "Generate one with `openssl rand -hex 32`.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+SECRET_KEY: str = _secret_key_env
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

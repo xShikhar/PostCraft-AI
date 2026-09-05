@@ -58,3 +58,6 @@ yarn-error.log*
 **/chroma_db/
 backend/chroma_db/
 backend/postcraft.db
+
+# ─── Design references (Stitch HTML exports, kept locally only) ───
+design-reference/
