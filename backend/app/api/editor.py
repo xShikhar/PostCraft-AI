@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -7,14 +7,21 @@ from app.core.database import get_db
 from app.models import Generation, ChatHistory, StyleProfile, Preference, Project, User
 from app.schemas.editor import EditRequest, EditResponse, FinalizeRequest
 from app.core.config import get_settings
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, auth_limiter
 
 from google import genai
 
 router = APIRouter(prefix="/api/generations", tags=["editor"])
 
 @router.post("/{gen_id}/edit", response_model=EditResponse)
-async def edit_generation(gen_id: uuid.UUID, req: EditRequest, session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+@auth_limiter.limit("20/hour")
+async def edit_generation(
+    request: Request,
+    gen_id: uuid.UUID,
+    req: EditRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     # Fetch generation and project to verify ownership
     stmt = select(Generation, Project).join(Project).where(
         Generation.id == gen_id,
@@ -89,7 +96,14 @@ async def edit_generation(gen_id: uuid.UUID, req: EditRequest, session: AsyncSes
     return EditResponse(revised_draft=revised_text, status="success")
 
 @router.post("/{gen_id}/finalize")
-async def finalize_generation(gen_id: uuid.UUID, req: FinalizeRequest, session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+@auth_limiter.limit("30/hour")
+async def finalize_generation(
+    request: Request,
+    gen_id: uuid.UUID,
+    req: FinalizeRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     # Fetch generation and project
     stmt = select(Generation, Project).join(Project).where(
         Generation.id == gen_id,

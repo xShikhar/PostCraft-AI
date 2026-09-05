@@ -1,0 +1,51 @@
+# Caddy reverse proxy for PostCraft AI
+#
+# Why Caddy: automatic Let's Encrypt cert issuance and renewal with zero
+# config. Cert expiry silently taking your site down is a real failure mode
+# for solo devs — Caddy's default 60-day renewal is the mitigation.
+#
+# How to use:
+#   1. Set $POSTCRAFT_DOMAIN in your env to your real domain
+#      (e.g. app.yourdomain.com) — Caddy will issue a cert for it.
+#   2. Run: caddy run --config Caddyfile
+#   3. Confirm with: curl -I https://$POSTCRAFT_DOMAIN/api/health
+#
+# Caddy needs port 80 + 443 open to the public internet. The backend /
+# frontend containers are NOT exposed to the public — only Caddy is.
+
+# Global options
+{
+    email {$POSTCRAFT_ADMIN_EMAIL}  # For Let's Encrypt expiry notifications
+}
+
+# Main site
+{$POSTCRAFT_DOMAIN} {
+    # Encode responses for compression
+    encode gzip zstd
+
+    # Strict transport security — pin HTTPS for one year
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Proxy API requests to backend
+    reverse_proxy /api/* backend:8000 {
+        # Pass the real client IP for rate limiting
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+
+    # Proxy everything else (Next.js) to frontend
+    reverse_proxy /* frontend:3000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+
+    # Health check logging — useful for monitoring
+    log {
+        output file /var/log/caddy/postcraft.log {
+            roll_size 100mb
+            roll_keep 10
+        }
+    }
+}

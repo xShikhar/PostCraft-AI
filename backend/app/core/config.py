@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     CHROMA_PORT: int = 8000
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] | str = ["http://localhost:3000"]
+    ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
     
     @field_validator('DATABASE_URL')
     @classmethod
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
     
-    @field_validator('CORS_ORIGINS', mode='before')
+    @field_validator('CORS_ORIGINS', mode='after')
     @classmethod
     def assemble_cors_origins(cls, v: object) -> list[str]:
         if isinstance(v, str):

@@ -9,8 +9,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postcraft}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postcraft}
       POSTGRES_DB: ${POSTGRES_DB:-postcraft}
-    ports:
-      - "5432:5432"
+    # No ports exposed — backend reaches postgres via internal Docker network (postgres:5432).
+    # Only expose port if you need host access for debugging (remember to firewall it).
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +24,7 @@ services:
     image: chromadb/chroma:0.5.23
     container_name: postcraft-chromadb
     restart: unless-stopped
-    ports:
-      - "8100:8000"
+    # No public ports — only backend reaches this on the internal Docker network.
     volumes:
       - chroma_data:/chroma/chroma
     environment:
@@ -39,14 +38,16 @@ services:
       dockerfile: Dockerfile
     container_name: postcraft-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # No public ports — only Caddy reaches this on the internal Docker network.
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postcraft}:${POSTGRES_PASSWORD:-postcraft}@postgres:5432/${POSTGRES_DB:-postcraft}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postcraft}:${POSTGRES_PASSWORD:-postcraft}@postgres:5432/${POSTGRES_DB:-postcraft}?sslmode=require
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - RESUME_ENCRYPTION_KEY=${RESUME_ENCRYPTION_KEY}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - ALLOWED_HOSTS=${POSTCRAFT_DOMAIN}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       postgres:
@@ -57,13 +58,41 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* is baked in at build time, so pass it here.
+        # This MUST be set to https://your-domain so client-side fetches hit the public URL.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: postcraft-frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # No public ports — only Caddy reaches this on the internal Docker network.
+    environment:
+      - API_INTERNAL_URL=http://backend:8000
     depends_on:
       - backend
+
+  # ─── Caddy (TLS termination) ───────────────────────────
+  # Handles automatic Let's Encrypt cert issuance and renewal.
+  # This is the only service that should be publicly accessible (80 + 443).
+  caddy:
+    image: caddy:2-alpine
+    container_name: postcraft-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"   # HTTP — redirects to HTTPS via Caddy's auto_https
+      - "443:443" # HTTPS
+    volumes:
+      - ./frontend/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data    # Cert storage
+      - caddy_config:/config
+    environment:
+      - POSTCRAFT_DOMAIN=${POSTCRAFT_DOMAIN:?POSTCRAFT_DOMAIN must be set, e.g. app.yourdomain.com}
+      - POSTCRAFT_ADMIN_EMAIL=${POSTCRAFT_ADMIN_EMAIL:?POSTCRAFT_ADMIN_EMAIL must be set for Let's Encrypt}
+    depends_on:
+      - backend
+      - frontend
 
 volumes:
   postgres_data:
   chroma_data:
+  caddy_data:
+  caddy_config:

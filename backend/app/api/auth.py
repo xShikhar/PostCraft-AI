@@ -1,15 +1,21 @@
 import uuid
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
 from jose import jwt, JWTError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.database import get_db
 from app.models import User
 from app.core.security import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
+
+# Per-IP rate limiter for auth endpoints. In-memory; swap to Redis backend
+# (slowapi supports it) before scaling beyond a single instance.
+auth_limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -49,7 +55,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     return user
 
 @router.post("/signup", response_model=Token)
-async def signup(user_req: UserCreate, session: AsyncSession = Depends(get_db)):
+@auth_limiter.limit("3/minute")
+async def signup(
+    request: Request,
+    user_req: UserCreate,
+    session: AsyncSession = Depends(get_db),
+):
     # Check if username exists
     stmt = select(User).where(User.username == user_req.username)
     res = await session.execute(stmt)
@@ -68,7 +79,12 @@ async def signup(user_req: UserCreate, session: AsyncSession = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_db)):
+@auth_limiter.limit("5/minute")
+async def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: AsyncSession = Depends(get_db),
+):
     stmt = select(User).where(User.username == form_data.username)
     res = await session.execute(stmt)
     user = res.scalars().first()

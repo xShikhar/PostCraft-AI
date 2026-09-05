@@ -17,11 +17,13 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=True) # nullable for backwards compatibility with sandbox DB
     profile_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    about_me: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     projects: Mapped[list["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     style_profiles: Mapped[list["StyleProfile"]] = relationship("StyleProfile", back_populates="user", cascade="all, delete-orphan")
     preferences: Mapped[list["Preference"]] = relationship("Preference", back_populates="user", cascade="all, delete-orphan")
+    resume: Mapped["UserResume | None"] = relationship("UserResume", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class Project(Base):
@@ -124,3 +126,17 @@ class CostLog(Base):
     completion_tokens: Mapped[int] = mapped_column(default=0)
     estimated_cost_usd: Mapped[float] = mapped_column(default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UserResume(Base):
+    """Stores user's uploaded resume (one row per user; re-upload overwrites)."""
+    __tablename__ = "user_resumes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    raw_text: Mapped[str] = mapped_column(Text)
+    structured_summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: {role, industry, expertise_areas[], experience_level}
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped["User"] = relationship("User", back_populates="resume")

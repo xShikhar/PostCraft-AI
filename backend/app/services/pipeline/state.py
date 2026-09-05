@@ -19,15 +19,21 @@ class GeneratedDrafts(BaseModel):
     draft_3: str = Field(description="Third draft variation, unique angle or hook.")
 
 class QualityVerdict(BaseModel):
-    """Structured output for the LLM quality check gate (lead-gen CTA + structural completeness)."""
+    """Structured output for the LLM quality check gate (originality + structural completeness + lead-gen CTA + substance)."""
     passed: bool = Field(description="True if all drafts pass all checks.")
     failed_check: Optional[str] = Field(
         default=None,
-        description="Which check failed: 'lead_gen_cta' or 'structural_completeness'"
+        description="Which check failed: 'originality', 'structural_completeness', 'lead_gen_cta', or 'substance'"
     )
     failed_drafts: Optional[str] = Field(
         default=None,
         description="Which draft(s) failed and a concise explanation of why, for feedback injection."
+    )
+    substance_score: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description="Overall substance / originality-of-thought score from 1-10 across all drafts. Lower = more generic/AI-sounding."
     )
 
 class PipelineState(BaseModel):
@@ -39,20 +45,22 @@ class PipelineState(BaseModel):
     topic: str
     raw_thoughts: str
     profile_context: Optional[str] = None  # Optional user bio/profile/resume text for lead-gen CTA context
-    
+    use_context: bool = True  # When False, skip background-context injection (resume/about-me)
+
     # Populated by node_research
     research_result: Optional[ResearchResult] = None
-    
+
     # Populated by node_pattern_extraction
     extracted_pattern: Optional[ExtractedPattern] = None
-    
+
     # Populated by node_draft_generation
     drafts: Optional[GeneratedDrafts] = None
-    
+
     # Populated by node_quality_check
     retry_count: int = 0
     quality_results: Optional[str] = None
-    
+    substance_score: Optional[int] = None  # 1-10 score from the substance gate
+
     # Any errors that occurred
     error: Optional[str] = None
 
@@ -65,12 +73,16 @@ class GraphState(TypedDict, total=False):
     topic: str
     raw_thoughts: str
     profile_context: Optional[str]
-    
+    use_context: bool
+
     research_result: Optional[ResearchResult]
     extracted_pattern: Optional[ExtractedPattern]
     drafts: Optional[GeneratedDrafts]
-    
+    snippets_text: str  # Local var in prompt builders, not shared across nodes
+
     retry_count: int
     quality_results: Optional[str]
+    quality_feedback: Optional[str]  # Populated by quality_check; consumed by draft_generation on retry
+    substance_score: Optional[int]  # 1-10 score from substance gate
     error: Optional[str]
     skip_extraction: bool

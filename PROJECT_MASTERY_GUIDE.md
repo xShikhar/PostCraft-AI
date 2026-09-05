@@ -11,8 +11,9 @@
 5. [Part 5 — The LangGraph Pipeline, Explained Conceptually](#part-5--the-langgraph-pipeline-explained-conceptually)
 6. [Part 6 — The Product Logic: What Makes AI Output Good or Bad](#part-6--the-product-logic-what-makes-ai-output-good-or-bad)
 7. [Part 7 — Database Schema, Explained Relationally](#part-7--database-schema-explained-relationally)
-8. [Part 8 — Known Rough Edges and Deliberate Trade-Offs](#part-8--known-rough-edges-and-deliberate-trade-offs)
-9. [Part 9 — "If You Want to Change X, Start at File Y"](#part-9--if-you-want-to-change-x-start-at-file-y)
+8. [Part 8 — Security, Rate Limiting & Account Lifecycle](#part-8--security-rate-limiting--account-lifecycle)
+9. [Part 9 — Known Rough Edges and Deliberate Trade-Offs](#part-9--known-rough-edges-and-deliberate-trade-offs)
+10. [Part 10 — "If You Want to Change X, Start at File Y"](#part-10--if-you-want-to-change-x-start-at-file-y)
 
 ---
 
@@ -213,22 +214,28 @@ Here is the complete, current file structure of the repository.
 ```
 postcraft-ai/
 ├── docker-compose.yml              # Local multi-container development environment
-├── docker-compose.prod.yml         # Production multi-container definition
+├── docker-compose.prod.yml         # Production multi-container definition (Caddy TLS, no public backend/frontend ports)
+├── Caddyfile                       # Caddy reverse proxy config (auto-https via Let's Encrypt)
 ├── README.md                       # High-level project summary and quickstart
+├── PRIVACY.md                      # Privacy Policy, ToS, GDPR notes
+├── DEPLOYMENT.md                   # Pre-launch security & operations checklist
 ├── PostCraft_AI_Complete_Documentation.md # Architecture reference and schema documentation
 ├── PROJECT_MASTERY_GUIDE.md        # This teaching guide
 │
 ├── backend/
 │   ├── pyproject.toml              # Backend dependencies and project metadata
 │   ├── Dockerfile                  # Multi-stage container definition for backend
-│   ├── start.sh                    # Container startup script (runs migrations then uvicorn)
+│   ├── start.sh                    # Runs resume-encryption migration, then uvicorn
 │   ├── .dockerignore               # Files excluded from Docker build context
 │   ├── alembic.ini                 # Configuration file for Alembic database migrations
 │   ├── alembic/                    # Database migration scripts
 │   │   ├── env.py                  # Alembic runtime environment (configures async engine)
 │   │   └── versions/               # Individual migration files
-│   │       ├── 4b3f9cce7b2c_initial_schema.py
-│   │       └── 3451f9589925_add_profile_context_to_user.py
+│   │       ├── 4a95865efc26_init_schema.py
+│   │       ├── db827654c4ab_add_password_hash.py
+│   │       ├── 4b3f9cce7b2c_add_cost_log.py
+│   │       ├── 3451f9589925_add_profile_context_to_user.py
+│   │       └── 4c91d2e8f0a3_add_about_me_and_resumes.py
 │   ├── creators/                   # Curated dataset of top viral posts
 │   │   ├── linkedin.json
 │   │   └── x.json
@@ -239,27 +246,30 @@ postcraft-ai/
 │   │   ├── test_quality_checker.py # N-gram originality and plagiarism detection tests
 │   │   └── test_research.py        # 4-tier search cache-miss and cache-hit tests
 │   └── app/
-│       ├── main.py                 # FastAPI app entrypoint, CORS middleware & router setup
-│       ├── models.py               # SQLAlchemy ORM table definitions
-│       ├── core/                   # Infrastructure layer (config, db, security)
+│       ├── main.py                 # FastAPI entrypoint, Sentry init, security headers, TrustedHost, CORS
+│       ├── models.py               # SQLAlchemy ORM table definitions (User, Generation, UserResume, etc.)
+│       ├── core/                   # Infrastructure layer
 │       │   ├── __init__.py         # Package exports
 │       │   ├── config.py           # Pydantic Settings & environment variable validation
 │       │   ├── database.py         # Async SQLAlchemy engine, session maker & get_db
-│       │   └── security.py         # Argon2 password hashing & JWT token generation
+│       │   ├── security.py         # Argon2 password hashing & JWT (fail-closed on missing/short secret)
+│       │   ├── crypto.py           # Fernet resume encryption (fail-closed)
+│       │   └── migrate_resume_encryption.py  # One-time plaintext→encrypted migration
 │       ├── schemas/                # Public HTTP request/response data contracts (Pydantic)
-│       │   ├── api.py              # Generation, User, and Cost request/response DTOs
+│       │   ├── api.py              # Generation, User, Resume, Cost DTOs
 │       │   ├── editor.py           # Conversational editor request/response DTOs
 │       │   └── research.py         # Research result and source snippet DTOs
-│       ├── api/                    # HTTP Controllers (FastAPI Routers)
-│       │   ├── auth.py             # POST /api/auth/signup and /api/auth/login
-│       │   ├── users.py            # GET and PATCH /api/users/me
-│       │   ├── generations.py      # POST /api/generations (pipeline trigger)
-│       │   ├── editor.py           # POST /api/generations/{id}/edit & /finalize
+│       ├── api/                    # HTTP Controllers (FastAPI Routers) — all write endpoints rate-limited
+│       │   ├── auth.py             # POST /api/auth/signup (3/min) and /api/auth/login (5/min)
+│       │   ├── users.py            # GET/PATCH/DELETE /api/users/me, resume upload/get/delete
+│       │   ├── generations.py      # POST /api/generations (10/hour)
+│       │   ├── editor.py           # POST /api/generations/{id}/edit (20/hour) & /finalize (30/hour)
 │       │   ├── admin.py            # GET /api/admin/cost-summary
 │       │   └── health.py           # GET /api/health and /api/health/db
 │       └── services/               # Domain business logic & AI engines
 │           ├── research.py         # 4-tier cascading search engine (Cache -> SerpApi -> Tavily -> Synthetic)
-│           ├── vector.py           # ChromaDB vector embedding & similarity search service
+│           ├── vector.py           # ChromaDB vector embedding & similarity search (+ delete_all_for_user)
+│           ├── resume.py           # Resume text extraction (PDF/DOCX/TXT) + Gemini summarization
 │           └── pipeline/           # LangGraph Post Generation State Machine
 │               ├── __init__.py     # Exports PostGenerationPipeline
 │               ├── deps.py         # PipelineDeps dependency injection container
@@ -273,35 +283,48 @@ postcraft-ai/
 └── frontend/
     ├── package.json                # Frontend dependencies and scripts
     ├── Dockerfile                  # Multi-stage standalone Next.js container build
-    ├── .dockerignore               # Files excluded from frontend build context
-    ├── next.config.ts              # Next.js configuration (output: 'standalone')
+    ├── Caddyfile                   # Local Caddy config (production-like TLS termination)
+    ├── next.config.ts              # Next.js configuration
     ├── tailwind.config.ts          # Tailwind CSS design tokens and theme settings
     ├── tsconfig.json               # TypeScript compiler configuration
     └── src/
         ├── app/
         │   ├── layout.tsx          # Root HTML layout with theme provider
-        │   ├── page.tsx            # Main application screen
-        │   └── globals.css         # Global CSS variables and Tailwind utilities
+        │   ├── page.tsx            # Main workspace — view dispatcher (home/editor/profile/history/privacy/terms)
+        │   └── globals.css         # Global CSS variables and Tailwind utilities (light + dark tokens)
         ├── components/
         │   ├── layout/
-        │   │   ├── app-layout.tsx     # Application container wrapper
-        │   │   └── top-navigation.tsx # Header bar with Profile Settings trigger & logout
-        │   └── ui/                    # Reusable shadcn/ui components (button, dialog, etc.)
+        │   │   ├── app-shell.tsx     # Full sidebar + top-header wrapper
+        │   │   ├── sidebar.tsx       # Nav, theme toggle, user row, legal footer links
+        │   │   └── top-header.tsx    # Page title header
+        │   ├── ui/                   # shadcn/ui primitives (button, dialog, card, etc.)
+        │   └── theme-provider.tsx
         ├── features/
-        │   ├── auth/components/
-        │   │   └── auth-screen.tsx    # Login & registration form tabbed modal
-        │   ├── generation/components/
-        │   │   ├── generation-form.tsx      # Main post generation input form
-        │   │   └── profile-settings-modal.tsx # Persistent user profile context dialog
-        │   └── editor/components/
-        │       └── draft-editor.tsx   # Live draft preview and conversational edit panel
+        │   ├── auth/
+        │   │   ├── components/auth-screen.tsx   # Login/Signup with required ToS agreement
+        │   │   └── hooks/use-auth.ts             # login / signup / logout + 429 surfacing
+        │   ├── generation/
+        │   │   └── components/generation-form.tsx  # Main post generation input form
+        │   ├── editor/
+        │   │   ├── components/draft-editor.tsx       # Live draft preview + chat
+        │   │   └── components/draft-selection-grid.tsx
+        │   ├── home/components/home-view.tsx         # Greeting, quick capture, recent drafts
+        │   ├── history/components/history-list.tsx   # Archived generations
+        │   ├── profile/components/profile-page.tsx   # Persona Engine + Danger Zone
+        │   └── legal/                                 # In-app Privacy / ToS / GDPR
+        │       ├── legal-content.ts                   # Bundled markdown (mirrors PRIVACY.md)
+        │       └── legal-view.tsx                     # react-markdown renderer
         └── lib/
             ├── utils.ts               # CSS class merger utility (`cn`)
+            ├── hooks/                 # Shared React hooks
             └── api/
-                ├── client.ts          # Central HTTP fetch client with JWT interceptor
+                ├── client.ts          # fetchApi: JWT injection, 401 → auth-expired, 429 → specific toast
                 ├── auth.ts            # Auth API calls (login, signup)
-                ├── user.ts            # User API calls (getCurrentUser, updateCurrentUser)
-                └── generation.ts      # Generation API calls (generateDrafts, editDraft, finalize)
+                ├── user.ts            # getCurrentUser, updateCurrentUser, deleteMyAccount
+                ├── generation.ts      # generateDrafts, editDraft, finalizeDraft
+                ├── history.ts         # List + load full generation
+                ├── resume.ts          # Resume upload, get, delete
+                └── style-profile.ts   # Style profile read
 ```
 
 ---
@@ -335,6 +358,17 @@ postcraft-ai/
   * `verify_password(plain, hashed)`: Cryptographically checks if a plaintext password matches an Argon2 hash.
   * `get_password_hash(password)`: Hashes a plaintext password using Argon2.
   * `create_access_token(data, expires_delta)`: Encodes a user payload into a signed JWT string with an expiration timestamp.
+* **Fail-closed startup contract**: `JWT_SECRET_KEY` is read at module import. If it is missing or under 32 characters, the process prints a clear `FATAL` message to stderr and `sys.exit(1)`. There is no hardcoded fallback in production — a leaked fallback would let anyone forge tokens for any user.
+
+#### [`crypto.py`](file:///c:/Project/Ai%20post/backend/app/core/crypto.py)
+* **Purpose**: Fernet-based encryption helpers for resume PII at rest.
+* **Key Components**:
+  * `encrypt(plaintext: str) -> str`: Encrypts using Fernet (AES-128-CBC + HMAC-SHA256). Key is sourced from `RESUME_ENCRYPTION_KEY` (URL-safe base64-encoded 32-byte key).
+  * `decrypt(ciphertext: str) -> str`: Decrypts. Fail-closed: if the key is missing, the ciphertext is corrupted, or decryption raises, the function re-raises rather than silently returning a value.
+
+#### [`migrate_resume_encryption.py`](file:///c:/Project/Ai%20post/backend/app/core/migrate_resume_encryption.py)
+* **Purpose**: One-time migration that walks the `user_resumes` table, detects rows whose `raw_text` / `structured_summary` are still plaintext, and encrypts them in place. Idempotent: rows already encrypted are skipped.
+* **Why it exists**: Early versions of the app stored resumes as plaintext. We don't want to lose that data, but we *do* want it encrypted from now on. This script runs at container startup (wired into `start.sh`) so any DB snapshot is brought forward to the encrypted state without manual intervention.
 
 ---
 
@@ -342,14 +376,16 @@ postcraft-ai/
 * **Purpose**: Defines the PostgreSQL database schema as Python classes.
 * **Dependencies**: Depends on `app.core.database.Base`.
 * **Tables Defined**:
-  * `User`: Stores user credentials, registration date, and persistent `profile_context`.
+  * `User`: Stores user credentials, registration date, persistent `profile_context`, and `about_me`.
   * `Project`: Groups a user's generations under a specific workspace or platform.
   * `Generation`: Stores the generated post drafts (`draft_1`, `draft_2`, `draft_3`), the active draft index, status (`generating`, `editing`, `completed`, `needs_review`, `failed`), and timestamps.
   * `StyleProfile`: Stores reverse-engineered writing patterns (structure, tone, pacing, CTA style).
   * `ChatHistory`: Stores conversational back-and-forth messages for the inline draft editor.
   * `Preference`: Stores persistent user writing preferences.
+  * `UserResume`: Stores uploaded resume `raw_text` and `structured_summary` — both encrypted with Fernet before persistence. One row per user (re-upload overwrites).
   * `ResearchCache`: Caches web search results with an expiration timestamp to prevent redundant API calls.
   * `CostLog`: Records exact prompt and completion token counts and estimated USD costs for every Gemini call.
+* **Cascade behavior**: User-owned rows (`UserResume`, `StyleProfile`, `Preference`, `Project` → `Generation` → `ChatHistory` and `CostLog`) are wired with `cascade="all, delete-orphan"` so `DELETE /api/users/me` cleans the entire graph in a single transaction.
 
 ---
 
@@ -360,7 +396,16 @@ postcraft-ai/
 * **Key Models**:
   * `GenerateRequest`: What the frontend sends when creating a post (`platform`, `topic`, `raw_thoughts`, optional `profile_context`).
   * `GenerateResponse`: What the frontend receives back (generation ID, 3 drafts, active draft index, research sources).
-  * `UserResponse` & `UserUpdate`: Data models for reading and updating `profile_context`.
+  * `UserResponse`: Read model for user data — includes `id`, `username`, `profile_context`, and `about_me`.
+  * `UserUpdate`: Patch model — allows setting `profile_context` and/or `about_me`.
+  * `AccountDeleteResponse`: Simple `{ status, message }` returned after `DELETE /api/users/me`.
+  * `ResumeResponse`: `{ id, filename, structured_summary, uploaded_at, raw_text_length }` — no raw text exposed to the API client.
+
+#### [`resume.py`](file:///c:/Project/Ai%20post/backend/app/services/resume.py)
+* **Purpose**: Text extraction from uploaded resume files and one-shot Gemini summarization.
+* **Key Functions**:
+  * `extract_text(file_bytes, mime_type)`: Handles PDF (via `pypdf`), DOCX (via `python-docx`), and plain text. Raises `ValueError` on unsupported formats or empty extraction.
+  * `summarize_to_structured(raw_text, api_key)`: Calls Gemini 2.5 Flash directly (not via LangChain) to produce a structured summary JSON — role, experience highlights, skills, education — returned as a Pydantic model.
 
 #### [`editor.py`](file:///c:/Project/Ai%20post/backend/app/schemas/editor.py)
 * **Purpose**: Schemas for conversational editing and final post selection.
@@ -387,10 +432,15 @@ postcraft-ai/
   * `get_current_user()`: A FastAPI dependency that extracts the JWT from the `Authorization: Bearer <token>` header, decodes the user ID, loads the user from the database, and injects the user into protected endpoints.
 
 #### [`users.py`](file:///c:/Project/Ai%20post/backend/app/api/users.py)
-* **Purpose**: Manages user profile settings.
+* **Purpose**: Manages user profile settings, resume upload/delete, and account deletion.
 * **Endpoints**:
-  * `GET /api/users/me`: Returns the current user's profile info and saved `profile_context`.
-  * `PATCH /api/users/me`: Updates the user's `profile_context` in PostgreSQL.
+  * `GET /api/users/me`: Returns the current user's profile info, `profile_context`, and `about_me`.
+  * `PATCH /api/users/me`: Updates `profile_context` and/or `about_me` in PostgreSQL.
+  * `DELETE /api/users/me`: Permanently deletes the user's account and cascades to all associated data. ChromaDB vectors are cleaned first (best-effort, logged on failure); DB delete uses SQLAlchemy cascades to wipe `user_resumes`, `style_profiles`, `preferences`, `projects`, `generations`, `chat_history`, and `cost_logs`.
+  * `POST /api/users/me/resume`: Accepts a PDF/DOCX/TXT upload. Parses the file to plaintext, runs a one-shot Gemini summarization, and stores both `raw_text` (Fernet-encrypted) and `structured_summary` (Fernet-encrypted) in `user_resumes`. Re-upload overwrites the previous row.
+  * `GET /api/users/me/resume`: Returns filename, structured summary, and plaintext byte count (does not return raw_text).
+  * `DELETE /api/users/me/resume`: Removes the resume row immediately.
+  * `GET /api/users/me/style-profile`: Returns the most recent StyleProfile for a platform plus history.
 
 #### [`generations.py`](file:///c:/Project/Ai%20post/backend/app/api/generations.py)
 * **Purpose**: Main endpoint for initiating post generations.
@@ -1059,7 +1109,45 @@ erDiagram
 
 ---
 
-# Part 8 — Known Rough Edges and Deliberate Trade-Offs
+# Part 8 — Security, Rate Limiting & Account Lifecycle
+
+### JWT Fail-Closed Startup
+
+`JWT_SECRET_KEY` is not optional. The module-level import in `security.py` exits the process if the key is missing or under 32 characters. This is deliberate: a hardcoded fallback in production would let anyone forge tokens for any user by simply signing up. Generate the key with `openssl rand -hex 32`.
+
+### Fernet Resume Encryption
+
+Resume `raw_text` and `structured_summary` are encrypted with Fernet before hitting the database. The key (`RESUME_ENCRYPTION_KEY`) is read at runtime. The `decrypt()` function re-raises on any failure — if the key is wrong or the ciphertext is corrupted, the read fails rather than returning garbage. The one-time migration (`migrate_resume_encryption.py`) converts existing plaintext rows to ciphertext at container startup.
+
+### Rate Limiting
+
+All write endpoints are gated by `slowapi`. The limits (5/min auth login, 3/min signup, 10/hour generation, 20/hour edit, 30/hour finalize) are documented in the API reference and surfaced specifically in the frontend — a 429 triggers a dedicated Sonner toast with the parsed `Retry-After` hint rather than a generic error.
+
+### Account Deletion Cascade
+
+`DELETE /api/users/me` does not merely delete the user row. The full cascade:
+1. `vector_service.delete_all_for_user(user_id)` — removes ChromaDB style vectors (best-effort, logged on failure).
+2. SQLAlchemy `cascade="all, delete-orphan"` on the User model covers `user_resumes`, `style_profiles`, `preferences`, `projects` → `generations` → `chat_history` and `cost_logs`.
+3. The frontend's confirmation dialog requires typing the exact username — this is not a bypass; it's the UX gate that prevents accidental clicks from triggering the irreversible API call.
+
+### Security Headers & Middleware
+
+`main.py` applies seven layers of defense:
+1. `TrustedHostMiddleware` — blocks Host-header attacks.
+2. Custom `http` middleware — `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
+3. `CORSMiddleware` — configurable via `CORS_ORIGINS`.
+4. Sentry — activates on `SENTRY_DSN`, sends no PII.
+5. `sslmode=require` on PostgreSQL in production.
+6. Caddy as the only publicly reachable service (ports 80 + 443 only).
+7. HSTS via Caddy's `Strict-Transport-Security` (1-year pin).
+
+### JWT Storage Trade-Off
+
+Tokens are stored in `localStorage`. This is simpler than `httpOnly` cookies and works well for a small user base, but is susceptible to XSS. XSS gives the attacker `localStorage.getItem("postcraft_token")`. The mitigation chain is: DOMPurify sanitizes AI content → tokens are short-lived (7 days) → Sentry catches unusual patterns. The migration path to `httpOnly` + `SameSite=Strict` cookies is documented in `DEPLOYMENT.md` and requires a CSRF token. Acceptable to defer past a small beta, required before broad consumer launch.
+
+---
+
+# Part 9 — Known Rough Edges and Deliberate Trade-Offs
 
 1. **`editor.py` Uses Raw `google-genai` Instead of LangChain**:
    * *Trade-off*: `editor.py` is a simple single-turn conversation handler. Keeping it on `google-genai` avoided overcomplicating a straightforward chat endpoint.
@@ -1068,15 +1156,15 @@ erDiagram
 2. **N-gram Originality Check Scope**:
    * *Limitation*: The 6-word n-gram check in `nodes.py` catches verbatim phrase copying, but cannot catch semantic paraphrasing where words are swapped with synonyms.
 
-3. **JWT Storage in `localStorage`**:
-   * *Trade-off*: Storing tokens in `localStorage` simplifies client-side API requests in single-page apps, but is susceptible to XSS attacks if untrusted scripts run. Using `httpOnly` cookies provides greater XSS protection but requires CSRF handling.
+3. **ChromaDB In-Process Storage**:
+   * *Trade-off*: ChromaDB runs embedded in the container (`./chroma_data` volume). In large distributed deployments, an external managed vector service would be preferred.
 
-4. **ChromaDB In-Process Storage**:
-   * *Trade-off*: ChromaDB runs embedded in local storage (`./chroma_db`) or containerized. In large distributed deployments, an external managed vector service would be preferred.
+4. **Legal Copy Sync**:
+   * The canonical legal text lives in `PRIVACY.md` at the repo root. The in-app renderer (`frontend/src/features/legal/legal-content.ts`) is a separate copy that must be kept in sync manually. This is the right tradeoff for a bundled-in legal page that loads without a backend round-trip; just remember to update both files when the policy changes.
 
 ---
 
-# Part 9 — "If You Want to Change X, Start at File Y"
+# Part 10 — "If You Want to Change X, Start at File Y"
 
 | What You Want to Do | Primary File(s) to Open |
 |---|---|
@@ -1093,8 +1181,13 @@ erDiagram
 | **Modify API request/response JSON formats** | [`backend/app/schemas/api.py`](file:///c:/Project/Ai%20post/backend/app/schemas/api.py) |
 | **Customize post generation form UI** | [`frontend/src/features/generation/components/generation-form.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/generation/components/generation-form.tsx) |
 | **Customize draft editor and conversational chat UI** | [`frontend/src/features/editor/components/draft-editor.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/editor/components/draft-editor.tsx) |
-| **Customize user profile settings dialog** | [`frontend/src/features/generation/components/profile-settings-modal.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/generation/components/profile-settings-modal.tsx) |
-| **Modify API client fetch and token handling** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) |
+| **Customize the Persona Engine / Profile page** | [`frontend/src/features/profile/components/profile-page.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/profile/components/profile-page.tsx) |
+| **Add or modify 429 error handling in the frontend** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) (parse logic) + all callers that surface errors via Sonner |
+| **Modify API client fetch, token handling, and 429 surfacing** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) |
+| **Change the legal copy (Privacy Policy / ToS / GDPR)** | [`PRIVACY.md`](file:///c:/Project/Ai%20post/PRIVACY.md) (canonical) AND [`frontend/src/features/legal/legal-content.ts`](file:///c:/Project/Ai%20post/frontend/src/features/legal/legal-content.ts) (must be kept in sync) |
+| **Change how 429 errors are surfaced** | [`frontend/src/features/auth/hooks/use-auth.ts`](file:///c:/Project/Ai%20post/frontend/src/features/auth/hooks/use-auth.ts) (login/signup) and [`frontend/src/app/page.tsx`](file:///c:/Project/Ai%20post/frontend/src/app/page.tsx) (generate/edit/finalize) |
 | **Add a new social media platform (e.g. Threads/Bluesky)** | [`backend/app/services/pipeline/prompts.py`](file:///c:/Project/Ai%20post/backend/app/services/pipeline/prompts.py), [`creators/`](file:///c:/Project/Ai%20post/backend/creators), and [`generation-form.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/generation/components/generation-form.tsx) |
+| **Change rate limits** | [`backend/app/api/auth.py`](file:///c:/Project/Ai%20post/backend/app/api/auth.py) (auth limits) and [`generations.py`](file:///c:/Project/Ai%20post/backend/app/api/generations.py) / [`editor.py`](file:///c:/Project/Ai%20post/backend/app/api/editor.py) (generation limits) |
 | **Change container startup or migration commands** | [`backend/start.sh`](file:///c:/Project/Ai%20post/backend/start.sh) & [`backend/Dockerfile`](file:///c:/Project/Ai%20post/backend/Dockerfile) |
+| **Migrate frontend to httpOnly cookies** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) (drop `Authorization` header, add `credentials: 'include'`) + [`backend/app/main.py`](file:///c:/Project/Ai%20post/backend/app/main.py) (cookie middleware) + [`DEPLOYMENT.md`](file:///c:/Project/Ai%20post/DEPLOYMENT.md) (Item E) |
 | **Add or update automated tests** | [`backend/tests/`](file:///c:/Project/Ai%20post/backend/tests) |
