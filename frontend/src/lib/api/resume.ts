@@ -1,4 +1,4 @@
-import { fetchApi, ApiError } from "./client";
+import { fetchApi, ApiError, API_URL } from "./client";
 
 export type ResumeSummary = {
   role: string;
@@ -16,8 +16,6 @@ export type ResumeResponse = {
   uploaded_at: string;
   raw_text_length: number;
 };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /**
  * Upload a resume. Multipart form data — `fetchApi` would force JSON headers,

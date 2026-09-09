@@ -19,38 +19,52 @@ logger = logging.getLogger(__name__)
 # Text extraction
 # ---------------------------------------------------------------------------
 
-def extract_text(file_bytes: bytes, mime_type: str) -> str:
+def extract_text(file_bytes: bytes, mime_type: str = "", filename: str = "") -> str:
     """
-    Extract plain text from a resume file based on its MIME type.
+    Extract plain text from a resume file based on its MIME type, filename, or magic bytes.
     Falls back to UTF-8 decode for plain text files.
     Raises ValueError for unsupported types.
     """
-    if mime_type in ("application/pdf", "application/x-pdf"):
+    fname = (filename or "").lower()
+    mtype = (mime_type or "").lower()
+
+    if (
+        file_bytes.startswith(b"%PDF-")
+        or mtype in ("application/pdf", "application/x-pdf")
+        or fname.endswith(".pdf")
+    ):
         return _extract_pdf(file_bytes)
-    elif mime_type in (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword",
+    elif (
+        fname.endswith(".docx")
+        or mtype in (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword",
+        )
     ):
         return _extract_docx(file_bytes)
-    elif mime_type in ("text/plain", "text/markdown"):
+    elif fname.endswith((".txt", ".md")) or mtype in ("text/plain", "text/markdown"):
         return file_bytes.decode("utf-8", errors="replace")
     else:
+        # If MIME type is octet-stream but bytes start with %PDF, handled above.
+        # Otherwise fallback to text decode if printable
+        try:
+            decoded = file_bytes.decode("utf-8")
+            if len(decoded.strip()) > 10:
+                return decoded
+        except Exception:
+            pass
+
         raise ValueError(
-            f"Unsupported resume file type: {mime_type}. "
+            f"Unsupported resume file type: {mime_type or filename or 'unknown'}. "
             "Please upload a PDF, DOCX, or plain text file."
         )
 
 
 def _extract_pdf(file_bytes: bytes) -> str:
-    """Extract text from a PDF using pdfplumber."""
-    try:
-        import pdfplumber
-    except ImportError:
-        logger.warning("pdfplumber not installed; using fallback raw text extraction")
-        return _fallback_text_extraction(file_bytes)
-
+    """Extract text from a PDF using pdfplumber, falling back to pypdf if available."""
     text_parts: list[str] = []
     try:
+        import pdfplumber
         import io
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for page in pdf.pages:
@@ -58,12 +72,24 @@ def _extract_pdf(file_bytes: bytes) -> str:
                 if page_text:
                     text_parts.append(page_text)
     except Exception as e:
-        logger.error(f"PDF extraction failed: {e}")
-        return _fallback_text_extraction(file_bytes)
+        logger.warning(f"pdfplumber extraction failed, trying fallback: {e}")
+
+    # Fallback to pypdf if pdfplumber didn't extract text
+    if not text_parts:
+        try:
+            import pypdf
+            import io
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            for page in reader.pages:
+                pt = page.extract_text()
+                if pt:
+                    text_parts.append(pt)
+        except Exception as e:
+            logger.warning(f"pypdf extraction failed: {e}")
 
     result = "\n".join(text_parts)
     if not result.strip():
-        logger.warning("PDF text extraction returned empty; using fallback")
+        logger.warning("PDF text extraction returned empty; using raw fallback")
         return _fallback_text_extraction(file_bytes)
     return result
 

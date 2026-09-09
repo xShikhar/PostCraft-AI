@@ -288,6 +288,13 @@ async def _build_background_context(deps: PipelineDeps, user_id: str) -> str:
     if user and user.about_me and user.about_me.strip():
         parts.append(f"About the author: {user.about_me.strip()}")
 
+    # Additional professional background notes (free text)
+    if user and user.profile_context and user.profile_context.strip():
+        # Strip out writing_style marker if stored in combined profile_context
+        clean_context = user.profile_context.split("[writing_style]")[0].strip().rstrip("-").strip()
+        if clean_context:
+            parts.append(f"Background notes: {clean_context}")
+
     if len(parts) == 1:
         # No content was actually added
         return ""

@@ -1,9 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Loader2, FileText, Briefcase, PenLine, Trash2, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  FileText,
+  Briefcase,
+  PenLine,
+  Trash2,
+  AlertTriangle,
+  UploadCloud,
+  CheckCircle2,
+  Lock,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentUser, updateCurrentUser, deleteMyAccount } from "@/lib/api/user";
+import { getResume, uploadResume, deleteResume, type ResumeResponse } from "@/lib/api/resume";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -107,6 +121,13 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [resumeBackground, setResumeBackground] = useState("");
   const [writingStyle, setWritingStyle] = useState("");
 
+  // Resume file state
+  const [resumeData, setResumeData] = useState<ResumeResponse | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [deletingResume, setDeletingResume] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Per-section saving flags + initial values for the dirty check.
   const [savingAbout, setSavingAbout] = useState(false);
   const [savingResume, setSavingResume] = useState(false);
@@ -125,12 +146,15 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [deleting, setDeleting] = useState(false);
   const { logout } = useAuth();
 
-  // Load the user once — three form fields share a single source of truth.
+  // Load the user and saved resume on mount
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getCurrentUser()
-      .then((u) => {
+    Promise.all([
+      getCurrentUser(),
+      getResume().catch(() => null),
+    ])
+      .then(([u, rData]) => {
         if (cancelled) return;
         // about_me → About Me
         const a = u.about_me ?? "";
@@ -146,6 +170,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
         setInitialResume(r.replace(/\[writing_style\]\s*[\s\S]*$/, "").trim());
         setInitialStyle(w);
         setInitialUsername(u.username ?? "");
+        setResumeData(rData);
       })
       .catch(() => {
         toast.error("Failed to load profile.");
@@ -159,6 +184,61 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
     // writingStyle intentionally not in deps — this is mount-once fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File exceeds maximum allowed size of 5MB.");
+      return;
+    }
+
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".txt")) {
+      toast.error("Please upload a PDF, DOCX, or TXT file.");
+      return;
+    }
+
+    setUploadingResume(true);
+    const toastId = toast.loading("Decoding and analyzing resume with AI...");
+    try {
+      const data = await uploadResume(file);
+      setResumeData(data);
+      toast.success("Resume decoded & saved! Your experience is stored.", { id: toastId });
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : "Failed to upload resume.";
+      toast.error(msg, { id: toastId });
+    } finally {
+      setUploadingResume(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleDeleteResume = async () => {
+    setDeletingResume(true);
+    try {
+      await deleteResume();
+      setResumeData(null);
+      toast.success("Resume removed. Future posts will not use this resume context.");
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : "Failed to delete resume.";
+      toast.error(msg);
+    } finally {
+      setDeletingResume(false);
+    }
+  };
 
   const handleSaveAbout = async () => {
     setSavingAbout(true);
@@ -313,21 +393,238 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
         <ProfileCard
           icon={<Briefcase className="w-5 h-5" />}
           title="Resume &amp; Background"
-          subtitle="Professional experience, role, industry, expertise — gives the model real grounding to pull from."
+          subtitle="Upload your resume to automatically decode your expertise, role, and industry. Stored securely and applied to future posts."
         >
-          <ProfileField
-            value={resumeBackground}
-            onChange={setResumeBackground}
-            initial={initialResume}
-            rows={7}
-            placeholder="e.g. 8 years building B2B SaaS. Former PM at Linear, now founder of a dev-tools startup. CS background, ex-Stripe eng..."
-          />
-          <SaveButton
-            onClick={handleSaveResume}
-            saving={savingResume}
-            dirty={resumeBackground !== initialResume}
-            label="Save background"
-          />
+          {/* 1. Resume File Upload / Summary Area */}
+          <div className="flex flex-col gap-space-sm">
+            {resumeData ? (
+              <div className="rounded-xl border border-primary/25 bg-primary/[0.04] dark:bg-primary/[0.08] p-space-md flex flex-col gap-space-sm transition-all">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-space-xs">
+                    <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-label-md text-label-md font-semibold text-text-display">
+                          {resumeData.filename}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Decoded &amp; Saved
+                        </span>
+                      </div>
+                      <span className="font-body-xs text-body-xs text-text-muted">
+                        Uploaded {new Date(resumeData.uploaded_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file);
+                      }}
+                      accept=".pdf,.docx,.txt,application/pdf"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingResume}
+                      className="px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-card hover:bg-surface-subtle text-text-display font-label-sm text-label-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {uploadingResume ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      )}
+                      <span>Replace PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDeleteResume}
+                      disabled={deletingResume}
+                      className="px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-950/50 bg-red-50/50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-950/40 font-label-sm text-label-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {deletingResume ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Decoded Insights Grid */}
+                {resumeData.structured_summary && (
+                  <div className="mt-2 pt-3 border-t border-primary/15 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {resumeData.structured_summary.role && (
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">
+                          Identified Role
+                        </span>
+                        <span className="font-body-sm text-body-sm font-medium text-text-display mt-0.5">
+                          {resumeData.structured_summary.role}
+                        </span>
+                      </div>
+                    )}
+                    {resumeData.structured_summary.industry && (
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">
+                          Industry
+                        </span>
+                        <span className="font-body-sm text-body-sm font-medium text-text-display mt-0.5">
+                          {resumeData.structured_summary.industry}
+                        </span>
+                      </div>
+                    )}
+                    {resumeData.structured_summary.experience_level && (
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">
+                          Experience Level
+                        </span>
+                        <span className="font-body-sm text-body-sm font-medium text-text-display capitalize mt-0.5">
+                          {resumeData.structured_summary.experience_level}
+                        </span>
+                      </div>
+                    )}
+                    {resumeData.structured_summary.past_employer && (
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">
+                          Past Employer / Organization
+                        </span>
+                        <span className="font-body-sm text-body-sm font-medium text-text-display mt-0.5">
+                          {resumeData.structured_summary.past_employer}
+                        </span>
+                      </div>
+                    )}
+                    {resumeData.structured_summary.education && (
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">
+                          Education
+                        </span>
+                        <span className="font-body-sm text-body-sm font-medium text-text-display mt-0.5">
+                          {resumeData.structured_summary.education}
+                        </span>
+                      </div>
+                    )}
+                    {resumeData.structured_summary.expertise_areas && resumeData.structured_summary.expertise_areas.length > 0 && (
+                      <div className="flex flex-col sm:col-span-2 md:col-span-3 mt-1">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted mb-1">
+                          Extracted Expertise &amp; Skills
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {resumeData.structured_summary.expertise_areas.map((exp, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 rounded-md bg-surface-card border border-border-subtle text-text-display text-body-xs font-medium"
+                            >
+                              {exp}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5 text-[11px] text-text-muted pt-1">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
+                  <span>Resume content is encrypted at rest (AES-128 Fernet) and private to your account.</span>
+                </div>
+              </div>
+            ) : (
+              /* Dropzone for Uploading Resume */
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleFileUpload(file);
+                }}
+                className={`rounded-xl border-2 border-dashed p-space-lg flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
+                  dragActive
+                    ? "border-primary bg-primary/10 scale-[1.005]"
+                    : "border-border-subtle bg-surface-subtle/50 hover:bg-surface-subtle hover:border-primary/50"
+                }`}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                  accept=".pdf,.docx,.txt,application/pdf"
+                  className="hidden"
+                />
+
+                {uploadingResume ? (
+                  <div className="flex flex-col items-center gap-space-xs py-space-sm">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    <span className="font-label-md text-label-md font-semibold text-text-display">
+                      Decoding resume with AI...
+                    </span>
+                    <span className="font-body-xs text-body-xs text-text-muted max-w-sm">
+                      Extracting role, background, industry domains, and experience level.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-space-xs py-space-xs">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-1">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-label-md text-label-md font-semibold text-text-display">
+                        Upload your Resume (Optional)
+                      </span>
+                      <span className="font-body-xs text-body-xs text-text-muted max-w-md">
+                        Drop your <strong>PDF</strong>, DOCX, or TXT file here, or click to browse (max 5MB).
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-primary/80 mt-1">
+                      Gemini decodes your real experience and persists it so every future post sounds authentically like you.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 2. Optional Manual Notes Textarea */}
+          <div className="flex flex-col gap-1.5 mt-2 pt-3 border-t border-border-subtle">
+            <span className="font-label-sm text-label-sm font-semibold text-text-display">
+              Additional Background &amp; Notes (Optional)
+            </span>
+            <span className="font-body-xs text-body-xs text-text-muted mb-1">
+              Add any extra context, current ventures, or details not on your resume that you want the model to remember.
+            </span>
+            <ProfileField
+              value={resumeBackground}
+              onChange={setResumeBackground}
+              initial={initialResume}
+              rows={5}
+              placeholder="e.g. 8 years building B2B SaaS. Former PM at Linear, now founder of a dev-tools startup. CS background, ex-Stripe eng..."
+            />
+            <SaveButton
+              onClick={handleSaveResume}
+              saving={savingResume}
+              dirty={resumeBackground !== initialResume}
+              label="Save background"
+            />
+          </div>
         </ProfileCard>
 
         <ProfileCard

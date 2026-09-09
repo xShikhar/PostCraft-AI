@@ -151,7 +151,7 @@ async def upload_resume(
     mime_type = file.content_type or "application/octet-stream"
 
     try:
-        raw_text = extract_text(file_bytes, mime_type)
+        raw_text = extract_text(file_bytes, mime_type, filename=file.filename or "")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
