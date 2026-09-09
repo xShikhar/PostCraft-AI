@@ -2,7 +2,17 @@
 set -e
 
 echo "==> Running database migrations with Alembic..."
-alembic upgrade head
+MAX_RETRIES=5
+RETRY_COUNT=0
+until alembic upgrade head; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
+    echo "FATAL: Database migrations failed after $MAX_RETRIES attempts."
+    exit 1
+  fi
+  echo "Migration failed (attempt $RETRY_COUNT/$MAX_RETRIES). Waiting 3s for DB to be ready..."
+  sleep 3
+done
 
 echo "==> Running one-time resume encryption migration (if needed)..."
 # Safe to re-run: already-encrypted rows are skipped. Won't block on failure.

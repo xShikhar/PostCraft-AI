@@ -36,6 +36,10 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 desktop.ini
+.claude/
+.playwright-cli/
+.agents/
+skills-lock.json
 
 # ─── Docker ──────────────────────────────────────────
 docker-compose.override.yml

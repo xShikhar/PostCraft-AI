@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Loader2, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +18,7 @@ interface GenerationFormProps {
   setUseContext: (v: boolean) => void;
   loading: boolean;
   loadingStepText: string;
+  activeStep: number;
   onSubmit: (e: React.FormEvent) => void;
 }
 
@@ -42,10 +42,9 @@ export function GenerationForm({
   setUseContext,
   loading,
   loadingStepText,
+  activeStep,
   onSubmit,
 }: GenerationFormProps) {
-  const [activeStep, setActiveStep] = useState(0);
-
   return (
     <div className="w-full max-w-5xl mx-auto">
       {/* Section header */}
@@ -75,7 +74,7 @@ export function GenerationForm({
                 type="button"
                 onClick={() => setPlatform("linkedin")}
                 className={`
-                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold
+                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold btn-press
                   ${platform === "linkedin"
                     ? "bg-primary text-on-primary border-primary shadow-md"
                     : "bg-surface-subtle text-text-muted border-transparent hover:bg-surface-container-high hover:text-text-display"
@@ -91,7 +90,7 @@ export function GenerationForm({
                 type="button"
                 onClick={() => setPlatform("x")}
                 className={`
-                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold
+                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold btn-press
                   ${platform === "x"
                     ? "bg-primary text-on-primary border-primary shadow-md"
                     : "bg-surface-subtle text-text-muted border-transparent hover:bg-surface-container-high hover:text-text-display"
@@ -188,17 +187,25 @@ export function GenerationForm({
                 <span className="font-label-xs text-label-xs text-text-muted">{loadingStepText}</span>
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
               </div>
-              <div className="flex gap-space-xs">
+              {/* Single horizontal progress bar that fills to the current step's
+                 midpoint. Using scaleX (GPU) instead of width to avoid layout thrash. */}
+              <div className="w-full h-1.5 rounded-full bg-surface-container overflow-hidden mb-space-sm">
+                <div
+                  className="h-full w-full bg-primary pipeline-fill rounded-full"
+                  style={{ transform: `scaleX(${(activeStep + 1) / PIPELINE_STEPS.length})` }}
+                />
+              </div>
+              {/* Step labels — highlighted if reached, all visible at once */}
+              <div className="flex justify-between">
                 {PIPELINE_STEPS.map((step, i) => (
-                  <div key={step.label} className="flex-1 flex flex-col items-center gap-space-2xs">
-                    <div className={`
-                      w-full h-1.5 rounded-full transition-colors
-                      ${i <= activeStep ? "bg-primary" : "bg-surface-container"}
-                    `} />
-                    <span className={`font-label-xs text-label-xs ${i <= activeStep ? "text-primary font-semibold" : "text-text-muted"}`}>
-                      {step.label}
-                    </span>
-                  </div>
+                  <span
+                    key={step.label}
+                    className={`font-label-xs text-label-xs transition-colors duration-300 ${
+                      i <= activeStep ? "text-primary font-semibold" : "text-text-muted"
+                    }`}
+                  >
+                    {step.label}
+                  </span>
                 ))}
               </div>
             </div>
@@ -207,7 +214,7 @@ export function GenerationForm({
           {/* Generate button */}
           <Button
             type="submit"
-            className="w-full h-14 text-base font-semibold rounded-xl bg-text-display hover:bg-black text-surface-card dark:bg-primary dark:hover:bg-primary-container dark:text-on-primary shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
+            className="w-full h-14 text-base font-semibold rounded-xl bg-text-display hover:bg-black text-surface-card dark:bg-primary dark:hover:bg-primary-container dark:text-on-primary shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none btn-press"
             disabled={loading}
           >
             {loading ? (

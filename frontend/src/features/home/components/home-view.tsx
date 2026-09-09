@@ -135,10 +135,14 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
   return (
     <div className="flex flex-col w-full gap-space-2xl">
       {/* Top Section: Greeting + Inspiration prompt + new-post CTA */}
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
-        <div className="flex flex-col gap-space-xs max-w-2xl">
+      <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg relative">
+        {/* Ambient orbs */}
+        <div className="absolute -top-20 -left-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl ambient-orb" />
+        <div className="absolute -top-10 right-1/3 w-48 h-48 bg-secondary/10 rounded-full blur-3xl ambient-orb" style={{ animationDelay: "-7s" }} />
+
+        <div className="flex flex-col gap-space-xs max-w-2xl relative z-10">
           <div className="flex items-center gap-space-xs flex-wrap">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="relative w-2 h-2 rounded-full bg-primary ring-pulse" />
             <span className="font-label-xs text-label-xs uppercase tracking-widest text-primary font-bold">
               STUDIO WORKSPACE
             </span>
@@ -148,18 +152,21 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             </span>
           </div>
           <h1 className="font-serif text-display-hero text-text-display tracking-tight leading-none">
-            {greeting()}, {username}
+            {greeting()}, <span className="text-primary">{username}</span>
           </h1>
           <div className="flex items-center gap-space-sm pt-space-xs flex-wrap">
             <span className="font-body-md text-body-md text-text-muted">Inspiration prompt:</span>
             <div className="inline-flex items-center gap-space-xs px-space-sm py-space-2xs bg-surface-container rounded-full transition-all duration-300">
               <Plus className="w-3.5 h-3.5 text-primary" />
-              <span className="font-title-sm text-body-sm text-text-display italic">
+              <span
+                key={promptIdx}
+                className="font-title-sm text-body-sm text-text-display italic inline-block animate-crossfade"
+              >
                 {INSPIRATION_PROMPTS[promptIdx]}
               </span>
               <button
                 onClick={() => setPromptIdx((i) => (i + 1) % INSPIRATION_PROMPTS.length)}
-                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-surface-variant text-text-muted hover:text-primary transition-colors ml-space-2xs"
+                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-surface-variant text-text-muted hover:text-primary transition-colors ml-space-2xs btn-press"
                 title="Cycle suggestion"
                 type="button"
               >
@@ -172,7 +179,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
         <div className="flex items-center gap-space-sm self-start md:self-end">
           <button
             onClick={onNewPost}
-            className="flex items-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide shadow-lg hover:scale-[1.01] active:scale-[0.98] transition-all"
+            className="flex items-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide shadow-lg hover:scale-[1.01] active:scale-[0.98] transition-all btn-press"
           >
             <Plus className="w-4 h-4" />
             <span>New post</span>
@@ -209,7 +216,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             </div>
             <button
               type="submit"
-              className="flex items-center gap-space-2xs px-space-md py-space-xs bg-primary text-on-primary rounded-full font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm"
+              className="flex items-center gap-space-2xs px-space-md py-space-xs bg-primary text-on-primary rounded-full font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm btn-press"
             >
               <span>Synthesize</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -269,43 +276,49 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
               <button
                 key={item.generation_id}
                 onClick={() => onOpenHistory(item.generation_id)}
-                className="group relative bg-surface-card rounded-xl p-space-lg shadow-card-light hover:shadow-2xl transition-all duration-300 hover:bg-gradient-to-br hover:from-surface-card-hover-start hover:to-surface-card-hover-end flex flex-col justify-between min-h-[300px] text-left"
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+                  e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+                }}
+                className="history-card spotlight-card group relative bg-surface-card rounded-xl p-space-lg shadow-card-light transition-all duration-300 flex flex-col justify-between min-h-[300px] text-left btn-press animate-fade-slide-up"
+                style={{ animationDelay: `${idx * 80}ms` }}
               >
-                <div className="flex flex-col gap-space-sm">
+                <div className="flex flex-col gap-space-sm relative z-10">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-space-2xs">
-                      <span className="w-6 h-6 rounded-full bg-surface-container group-hover:bg-inverse-surface flex items-center justify-center transition-colors">
-                        <span className="font-title-sm text-body-sm font-bold text-primary group-hover:text-surface-variant leading-none">
+                      <span className="w-6 h-6 rounded-full bg-surface-container flex items-center justify-center">
+                        <span className="font-title-sm text-body-sm font-bold text-primary leading-none">
                           {item.platform === "x" ? "𝕏" : "in"}
                         </span>
                       </span>
-                      <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted group-hover:text-surface-variant transition-colors">
+                      <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted">
                         {item.platform === "x" ? "X / Twitter" : "LinkedIn"}
                       </span>
                     </div>
-                    <span className="px-space-xs py-space-2xs bg-surface-subtle group-hover:bg-inverse-surface text-text-body group-hover:text-surface-bright rounded-full font-label-xs text-label-xs tracking-wider transition-colors">
+                    <span className="px-space-xs py-space-2xs bg-surface-subtle text-text-body rounded-full font-label-xs text-label-xs tracking-wider">
                       {item.status === "finalized" ? "Finalized" : item.status === "needs_review" ? "Needs review" : "Editing"}
                     </span>
                   </div>
                   <div className="flex flex-col gap-space-2xs pt-space-xs">
-                    <h3 className="font-serif text-title-lg text-text-display group-hover:text-surface-bright transition-colors line-clamp-2">
+                    <h3 className="font-serif text-title-lg text-text-display line-clamp-2">
                       {item.topic}
                     </h3>
                     {item.preview && (
-                      <p className="font-body-md text-body-md text-text-muted group-hover:text-surface-variant transition-colors line-clamp-3">
+                      <p className="font-body-md text-body-md text-text-muted line-clamp-3">
                         {item.preview}...
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="pt-space-md flex items-center justify-between mt-space-md">
+                <div className="pt-space-md flex items-center justify-between mt-space-md relative z-10">
                   <div className="flex items-center gap-space-xs">
-                    <span className="font-label-xs text-label-xs text-text-muted group-hover:text-surface-variant transition-colors">
+                    <span className="font-label-xs text-label-xs text-text-muted">
                       Edited {relativeTime(item.created_at)}
                     </span>
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-surface-subtle group-hover:bg-secondary flex items-center justify-center transition-colors shadow-sm">
-                    <ArrowUpRight className="w-4 h-4 text-text-display group-hover:text-on-secondary transition-colors" />
+                  <div className="w-8 h-8 rounded-full bg-surface-subtle flex items-center justify-center shadow-sm history-arrow">
+                    <ArrowUpRight className="w-4 h-4 text-text-display" />
                   </div>
                 </div>
               </button>
@@ -348,9 +361,12 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
                     <div key={i} className="flex-1 flex flex-col items-center gap-space-xs">
                       <div className="w-full flex items-end h-32">
                         <div
-                          className="w-full bg-primary rounded transition-all"
-                          style={{ height: `${Math.max(4, heightPct)}%` }}
-                          title={`${d.count} generation${d.count === 1 ? "" : "s"} on ${d.label}`}
+                          className="w-full bg-primary rounded cadence-bar"
+                          style={{
+                            height: `${Math.max(4, heightPct)}%`,
+                            animationDelay: `${i * 60}ms`,
+                          }}
+                          data-tooltip={`${d.count} generation${d.count === 1 ? "" : "s"} on ${d.label}`}
                         />
                       </div>
                       <span className="font-label-xs text-label-xs text-text-muted">{d.label}</span>

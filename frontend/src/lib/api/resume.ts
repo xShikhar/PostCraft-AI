@@ -1,4 +1,4 @@
-import { fetchApi } from "./client";
+import { fetchApi, ApiError } from "./client";
 
 export type ResumeSummary = {
   role: string;
@@ -17,8 +17,13 @@ export type ResumeResponse = {
   raw_text_length: number;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/**
+ * Upload a resume. Multipart form data — `fetchApi` would force JSON headers,
+ * so we call `fetch` directly and then funnel the response through the same
+ * error/401 handling as `fetchApi` so behavior stays consistent.
+ */
 export async function uploadResume(file: File): Promise<ResumeResponse> {
   const token = typeof window !== "undefined" ? localStorage.getItem("postcraft_token") : null;
 
@@ -36,11 +41,15 @@ export async function uploadResume(file: File): Promise<ResumeResponse> {
       localStorage.removeItem("postcraft_token");
       window.dispatchEvent(new Event("auth-expired"));
     }
+    throw new ApiError(401, "Your session has expired. Please sign in again.");
   }
 
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new Error(data?.detail || data?.error || `Upload failed: ${res.statusText}`);
+    throw new ApiError(
+      res.status,
+      data?.detail || data?.error || `Upload failed: ${res.statusText}`
+    );
   }
 
   return res.json();

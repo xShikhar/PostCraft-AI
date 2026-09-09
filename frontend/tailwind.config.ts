@@ -18,6 +18,7 @@ const config: Config = {
     },
     extend: {
       // ─── Luminous Editorial AI — Light palette ───────────────────────────────
+      // Typography: Merriweather (headlines) + Lato (body/UI) — per hyperverge.co
       colors: {
         // Surface layers (light)
         surface: "var(--surface)",
@@ -155,39 +156,43 @@ const config: Config = {
 
       // ─── Font families ───────────────────────────────────────────────────────
       fontFamily: {
-        // Headings use Playfair Display (editorial serif)
-        serif: ["Playfair Display", "Georgia", "serif"],
-        "headline-lg": ["Playfair Display", "Georgia", "serif"],
-        "headline-lg-mobile": ["Playfair Display", "Georgia", "serif"],
-        "headline-md": ["Playfair Display", "Georgia", "serif"],
-        "headline-sm": ["Playfair Display", "Georgia", "serif"],
-        "display-hero": ["Playfair Display", "Georgia", "serif"],
-        "display-hero-mobile": ["Playfair Display", "Georgia", "serif"],
-        // Body / UI uses Inter (neo-grotesque sans)
-        sans: ["Inter", "system-ui", "sans-serif"],
-        body: ["Inter", "system-ui", "sans-serif"],
-        "body-lg": ["Inter", "system-ui", "sans-serif"],
-        "body-md": ["Inter", "system-ui", "sans-serif"],
-        "body-sm": ["Inter", "system-ui", "sans-serif"],
-        "title-lg": ["Inter", "system-ui", "sans-serif"],
-        "title-sm": ["Inter", "system-ui", "sans-serif"],
-        "label-md": ["Inter", "system-ui", "sans-serif"],
-        "label-xs": ["Inter", "system-ui", "sans-serif"],
+        // Headlines use Merriweather (editorial serif — matches hyperverge.co)
+        serif: ["Merriweather", "Georgia", "serif"],
+        "headline-lg": ["Merriweather", "Georgia", "serif"],
+        "headline-lg-mobile": ["Merriweather", "Georgia", "serif"],
+        "headline-md": ["Merriweather", "Georgia", "serif"],
+        "headline-sm": ["Merriweather", "Georgia", "serif"],
+        "display-hero": ["Merriweather", "Georgia", "serif"],
+        "display-hero-mobile": ["Merriweather", "Georgia", "serif"],
+        // Body / UI uses Lato (clean sans — matches hyperverge.co)
+        sans: ["Lato", "system-ui", "sans-serif"],
+        body: ["Lato", "system-ui", "sans-serif"],
+        "body-lg": ["Lato", "system-ui", "sans-serif"],
+        "body-md": ["Lato", "system-ui", "sans-serif"],
+        "body-sm": ["Lato", "system-ui", "sans-serif"],
+        "title-lg": ["Lato", "system-ui", "sans-serif"],
+        "title-sm": ["Lato", "system-ui", "sans-serif"],
+        "label-md": ["Lato", "system-ui", "sans-serif"],
+        "label-xs": ["Lato", "system-ui", "sans-serif"],
       },
 
       // ─── Font sizes ──────────────────────────────────────────────────────────
       fontSize: {
-        // Headlines (Playfair Display)
-        "display-hero": ["3rem", { lineHeight: "3.5rem", letterSpacing: "-0.02em", fontWeight: "600" }],
-        "display-hero-mobile": ["2.125rem", { lineHeight: "2.625rem", letterSpacing: "-0.01em", fontWeight: "600" }],
-        "headline-lg": ["2rem", { lineHeight: "2.5rem", letterSpacing: "-0.015em", fontWeight: "600" }],
-        "headline-lg-mobile": ["1.625rem", { lineHeight: "2.125rem", letterSpacing: "-0.01em", fontWeight: "600" }],
-        "headline-md": ["1.5rem", { lineHeight: "2rem", letterSpacing: "-0.01em", fontWeight: "500" }],
-        // UI / Body (Inter)
+        // Headlines (Merriweather — only ships 400, 700, 900. Always force
+        // weight 700 or higher so the browser doesn't pick the thin 400
+        // fallback when a "medium" weight is requested.)
+        "display-hero": ["3rem", { lineHeight: "3.5rem", letterSpacing: "-0.02em", fontWeight: "700" }],
+        "display-hero-mobile": ["2.125rem", { lineHeight: "2.625rem", letterSpacing: "-0.01em", fontWeight: "700" }],
+        "headline-lg": ["2rem", { lineHeight: "2.5rem", letterSpacing: "-0.015em", fontWeight: "700" }],
+        "headline-lg-mobile": ["1.625rem", { lineHeight: "2.125rem", letterSpacing: "-0.01em", fontWeight: "700" }],
+        "headline-md": ["1.5rem", { lineHeight: "2rem", letterSpacing: "-0.01em", fontWeight: "700" }],
+        // Card / sub-headlines — also Merriweather, must be 700+
+        "title-lg": ["1.125rem", { lineHeight: "1.625rem", letterSpacing: "-0.01em", fontWeight: "700" }],
+        "title-md": ["1rem", { lineHeight: "1.5rem", letterSpacing: "0em", fontWeight: "700" }],
+        // UI / Body (Lato — full 100-900 range available)
         "body-lg": ["1rem", { lineHeight: "1.625rem", letterSpacing: "0em", fontWeight: "400" }],
         "body-md": ["0.875rem", { lineHeight: "1.375rem", letterSpacing: "0em", fontWeight: "400" }],
         "body-sm": ["0.8125rem", { lineHeight: "1.125rem", letterSpacing: "0.005em", fontWeight: "400" }],
-        "title-lg": ["1.125rem", { lineHeight: "1.625rem", letterSpacing: "-0.01em", fontWeight: "600" }],
         "title-sm": ["0.9375rem", { lineHeight: "1.375rem", letterSpacing: "0em", fontWeight: "600" }],
         "label-md": ["0.75rem", { lineHeight: "1rem", letterSpacing: "0.04em", fontWeight: "600" }],
         "label-xs": ["0.625rem", { lineHeight: "0.875rem", letterSpacing: "0.06em", fontWeight: "700" }],

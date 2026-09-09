@@ -4,14 +4,16 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
 
+import os
+# Set environment variables for tests before importing app modules
+os.environ.setdefault("GEMINI_API_KEY", "mock_gemini_key")
+os.environ.setdefault("TAVILY_API_KEY", "mock_tavily_key")
+os.environ.setdefault("SERP_API_KEY", "mock_serp_key")
+os.environ.setdefault("JWT_SECRET_KEY", "mock_jwt_secret_key_at_least_32_chars_long_for_testing")
+os.environ.setdefault("RESUME_ENCRYPTION_KEY", "GqqEbSX3AX9Y4cKboWBIVmMjW_96ek-JjsUIi7lY_Xg=")
+
 from app.core.database import Base, get_db
 from app.main import app
-import os
-
-# Set environment variables for tests to avoid "API Key missing" short circuits
-os.environ["GEMINI_API_KEY"] = "mock_gemini_key"
-os.environ["TAVILY_API_KEY"] = "mock_tavily_key"
-os.environ["SERP_API_KEY"] = "mock_serp_key"
 
 import unittest.mock as mock
 

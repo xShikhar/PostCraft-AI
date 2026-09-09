@@ -56,37 +56,37 @@ function DraftCard({
   };
 
   return (
-    <div className="group relative bg-surface-card rounded-xl p-space-lg shadow-card-light hover:shadow-2xl transition-all duration-300 hover:bg-gradient-to-br hover:from-surface-card-hover-start hover:to-surface-card-hover-end hover:text-surface-card flex flex-col justify-between min-h-[320px]">
+    <div className="relative rounded-xl p-space-lg flex flex-col justify-between min-h-[320px] w-full h-full">
       {/* Header */}
-      <div className="flex flex-col gap-space-sm">
+      <div className="flex flex-col gap-space-sm relative z-10">
         <div className="flex items-center justify-between flex-wrap gap-space-xs">
-          <span className="font-serif text-title-lg text-text-display group-hover:text-surface-bright transition-colors">
+          <span className="font-serif text-title-lg text-text-display">
             Draft {number}
           </span>
           <PlatformBadge platform={platform} />
         </div>
 
         {/* Divider */}
-        <div className="border-t border-border-subtle group-hover:border-surface-variant transition-colors" />
+        <div className="border-t border-border-subtle" />
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative z-10">
         <div
-          className="font-body-md text-body-md text-text-muted group-hover:text-surface-variant transition-colors line-clamp-[8] prose-invert max-w-none [&_br]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_strong]:font-semibold [&_strong]:text-text-display group-hover:[&_strong]:text-surface-bright [&_em]:italic [&_em]:text-text-body/90 group-hover:[&_em]:text-surface-variant [&_li]:text-text-muted group-hover:[&_li]:text-surface-variant"
+          className="font-body-md text-body-md text-text-muted line-clamp-[8] prose-invert max-w-none [&_br]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_strong]:font-semibold [&_strong]:text-text-display [&_em]:italic [&_em]:text-text-body/90 [&_li]:text-text-muted"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
         />
       </div>
 
       {/* Footer: stats + actions */}
-      <div className="pt-space-md mt-space-md border-t border-border-subtle group-hover:border-surface-variant transition-colors">
+      <div className="pt-space-md mt-space-md border-t border-border-subtle relative z-10">
         <div className="flex items-center justify-between flex-wrap gap-space-sm">
           <div className="flex items-center gap-space-sm">
-            <span className="font-label-xs text-label-xs text-text-muted group-hover:text-surface-variant transition-colors">
+            <span className="font-label-xs text-label-xs text-text-muted">
               {charCount} chars
             </span>
             <span className="text-outline-variant text-label-xs">·</span>
-            <span className="font-label-xs text-label-xs text-text-muted group-hover:text-surface-variant transition-colors">
+            <span className="font-label-xs text-label-xs text-text-muted">
               {wordCount} words
             </span>
           </div>
@@ -94,7 +94,7 @@ function DraftCard({
           <div className="flex items-center gap-space-2xs">
             <button
               onClick={handleCopy}
-              className="flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-surface-subtle group-hover:bg-inverse-surface text-text-body group-hover:text-surface-bright transition-all font-label-xs text-label-xs font-semibold"
+              className="flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-surface-subtle hover:bg-surface-container-high text-text-body transition-all font-label-xs text-label-xs font-semibold btn-press"
             >
               {copied ? (
                 <>
@@ -111,7 +111,7 @@ function DraftCard({
 
             <button
               onClick={() => onSelect(number)}
-              className="flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-primary text-on-primary group-hover:bg-surface-bright group-hover:text-text-display transition-all font-label-xs text-label-xs font-semibold shadow-sm"
+              className="flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-primary text-on-primary hover:bg-primary-container transition-all font-label-xs text-label-xs font-semibold shadow-sm btn-press"
             >
               <Edit3 className="w-3 h-3" />
               <span>Edit</span>
@@ -144,31 +144,28 @@ export function DraftSelectionGrid({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
-        <DraftCard
-          number={1}
-          content={drafts.draft_1}
-          platform={platform}
-          onSelect={onSelect}
-          onCopy={onCopy}
-          renderMarkdown={renderMarkdown}
-        />
-        <DraftCard
-          number={2}
-          content={drafts.draft_2}
-          platform={platform}
-          onSelect={onSelect}
-          onCopy={onCopy}
-          renderMarkdown={renderMarkdown}
-        />
-        <DraftCard
-          number={3}
-          content={drafts.draft_3}
-          platform={platform}
-          onSelect={onSelect}
-          onCopy={onCopy}
-          renderMarkdown={renderMarkdown}
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg draft-grid">
+        {[1, 2, 3].map((num, idx) => (
+          <div
+            key={num}
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+              e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+            }}
+            className="draft-card history-card spotlight-card animate-fade-slide-up"
+            style={{ animationDelay: `${idx * 80}ms` }}
+          >
+            <DraftCard
+              number={num as 1 | 2 | 3}
+              content={drafts[`draft_${num}` as keyof Drafts]}
+              platform={platform}
+              onSelect={onSelect}
+              onCopy={onCopy}
+              renderMarkdown={renderMarkdown}
+            />
+          </div>
+        ))}
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -9,14 +9,28 @@ from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Authorization gate for admin-only endpoints.
+
+    Without this check, ANY authenticated user could view cost data and other
+    sensitive admin views. The previous code had a TODO comment about
+    "verifying is_admin" but never actually did — this dependency enforces it.
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user
+
+
 @router.get("/cost-summary")
 async def get_cost_summary(
     session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin),
 ):
-    # In a real app, verify current_user.is_admin.
-    # For now, we just require authentication.
-    
     # Aggregate total costs
     stmt = select(
         func.sum(CostLog.prompt_tokens).label("total_prompt_tokens"),
@@ -25,14 +39,14 @@ async def get_cost_summary(
     )
     result = await session.execute(stmt)
     row = result.first()
-    
+
     # Aggregate by operation
     op_stmt = select(
         CostLog.operation,
         func.sum(CostLog.estimated_cost_usd).label("cost")
     ).group_by(CostLog.operation)
     op_result = await session.execute(op_stmt)
-    
+
     breakdown = {}
     for op_row in op_result:
         breakdown[op_row.operation] = op_row.cost

@@ -4,6 +4,30 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/use-auth";
 import { toast } from "sonner";
 import { AtSign, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
+import { useTheme } from "next-themes";
+import Image from "next/image";
+
+function ThemeLogo({ size = 56 }: { size?: number }) {
+  const { theme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const activeTheme = mounted ? resolvedTheme || theme : "light";
+  return (
+    <div
+      className="rounded-full bg-surface-subtle p-space-2xs flex items-center justify-center shadow-sm mb-space-md overflow-hidden"
+      style={{ width: size, height: size }}
+    >
+      <Image
+        src={activeTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
+        alt="PostCraft AI"
+        width={size - 8}
+        height={size - 8}
+        className="object-contain"
+        priority
+      />
+    </div>
+  );
+}
 
 interface AuthScreenProps {
   // Lets the auth-screen footer Privacy / Terms links open the legal view
@@ -78,16 +102,9 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
 
             {/* Brand block */}
             <div className="relative z-10 flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-full bg-surface-subtle p-space-2xs flex items-center justify-center shadow-sm mb-space-md">
-                <svg className="w-10 h-10 text-primary" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <path d="M20 4L25 15L36 17L28 25L30 36L20 31L10 36L12 25L4 17L15 15L20 4Z" fill="currentColor" opacity="0.9"/>
-                </svg>
-              </div>
-              <span className="font-label-xs text-label-xs uppercase tracking-widest text-primary font-bold mb-space-2xs">
-                Editorial Intelligence
-              </span>
-              <h1 className="font-serif text-headline-md text-text-display mb-space-xs">
-                PostCraft AI
+              <ThemeLogo size={56} />
+              <h1 className="wordmark font-serif text-headline-md text-text-display mb-space-2xs">
+                POSTCRAFT AI
               </h1>
               <p className="font-body-sm text-body-sm text-text-muted max-w-xs leading-relaxed">
                 Welcome back — Log in to your social writing partner workspace.
@@ -106,7 +123,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                   <input
                     id="username"
                     autoComplete="username"
-                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-space-md py-space-sm rounded-lg focus:outline-none focus:bg-surface-card focus:ring-2 focus:ring-primary-container transition-colors placeholder:text-outline"
+                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-space-md py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
                     placeholder="name@domain.com"
                     required
                     type="text"
@@ -124,7 +141,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                     Password
                   </label>
                   <a
-                    className="font-label-xs text-label-xs text-primary hover:text-primary-container transition-colors cursor-pointer"
+                    className="font-body-sm text-body-sm text-primary hover:text-primary-container transition-colors cursor-pointer"
                     href="#"
                     onClick={(e) => e.preventDefault()}
                   >
@@ -136,7 +153,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                   <input
                     id="password"
                     autoComplete={isLoginMode ? "current-password" : "new-password"}
-                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-10 py-space-sm rounded-lg focus:outline-none focus:bg-surface-card focus:ring-2 focus:ring-primary-container transition-colors placeholder:text-outline"
+                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-10 py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
                     placeholder="Enter password"
                     required
                     type={showPassword ? "text" : "password"}
@@ -217,7 +234,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
               <button
                 type="submit"
                 disabled={isLoading || !canSubmit}
-                className="mt-space-2xs w-full py-space-sm px-space-lg rounded-full bg-text-display hover:bg-black dark:bg-primary dark:hover:bg-primary-container text-surface-card dark:text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
+                className="mt-space-2xs w-full py-space-sm px-space-lg rounded-full bg-text-display hover:bg-black dark:bg-primary dark:hover:bg-primary-container text-surface-card dark:text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none btn-press"
               >
                 <span>{isLoading ? "Please wait..." : isLoginMode ? "Sign in to PostCraft" : "Create account"}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -241,11 +258,11 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
 
             {/* Footer */}
             <div className="relative z-10 mt-space-lg pt-space-md flex flex-col items-center gap-space-2xs">
-              <div className="inline-flex items-center gap-space-2xs text-text-muted font-label-xs text-label-xs bg-surface-subtle px-space-sm py-space-2xs rounded-full">
+              <div className="inline-flex items-center gap-space-2xs text-text-muted font-body-sm text-body-sm bg-surface-subtle px-space-sm py-space-2xs rounded-full">
                 <ShieldCheck className="w-3.5 h-3.5 text-primary" />
                 <span>Enterprise 256-bit encryption</span>
               </div>
-              <div className="flex items-center gap-space-xs font-label-xs text-label-xs text-text-muted">
+              <div className="flex items-center gap-space-xs font-body-sm text-body-sm text-text-muted">
                 <button
                   type="button"
                   onClick={() => onOpenLegal?.("privacy")}

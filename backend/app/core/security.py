@@ -3,6 +3,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from jose import jwt, JWTError
+from dotenv import load_dotenv
+
+# Ensure local .env is loaded if running outside container / platform env
+load_dotenv()
 
 # JWT secret — REQUIRED. Fail closed if not set. Never use a hardcoded fallback
 # in production: a leaked fallback lets anyone forge tokens for any user.

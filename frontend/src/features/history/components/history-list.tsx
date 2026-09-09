@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { listGenerations, type HistoryItem } from "@/lib/api/history";
-import { ArrowLeft, Calendar, ChevronDown, FileText } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown, FileText, ArrowRight } from "lucide-react";
 
 interface HistoryListProps {
   onBack: () => void;
@@ -129,7 +129,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
       <div className="flex items-center gap-space-md">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-xl bg-surface-card shadow-card-light hover:bg-surface-container flex items-center justify-center text-text-display hover:text-primary transition-all"
+          className="w-10 h-10 rounded-xl bg-surface-card shadow-card-light hover:bg-surface-container flex items-center justify-center text-text-display hover:text-primary transition-all btn-press"
           aria-label="Go back"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -165,22 +165,23 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-space-md">
-          {items.map((item) => (
+          {items.map((item, idx) => (
             <button
               key={item.generation_id}
               onClick={() => onOpen(item.generation_id)}
-              className="group w-full text-left bg-surface-card rounded-xl p-space-lg shadow-card-light hover:shadow-2xl transition-all duration-300 hover:bg-surface-container"
+              className="history-card group w-full text-left bg-surface-card rounded-xl p-space-lg shadow-card-light transition-all duration-300 btn-press animate-fade-slide-up"
+              style={{ animationDelay: `${idx * 60}ms` }}
             >
               <div className="flex items-start justify-between gap-space-md">
                 {/* Left: topic + preview */}
                 <div className="flex flex-col gap-space-xs flex-1 min-w-0">
                   {/* Badges row */}
                   <div className="flex items-center gap-space-xs flex-wrap">
-                    <span className="px-space-xs py-space-2xs bg-surface-subtle group-hover:bg-inverse-surface text-text-body group-hover:text-surface-bright rounded-full font-label-xs text-label-xs uppercase tracking-wider transition-colors">
+                    <span className="px-space-xs py-space-2xs bg-surface-subtle text-text-body rounded-full font-label-xs text-label-xs uppercase tracking-wider">
                       {platformLabel(item.platform)}
                     </span>
                     <span
-                      className={`px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider transition-colors ${statusColor(
+                      className={`px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider ${statusColor(
                         item.status
                       )}`}
                     >
@@ -189,13 +190,13 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
                   </div>
 
                   {/* Topic */}
-                  <h2 className="font-serif text-title-md text-text-display group-hover:text-surface-bright transition-colors line-clamp-2 mt-space-2xs">
+                  <h2 className="font-serif text-title-md text-text-display line-clamp-2 mt-space-2xs">
                     {item.topic}
                   </h2>
 
                   {/* Preview */}
                   {item.preview && (
-                    <p className="font-body-sm text-body-sm text-text-muted group-hover:text-surface-variant transition-colors line-clamp-2">
+                    <p className="font-body-sm text-body-sm text-text-muted line-clamp-2">
                       {item.preview}
                     </p>
                   )}
@@ -203,15 +204,20 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
 
                 {/* Right: date */}
                 <div className="flex flex-col items-end gap-space-2xs flex-shrink-0">
-                  <div className="flex items-center gap-space-2xs text-text-muted group-hover:text-surface-variant transition-colors">
+                  <div className="flex items-center gap-space-2xs text-text-muted">
                     <Calendar className="w-3.5 h-3.5" />
                     <span className="font-label-xs text-label-xs">
                       {formatDate(item.created_at)}
                     </span>
                   </div>
-                  <span className="font-label-xs text-label-xs text-text-muted group-hover:text-surface-variant transition-colors">
+                  <span className="font-label-xs text-label-xs text-text-muted">
                     {relativeTime(item.created_at)}
                   </span>
+                </div>
+
+                {/* Hover arrow indicator */}
+                <div className="flex-shrink-0 self-center w-8 h-8 rounded-full bg-surface-subtle flex items-center justify-center history-arrow">
+                  <ArrowRight className="w-4 h-4 text-text-muted" />
                 </div>
               </div>
             </button>
@@ -223,7 +229,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-space-xs px-space-lg py-space-sm bg-surface-card hover:bg-surface-container text-text-display hover:text-primary rounded-full font-label-md text-label-md shadow-card-light hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-space-xs px-space-lg py-space-sm bg-surface-card hover:bg-surface-container text-text-display hover:text-primary rounded-full font-label-md text-label-md shadow-card-light hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed btn-press"
               >
                 {loadingMore ? (
                   <>

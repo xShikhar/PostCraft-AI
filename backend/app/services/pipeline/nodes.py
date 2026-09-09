@@ -173,8 +173,6 @@ def _build_temporal_style_bias(user_id: str, platform: str) -> str:
     Most recent gets the highest weight, older ones get progressively less.
     Falls back to single profile if fewer than 2 exist.
     """
-    import logging
-    log = logging.getLogger(__name__)
 
     recent = vector_service.get_recent_profiles(user_id, platform, limit=5)
     if not recent:
@@ -208,8 +206,6 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
     Deletes all but the newest `keep` StyleProfile rows for a user+platform in PostgreSQL,
     and mirrors the deletion in ChromaDB via vector_service.
     """
-    import logging
-    log = logging.getLogger(__name__)
 
     stmt = (
         select(StyleProfile)
@@ -226,8 +222,6 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
         return
 
     to_delete = all_profiles[keep:]
-    to_delete_ids = [p.id for p in to_delete]
-    to_delete_str_ids = [str(p.id) for p in to_delete]
 
     for profile in to_delete:
         await deps.session.delete(profile)
@@ -266,7 +260,11 @@ async def _build_background_context(deps: PipelineDeps, user_id: str) -> str:
     if resume and resume.structured_summary:
         try:
             summary = json.loads(decrypt(resume.structured_summary))
-        except (json.JSONDecodeError, Exception):
+        except (json.JSONDecodeError, ValueError) as e:
+            # JSON parse failure OR Fernet decryption failure (InvalidToken is a ValueError).
+            # Without this split, the original `except (json.JSONDecodeError, Exception)`
+            # made the second branch dead code.
+            logger.warning(f"Failed to decrypt/parse resume summary: {e}")
             summary = {}
         if summary:
             bits = []

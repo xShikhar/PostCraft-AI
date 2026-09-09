@@ -19,6 +19,9 @@ import os
 import sys
 
 from cryptography.fernet import Fernet, InvalidToken
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 _fernet: Fernet | None = None

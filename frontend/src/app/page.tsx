@@ -153,12 +153,14 @@ export default function Home() {
       });
       setSources(data.sources || []);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 429s already carry a rate-limit-specific message; surface as-is.
       // Other errors fall back to the server's message or a generic one.
       const message = err instanceof ApiError
         ? err.message
-        : err?.message || "Failed to generate drafts";
+        : err instanceof Error
+          ? err.message
+          : "Failed to generate drafts";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -179,10 +181,12 @@ export default function Home() {
       setChatHistory(prev => [...prev, { role: "assistant", content: "Draft revised successfully." }]);
       setDrafts(prev => prev ? { ...prev, [`draft_${activeDraftIndex}`]: data.revised_draft } : prev);
       toast.success("Draft updated!");
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = err instanceof ApiError
         ? err.message
-        : err?.message || "Edit failed";
+        : err instanceof Error
+          ? err.message
+          : "Edit failed";
       toast.error(message);
       setChatHistory(prev => [...prev, { role: "assistant", content: `Error: ${message}` }]);
     } finally {
@@ -197,10 +201,12 @@ export default function Home() {
       await finalizeDraft(generationId, activeDraftIndex);
       setIsFinalized(true);
       toast.success("Draft finalized and preferences saved!");
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = err instanceof ApiError
         ? err.message
-        : err?.message || "Finalization failed";
+        : err instanceof Error
+          ? err.message
+          : "Finalization failed";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -287,7 +293,7 @@ export default function Home() {
     >
       <Toaster theme="light" position="top-center" richColors />
 
-      <main className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <main key={view} className="w-full space-y-8 animate-fade-slide-up">
 
         {view === "profile" ? (
           <ProfilePage onBack={() => setView("home")} />
@@ -339,6 +345,7 @@ export default function Home() {
                 setUseContext={setUseContext}
                 loading={loading}
                 loadingStepText={steps[loadingStep]}
+                activeStep={loadingStep}
                 onSubmit={handleGenerate}
               />
             )}

@@ -18,6 +18,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=True) # nullable for backwards compatibility with sandbox DB
     profile_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     about_me: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     projects: Mapped[list["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")

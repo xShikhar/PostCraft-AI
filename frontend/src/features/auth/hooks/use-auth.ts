@@ -41,14 +41,16 @@ export function useAuth() {
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Welcome back!");
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 429 already has a rate-limit specific message from fetchApi; surface
       // it as-is so the user understands what's happening. Other errors just
       // pass through whatever the server sent.
       const message =
         err instanceof ApiError
           ? err.message
-          : err?.message || "Failed to log in";
+          : err instanceof Error
+            ? err.message
+            : "Failed to log in";
       toast.error(message);
       return false;
     } finally {
@@ -65,11 +67,13 @@ export function useAuth() {
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Account created successfully!");
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message =
         err instanceof ApiError
           ? err.message
-          : err?.message || "Failed to sign up";
+          : err instanceof Error
+            ? err.message
+            : "Failed to sign up";
       toast.error(message);
       return false;
     } finally {

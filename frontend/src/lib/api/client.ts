@@ -1,4 +1,4 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public retryAfter?: number) {
@@ -7,19 +7,51 @@ export class ApiError extends Error {
   }
 }
 
+// Long-running endpoints (e.g. /api/generations pipeline) get a longer
+// client-side timeout. Default 1 minute for most routes; 10 minutes for
+// the generation pipeline (Research + Pattern + 3× Draft LLM calls +
+// Quality + retry, with margin). Other endpoints use 60s.
+const DEFAULT_TIMEOUT_MS = 60_000;
+const LONG_RUNNING_TIMEOUT_MS = 600_000;
+
+function timeoutFor(endpoint: string): number {
+  return endpoint.startsWith("/api/generations") ? LONG_RUNNING_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+}
+
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("postcraft_token") : null;
-  
+
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  // Wrap fetch with AbortController so a hung backend can't pin the UI in
+  // the "generating..." state forever. Browsers don't apply any default
+  // timeout, so without this the user just sees an indefinite spinner.
+  const controller = new AbortController();
+  const timeoutMs = timeoutFor(endpoint);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(
+        408,
+        `Request timed out after ${Math.round(timeoutMs / 1000)}s. The server is taking too long — try again.`
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (response.status === 401) {
     if (typeof window !== "undefined") {

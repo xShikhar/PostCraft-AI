@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import Image from "next/image";
 import {
   Plus,
   Home,
@@ -30,6 +31,31 @@ const navItems: { view: "home" | "history" | "profile"; label: string; icon: Rea
   { view: "history", label: "History", icon: <History className="w-5 h-5" /> },
   { view: "profile", label: "Profile & Voice", icon: <Mic className="w-5 h-5" /> },
 ];
+
+function ThemeLogo({ size = 32 }: { size?: number }) {
+  const { theme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Avoid hydration mismatch — show light by default before mount
+  const activeTheme = mounted ? resolvedTheme || theme : "light";
+
+  return (
+    <div
+      className="relative flex items-center justify-center rounded-lg overflow-hidden bg-surface-container"
+      style={{ width: size, height: size }}
+    >
+      <Image
+        src={activeTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
+        alt="PostCraft AI"
+        width={size}
+        height={size}
+        className="object-contain"
+        priority
+      />
+    </div>
+  );
+}
 
 export function Sidebar({
   currentView,
@@ -72,12 +98,8 @@ export function Sidebar({
         {/* Brand row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-space-sm">
-            <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M10 2L12.5 7.5L18 8.5L14 12.5L15 18L10 15.5L5 18L6 12.5L2 8.5L7.5 7.5L10 2Z" fill="currentColor" opacity="0.9"/>
-              </svg>
-            </div>
-            <span className="font-serif text-title-lg text-text-display tracking-tight">PostCraft AI</span>
+            <ThemeLogo />
+            <span className="wordmark font-serif text-title-lg text-text-display">POSTCRAFT AI</span>
           </div>
           <button
             onClick={onToggleCollapse}
@@ -91,7 +113,7 @@ export function Sidebar({
         {/* New post CTA */}
         <button
           onClick={onNewPost}
-          className="w-full flex items-center justify-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide transition-transform hover:scale-[1.01] active:scale-[0.98] shadow-md"
+          className="w-full flex items-center justify-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide transition-transform hover:scale-[1.01] active:scale-[0.98] shadow-md btn-press"
         >
           <Plus className="w-4 h-4" />
           <span>New post</span>
@@ -106,7 +128,7 @@ export function Sidebar({
                 key={item.view}
                 onClick={() => onNavigate(item.view)}
                 className={`
-                  flex items-center gap-space-sm px-space-md py-space-sm rounded-xl transition-colors text-left
+                  flex items-center gap-space-sm px-space-md py-space-sm rounded-xl transition-colors text-left btn-press
                   ${active
                     ? "bg-surface-container-high text-primary font-title-sm shadow-sm"
                     : "text-text-muted hover:bg-surface-subtle hover:text-text-display"
@@ -153,7 +175,7 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* User identity row */}
+        {/* User identity row — clickable to navigate to profile */}
         <div className="flex items-center justify-between pt-space-xs">
           {userLoading ? (
             <div className="flex items-center gap-space-sm">
@@ -162,23 +184,28 @@ export function Sidebar({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-space-sm min-w-0">
-              <div className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-primary font-headline-md text-title-sm font-semibold flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate("profile")}
+              className="flex items-center gap-space-sm min-w-0 flex-1 text-left p-space-2xs -ml-space-2xs rounded-lg hover:bg-surface-subtle transition-colors group"
+              aria-label="Open profile and voice settings"
+            >
+              <div className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-primary font-headline-md text-title-sm font-semibold flex-shrink-0 ring-2 ring-transparent group-hover:ring-primary-container transition-all">
                 {initials}
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="font-title-sm text-body-sm text-text-display font-semibold truncate leading-tight">
+                <span className="font-title-sm text-body-sm text-text-display font-semibold truncate leading-tight group-hover:text-primary transition-colors">
                   {user?.username ?? "User"}
                 </span>
                 <span className="font-body-sm text-body-sm text-text-muted truncate leading-tight">
                   {user?.profile_context || "Creator"}
                 </span>
               </div>
-            </div>
+            </button>
           )}
           <button
             onClick={onLogout}
-            className="p-space-2xs text-text-muted hover:text-secondary rounded-lg transition-colors flex items-center justify-center"
+            className="p-space-2xs text-text-muted hover:text-secondary rounded-lg transition-colors flex items-center justify-center btn-press"
             title="Sign out"
           >
             <LogOut className="w-5 h-5" />
@@ -189,14 +216,14 @@ export function Sidebar({
         <div className="flex items-center gap-space-xs pt-space-2xs border-t border-border-subtle">
           <button
             onClick={() => onNavigate("privacy")}
-            className="font-label-xs text-label-xs text-text-muted hover:text-text-display transition-colors"
+            className="font-body-sm text-body-sm text-text-muted hover:text-text-display transition-colors"
           >
             Privacy
           </button>
           <span className="w-1 h-1 rounded-full bg-outline-variant" />
           <button
             onClick={() => onNavigate("terms")}
-            className="font-label-xs text-label-xs text-text-muted hover:text-text-display transition-colors"
+            className="font-body-sm text-body-sm text-text-muted hover:text-text-display transition-colors"
           >
             Terms
           </button>

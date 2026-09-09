@@ -5,6 +5,28 @@ import { Sidebar } from "./sidebar";
 import { TopHeader } from "./top-header";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Home, History, Mic, Plus, Menu } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useEffect } from "react";
+import Image from "next/image";
+
+function CollapsedLogo() {
+  const { theme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const activeTheme = mounted ? resolvedTheme || theme : "light";
+  return (
+    <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden">
+      <Image
+        src={activeTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
+        alt="PostCraft AI"
+        width={28}
+        height={28}
+        className="object-contain"
+        priority
+      />
+    </div>
+  );
+}
 
 type View = "home" | "editor" | "profile" | "history" | "privacy" | "terms";
 
@@ -53,11 +75,7 @@ export function AppShell({
         <aside className="fixed top-0 left-0 bottom-0 w-16 bg-surface-card border-r border-border-subtle z-50 flex flex-col items-center justify-between py-space-lg shadow-sidebar">
           <div className="flex flex-col items-center gap-space-md">
             {/* Logo */}
-            <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M10 2L12.5 7.5L18 8.5L14 12.5L15 18L10 15.5L5 18L6 12.5L2 8.5L7.5 7.5L10 2Z" fill="currentColor" opacity="0.9"/>
-              </svg>
-            </div>
+            <CollapsedLogo />
 
             {/* Expand button */}
             <button
@@ -130,6 +148,7 @@ export function AppShell({
           username={username}
           initials={initials}
           collapsed={collapsed}
+          onNavigate={onNavigate}
         />
 
         <main className="flex-1 w-full pt-16 bg-canvas-base">

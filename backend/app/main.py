@@ -40,16 +40,23 @@ else:
 
 # CSP & security headers: applied via custom middleware below
 # (Starlette removed its built-in SecurityMiddleware in newer versions.)
+#
+# Note: `'unsafe-inline'` is allowed for `style-src` to support shadcn/ui's
+# generated styles. We do NOT allow `'unsafe-inline'` for `script-src` — all
+# our scripts are bundled by Next.js. If you embed third-party widgets, you'll
+# need a nonce-based CSP.
+IS_PROD = settings.ENVIRONMENT == "production"
 CSP_DIRECTIVES = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "img-src 'self' data:; "
+    "script-src 'self'; "
+    f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com{' https://cdn.tailwindcss.com' if not IS_PROD else ''}; "
+    "img-src 'self' data: https:; "
     "connect-src 'self'; "
     "font-src 'self' https://fonts.gstatic.com; "
     "frame-ancestors 'none'; "
     "base-uri 'self';"
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,10 +64,11 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down PostCraft AI backend...")
 
+
 app = FastAPI(
     title="PostCraft AI",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Wire slowapi's limiter state into the app so decorators can track state.
@@ -70,9 +78,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # --- Security middleware stack ---
 
 # 1. TrustedHostMiddleware — prevent HTTP Host header attacks
+# TrustedHostMiddleware in Starlette is FINICKY: setting it after CORS or other
+# middlewares means its 400 short-circuits CORS preflights. Wire it FIRST.
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS,
+    allowed_hosts=settings.allowed_hosts_list,
 )
 
 # 2. Custom security headers middleware (CSP, X-Content-Type-Options, etc.)
@@ -83,15 +93,20 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Disable powerful browser features we don't need.
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()"
+    )
     return response
 
 # 3. CORS — must be last so it can short-circuit preflight
+#    CORS_ORIGINS comes from settings; never use "*" with allow_credentials=True.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.allowed_cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(health_router)

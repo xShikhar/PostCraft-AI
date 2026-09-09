@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -174,7 +175,7 @@ async def upload_resume(
         # Encrypt PII (raw_text and structured_summary) at rest
         existing.raw_text = encrypt(raw_text)
         existing.structured_summary = encrypt(json.dumps(summary_dict))
-        existing.uploaded_at = __import__('datetime').datetime.now(__import__('datetime').timezone.utc)
+        existing.uploaded_at = datetime.now(timezone.utc)
         resume = existing
     else:
         resume = UserResume(
@@ -215,7 +216,9 @@ async def get_resume(
         try:
             # Decrypt the structured summary before parsing
             summary_dict = json.loads(decrypt(resume.structured_summary))
-        except (json.JSONDecodeError, Exception):
+        except (json.JSONDecodeError, ValueError) as e:
+            # JSON parse failure OR Fernet decryption failure (InvalidToken)
+            logger.warning(f"Failed to decrypt/parse resume summary: {e}")
             summary_dict = None
 
     # raw_text_length is the plaintext length (informational only — we never
@@ -225,7 +228,8 @@ async def get_resume(
     if resume.raw_text:
         try:
             plaintext_length = len(decrypt(resume.raw_text))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to decrypt resume raw_text for length: {e}")
             plaintext_length = 0
 
     return ResumeResponse(

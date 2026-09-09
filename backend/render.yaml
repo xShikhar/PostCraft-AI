@@ -1,0 +1,68 @@
+# ─── Render blueprint for PostCraft AI backend ───────
+# Usage:
+#   1. Connect this repo to Render (https://render.com).
+#   2. "New" → "Blueprint" → point at this file.
+#   3. Render provisions the database + web service, runs the Dockerfile,
+#      and applies `release` (alembic upgrade head) before the first request.
+#
+# All secrets (GEMINI/SERP/TAVILY keys, JWT secret, Fernet key) live in
+# `envVars` as `generateValue: true` placeholders — set them in the Render
+# dashboard after the first deploy and rotate any leaked values immediately.
+
+services:
+  - type: web
+    name: postcraft-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # `releaseCommand` runs before the new container accepts traffic.
+    # Apply DB migrations on every deploy so schema stays in sync with the
+    # model definitions.
+    releaseCommand: |
+      alembic upgrade head
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: postcraft-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: RESUME_ENCRYPTION_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SERP_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: CHROMA_PERSIST_DIR
+        value: /var/data/chroma
+      - key: ALLOWED_HOSTS
+        value: postcraft-backend.onrender.com,postcraft-ai.onrender.com,*.onrender.com,localhost,127.0.0.1
+      - key: CORS_ORIGINS
+        # Set the Vercel domain here after first deploy — Render injects it
+        # into the env at runtime so the frontend can call the API.
+        value: https://postcraft.vercel.app,https://post-craft-ai.vercel.app,http://localhost:3000
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
+    disk:
+      # Persistent disk for ChromaDB. /var/data survives deploys.
+      name: chroma-disk
+      mountPath: /var/data
+      sizeGB: 1
+
+databases:
+  - name: postcraft-db
+    plan: starter
+    region: oregon
+    # `version` is left to Render's default Postgres major.
+    # DATABASE_URL is built from `connectionString` above.

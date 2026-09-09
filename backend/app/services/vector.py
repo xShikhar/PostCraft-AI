@@ -1,24 +1,33 @@
+import os
 import chromadb
-from chromadb.config import Settings
 import logging
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _get_client():
-    settings = get_settings()
-    return chromadb.PersistentClient(path="./chroma_db")
-
 class VectorService:
+    """
+    Wrapper around ChromaDB for storing and querying user style profiles.
+
+    Uses CHROMA_PERSIST_DIR env var (default ./chroma_data) so the path is
+    configurable in production. On Render, mount a persistent disk at that
+    path or back the data with a separate service — the default local
+    path is for development.
+    """
+
     def __init__(self):
         self._client = None
         self._collection = None
 
     @property
+    def _persist_path(self) -> str:
+        return os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
+
+    @property
     def client(self):
         if self._client is None:
-            self._client = chromadb.PersistentClient(path="./chroma_db")
+            self._client = chromadb.PersistentClient(path=self._persist_path)
         return self._client
 
     @property
@@ -32,7 +41,7 @@ class VectorService:
             self.collection.add(
                 documents=[style_text],
                 metadatas=[{"user_id": str(user_id), "platform": platform}],
-                ids=[str(profile_id)]
+                ids=[str(profile_id)],
             )
             logger.info(f"Saved StyleProfile {profile_id} to ChromaDB.")
         except Exception as e:
@@ -43,11 +52,12 @@ class VectorService:
             results = self.collection.query(
                 query_texts=[query_text],
                 n_results=n_results,
-                where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]}
+                where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]},
             )
 
-            if results["documents"] and results["documents"][0]:
-                return results["documents"][0][0]
+            documents = results.get("documents") if results else None
+            if documents and documents[0]:
+                return documents[0][0]
             return None
         except Exception as e:
             logger.error(f"Failed to query ChromaDB: {e}")
@@ -56,24 +66,30 @@ class VectorService:
     def get_recent_profiles(self, user_id: str, platform: str, limit: int = 5) -> list[dict]:
         """
         Returns the last N style profile documents for a user+platform,
-        ordered by ID descending (most recent first).
-        Each entry: {'id': str, 'text': str}
+        ordered by the embedded `created_at` metadata (newest first).
+
+        NOTE: We sort on `created_at` (ISO timestamp stored in metadata),
+        NOT on the UUID. UUID v4 is random, so lexicographic UUID sort does
+        not reflect insertion order. This was a real bug before the fix.
         """
         try:
             results = self.collection.get(
                 where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]},
-                limit=100,  # ChromaDB doesn't support ordering, fetch max and sort in Python
+                include=["documents", "metadatas"],
             )
-            if not results["documents"]:
+            if not results or not results.get("ids"):
                 return []
 
-            # Sort by ID descending (newer UUIDs have later timestamp components)
-            entries = [
-                {"id": results["ids"][i], "text": results["documents"][i]}
-                for i in range(len(results["ids"]))
-            ]
-            # Sort descending by ID — works because UUID v4 sorts lexicographically with time components
-            entries.sort(key=lambda x: x["id"], reverse=True)
+            entries = []
+            for i, doc_id in enumerate(results["ids"]):
+                meta = (results.get("metadatas") or [{}] * len(results["ids"]))[i] or {}
+                entries.append({
+                    "id": doc_id,
+                    "text": results["documents"][i] if i < len(results["documents"]) else "",
+                    "created_at": meta.get("created_at", ""),
+                })
+            # Sort by created_at descending (ISO timestamps sort lexicographically).
+            entries.sort(key=lambda e: e["created_at"], reverse=True)
             return entries[:limit]
         except Exception as e:
             logger.error(f"Failed to get recent profiles from ChromaDB: {e}")
@@ -89,9 +105,9 @@ class VectorService:
             keep_ids = {e["id"] for e in recent}
 
             results = self.collection.get(
-                where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]}
+                where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]},
             )
-            if not results["ids"]:
+            if not results or not results.get("ids"):
                 return 0
 
             to_delete = [id_ for id_ in results["ids"] if id_ not in keep_ids]
@@ -111,15 +127,18 @@ class VectorService:
         """
         try:
             results = self.collection.get(
-                where={"user_id": str(user_id)}
+                where={"user_id": str(user_id)},
             )
-            if not results["ids"]:
+            ids = results.get("ids", []) if results else []
+            if not ids:
                 return 0
-            self.collection.delete(ids=results["ids"])
-            logger.info(f"Deleted {len(results['ids'])} style profiles for user {user_id} from ChromaDB.")
-            return len(results["ids"])
+            self.collection.delete(ids=ids)
+            logger.info(f"Deleted {len(ids)} style profiles for user {user_id} from ChromaDB.")
+            return len(ids)
         except Exception as e:
             logger.error(f"Failed to delete user {user_id}'s profiles from ChromaDB: {e}")
             return 0
 
+
+# Module-level singleton.
 vector_service = VectorService()

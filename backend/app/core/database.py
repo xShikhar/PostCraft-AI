@@ -14,26 +14,26 @@ class Base(DeclarativeBase):
     pass
 
 
-def _create_engine():
-    """Create the async engine lazily — avoids import-time side effects."""
-    settings = get_settings()
-    return create_async_engine(
-        settings.DATABASE_URL,
-        echo=settings.DEBUG,
-        pool_pre_ping=True,
-    )
+# ─── Module-level engine singleton ─────────────────────
+# Creating an engine per request leaks connection pools and dramatically
+# slows down under load. We build ONE engine at module import and reuse it.
 
-
-def _create_session_maker():
-    return async_sessionmaker(
-        bind=_create_engine(),
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
+_settings = get_settings()
+_engine = create_async_engine(
+    _settings.DATABASE_URL,
+    echo=_settings.DEBUG,
+    pool_pre_ping=True,
+    # pool_size and max_overflow default to 5 and 10 respectively which is
+    # fine for most workloads. Bump if you see connection pool exhaustion.
+)
+_session_maker = async_sessionmaker(
+    bind=_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency — yields an async database session."""
-    session_maker = _create_session_maker()
-    async with session_maker() as session:
+    async with _session_maker() as session:
         yield session

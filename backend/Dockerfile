@@ -1,6 +1,14 @@
 # ─── Stage 1: Build dependencies ─────────────────────
 FROM python:3.12-slim AS builder
 
+# poppler-utils is required by pdfplumber for PDF text extraction.
+# Without it, PDF processing silently falls back to raw text (broken).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        poppler-utils \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 \
@@ -17,6 +25,13 @@ RUN uv venv /app/.venv && \
 
 # ─── Stage 2: Runtime ────────────────────────────────
 FROM python:3.12-slim
+
+# poppler-utils (for pdfplumber) and libpq5 (for psycopg2) are runtime deps.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        poppler-utils \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
