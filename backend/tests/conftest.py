@@ -21,6 +21,9 @@ import unittest.mock as mock
 patcher = mock.patch("app.services.vector.chromadb")
 mock_chromadb = patcher.start()
 
+# Disable rate limiter for test runs
+app.state.limiter.enabled = False
+
 from app.core.config import get_settings
 get_settings.cache_clear()
 

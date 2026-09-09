@@ -141,3 +141,15 @@ class UserResume(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user: Mapped["User"] = relationship("User", back_populates="resume")
+
+
+class AdminAuditLog(Base):
+    """Immutable audit trail for sensitive administrative operations."""
+    __tablename__ = "admin_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    admin_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(100))  # e.g. 'viewed_user_generations'
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+

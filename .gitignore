@@ -20,12 +20,26 @@ out/
 .turbo/
 *.tsbuildinfo
 next-env.d.ts
+.vercel/
 
-# ─── Environment ─────────────────────────────────────
+# ─── Environment & Secrets ───────────────────────────
 .env
-.env.local
-.env.*.local
+.env*
 *.env
+*.env.*
+!.env.example
+!*.env.example
+
+# ─── Certificates & Credentials ──────────────────────
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+secrets.json
+credentials.json
+service_account*.json
 
 # ─── IDE & OS ────────────────────────────────────────
 .vscode/

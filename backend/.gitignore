@@ -1,0 +1,41 @@
+# PostCraft AI — Backend .gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env*
+*.env*
+!.env.example
+!*.env.example
+
+# Keys, certificates, credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+secrets.json
+credentials.json
+service_account*.json
+
+# Databases & local storage
+*.sqlite3
+*.db
+chroma_db/
+chroma_data/
+postcraft.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

@@ -68,6 +68,18 @@ When you use PostCraft AI, we collect:
 - **We do not:** sell your data, share it with advertisers, or use your
   resume or drafts to train third-party models.
 
+### 2.1 Administrative and Operational Access
+
+To provide customer support, ensure platform reliability, investigate technical faults, and enforce acceptable use policies, authorized system administrators (application operators) have access to:
+- **Aggregate platform statistics** — total user accounts, signup frequencies, aggregate post volume by platform.
+- **Account profile metadata** — usernames, registration dates, post creation timestamps.
+- **Post generation history** — topics, prompt inputs, and generated draft variations.
+
+**Access Controls & Audit Logging:**
+- Administrative access is restricted to accounts with explicit `is_admin` privileges verified cryptographically on every request.
+- Passwords are never visible to administrators; they are stored exclusively as one-way Argon2id cryptographic hashes.
+- Whenever an administrator inspects an individual user's post history, an immutable record is logged to the `admin_audit_logs` system table capturing the administrator ID, the target user ID, the action performed, and the exact UTC timestamp.
+
 ---
 
 ## 3. Third-party processors
