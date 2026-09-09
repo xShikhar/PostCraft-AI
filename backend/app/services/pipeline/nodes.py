@@ -4,7 +4,6 @@ import uuid
 from sqlalchemy.future import select
 
 from app.models import Generation, StyleProfile, CostLog, User, UserResume
-from app.schemas.research import ResearchResult
 from app.services.research import cascading_search
 from app.services.vector import vector_service
 from app.core.crypto import decrypt
@@ -73,7 +72,6 @@ async def node_research(state: GraphState, deps: PipelineDeps) -> dict:
         logger.error(f"Research failed: {e}", exc_info=True)
         return {"error": str(e), "research_result": None, "skip_extraction": False}
 
-    skip = False
     if result and result.source == "cache":
         stmt = (
             select(StyleProfile)
@@ -88,7 +86,6 @@ async def node_research(state: GraphState, deps: PipelineDeps) -> dict:
         recent_profile = res.scalars().first()
         if recent_profile:
             logger.info("Cache hit + recent profile found. Skipping pattern extraction.")
-            skip = True
             extracted = ExtractedPattern(
                 structure=recent_profile.structure,
                 tone=recent_profile.tone,
@@ -193,7 +190,7 @@ def _build_temporal_style_bias(user_id: str, platform: str) -> str:
         parts.append(f"{weight_label}\n{entry['text']}")
 
     combined = "\n\n".join(parts)
-    log.info(f"Injected temporal style bias from {len(recent)} recent profiles.")
+    logger.info(f"Injected temporal style bias from {len(recent)} recent profiles.")
     return (
         f"\nHere is the user's historical preferred style (temporal blend):\n{combined}\n"
         "Bias and blend your extraction towards the most recent style while honoring recurring patterns "
@@ -227,11 +224,11 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
         await deps.session.delete(profile)
     await deps.session.commit()
 
-    log.info(f"Cleaned up {len(to_delete)} old StyleProfile rows from DB (kept {keep}).")
+    logger.info(f"Cleaned up {len(to_delete)} old StyleProfile rows from DB (kept {keep}).")
 
     # Mirror deletion in ChromaDB
     deleted = vector_service.delete_oldest_profiles(user_id, platform, keep=keep)
-    log.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
+    logger.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
 
 
 async def _build_background_context(deps: PipelineDeps, user_id: str) -> str:
