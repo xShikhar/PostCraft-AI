@@ -342,6 +342,7 @@ erDiagram
         string password_hash
         text profile_context
         text about_me
+        boolean is_admin
         datetime created_at
     }
 
@@ -405,6 +406,15 @@ erDiagram
         datetime uploaded_at
     }
 
+    admin_audit_logs {
+        uuid id PK
+        uuid admin_user_id FK
+        uuid target_user_id FK
+        string action
+        json details
+        datetime created_at
+    }
+
     research_cache {
         uuid id PK
         string topic
@@ -444,14 +454,14 @@ When a user calls `DELETE /api/users/me`:
 
 | Method | Endpoint | Rate Limit | Description |
 |---|---|---|---|
-| `POST` | `/api/auth/signup` | 3/min | Register new user account. Returns JWT access token. |
-| `POST` | `/api/auth/login` | 5/min | Authenticate with credentials. Returns JWT access token. |
+| `POST` | `/api/auth/signup` | 3/min | Register new user account. Returns JWT access token. Auto-elevates if listed in `ADMIN_USERNAMES`. |
+| `POST` | `/api/auth/login` | 5/min | Authenticate with credentials. Returns JWT access token. Auto-elevates if listed in `ADMIN_USERNAMES`. |
 
 ### User Profile Endpoints
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/users/me` | ✅ Bearer | Retrieve authenticated user details, `profile_context`, and `about_me`. |
+| `GET` | `/api/users/me` | ✅ Bearer | Retrieve authenticated user details, `profile_context`, `about_me`, and `is_admin`. |
 | `PATCH` | `/api/users/me` | ✅ Bearer | Update `profile_context` and/or `about_me`. |
 | `DELETE` | `/api/users/me` | ✅ Bearer | Permanently delete the account; cascades to resume, style profiles, projects, generations, chat history, preferences, and ChromaDB vectors. |
 | `GET` | `/api/users/me/style-profile` | ✅ Bearer | Current StyleProfile for a platform (with last 5 history entries). |
@@ -479,11 +489,19 @@ When a user calls `DELETE /api/users/me`:
 | `GET` | `/api/generations` | ✅ Bearer | List recent generations for the user. |
 | `GET` | `/api/generations/{id}` | ✅ Bearer | Full generation record including chat history. |
 
-### Administration & Health Endpoints
+### Administration Endpoints (Admin Only)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/admin/cost-summary` | ✅ Bearer | Aggregated token usage and estimated USD cost breakdown. |
+| `GET` | `/api/admin/metrics` | ✅ Admin | System-wide usage aggregates: total users, total generations, total tokens, total cost USD. |
+| `GET` | `/api/admin/users` | ✅ Admin | User table with generation counts, cost totals, and admin elevation status. |
+| `PATCH` | `/api/admin/users/{id}/admin` | ✅ Admin | Promote or demote a user's admin privilege. Automatically logs to `admin_audit_logs`. |
+| `GET` | `/api/admin/audit-logs` | ✅ Admin | Paginated security audit ledger of all administrative actions. |
+
+### Health Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
 | `GET` | `/api/health` | Public | System status, version, and environment. |
 | `GET` | `/api/health/db` | Public | Database connection health check. |
 
@@ -499,11 +517,15 @@ All error responses use FastAPI's standard HTTPException format:
 
 ---
 
-## 12. Authentication System
+## 12. Authentication & Administration System
 
 - **Password Hashing**: Argon2 algorithm via `passlib[argon2]`.
 - **JWT Token**: Signed with HS256, 7-day expiration.
 - **JWT Secret Fail-Closed**: `JWT_SECRET_KEY` is read at module import. The process exits with a clear error if it is missing or under 32 characters — there is no hardcoded fallback in production.
+- **Admin Elevation**:
+  - `ADMIN_USERNAMES`: Environment variable containing a comma-separated list of usernames to automatically elevate on signup/login. Solves bootstrapping on managed cloud hosts (like Render) without requiring a paid interactive shell.
+  - `make_admin.py`: Interactive CLI tool (`python -m app.cli.make_admin <username>`) for local development or shell environments.
+  - In-app Administration: Gated UI at `/admin` displaying metrics, cost breakdowns, and live user management.
 - **Interceptors**: Frontend API client automatically attaches Bearer tokens. On a 401 response, the client clears the local token and dispatches an `auth-expired` event so the UI can return to the auth screen.
 
 ---

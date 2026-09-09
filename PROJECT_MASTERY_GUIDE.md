@@ -203,7 +203,19 @@ Every tool in our dependency tree was selected to solve a distinct engineering p
 
 ### 16. `uv`
 * **Category**: High-performance Python package installer and virtual environment manager (written in Rust).
-* **What it does here**: Used inside our `backend/Dockerfile` to install all 120+ Python dependencies in seconds rather than minutes.
+* **What it does here**: Used inside our `backend/Dockerfile` to install all Python dependencies in seconds rather than minutes.
+
+---
+
+### 17. Fernet Symmetric Encryption (`cryptography`)
+* **Category**: Authenticated symmetric encryption (AES-128-CBC + HMAC-SHA256).
+* **What it does here**: Encrypts sensitive resume data (`raw_text` and `structured_summary`) at rest in PostgreSQL. Fail-closed: missing keys or corrupted ciphertexts refuse to decrypt rather than leaking plaintext or returning corrupted data.
+
+---
+
+### 18. PDF Parsing (`pypdf`, `pdfplumber`)
+* **Category**: Pure-Python and PDF-layout extraction libraries.
+* **What it does here**: Extracts plain text from candidate resumes uploaded via the Persona Engine, with magic-byte (`%PDF-`) detection and multi-page stream parsing.
 
 ---
 
@@ -215,10 +227,10 @@ Here is the complete, current file structure of the repository.
 postcraft-ai/
 ├── docker-compose.yml              # Local multi-container development environment
 ├── docker-compose.prod.yml         # Production multi-container definition (Caddy TLS, no public backend/frontend ports)
-├── Caddyfile                       # Caddy reverse proxy config (auto-https via Let's Encrypt)
 ├── README.md                       # High-level project summary and quickstart
 ├── PRIVACY.md                      # Privacy Policy, ToS, GDPR notes
 ├── DEPLOYMENT.md                   # Pre-launch security & operations checklist
+├── DEPLOYMENT_ARCHITECTURE.md      # Production split-host architecture & operations guide
 ├── PostCraft_AI_Complete_Documentation.md # Architecture reference and schema documentation
 ├── PROJECT_MASTERY_GUIDE.md        # This teaching guide
 │
@@ -235,22 +247,28 @@ postcraft-ai/
 │   │       ├── db827654c4ab_add_password_hash.py
 │   │       ├── 4b3f9cce7b2c_add_cost_log.py
 │   │       ├── 3451f9589925_add_profile_context_to_user.py
-│   │       └── 4c91d2e8f0a3_add_about_me_and_resumes.py
+│   │       ├── 4c91d2e8f0a3_add_about_me_and_resumes.py
+│   │       ├── 7a1e4f5b9c2d_add_is_admin_to_user.py
+│   │       └── 8b2e5a7c3d1f_add_admin_audit_logs_table.py
 │   ├── creators/                   # Curated dataset of top viral posts
 │   │   ├── linkedin.json
 │   │   └── x.json
 │   ├── tests/                      # Automated test suite (pytest)
 │   │   ├── conftest.py             # Test fixtures, in-memory DB setup, and global mocks
+│   │   ├── test_admin.py           # Admin metrics, user list, role elevation, and audit logs
 │   │   ├── test_auth.py            # User signup, login, and tenant data isolation tests
 │   │   ├── test_pipeline_graph.py  # LangGraph compilation & end-to-end execution test
 │   │   ├── test_quality_checker.py # N-gram originality and plagiarism detection tests
-│   │   └── test_research.py        # 4-tier search cache-miss and cache-hit tests
+│   │   ├── test_research.py        # 4-tier search cache-miss and cache-hit tests
+│   │   └── test_resume.py          # PDF extraction, Gemini decoding, encryption & context injection
 │   └── app/
 │       ├── main.py                 # FastAPI entrypoint, Sentry init, security headers, TrustedHost, CORS
 │       ├── models.py               # SQLAlchemy ORM table definitions (User, Generation, UserResume, etc.)
+│       ├── cli/                    # CLI tools
+│       │   └── make_admin.py       # Terminal CLI to promote any user to admin
 │       ├── core/                   # Infrastructure layer
 │       │   ├── __init__.py         # Package exports
-│       │   ├── config.py           # Pydantic Settings & environment variable validation
+│       │   ├── config.py           # Pydantic Settings (ADMIN_USERNAMES, env validation)
 │       │   ├── database.py         # Async SQLAlchemy engine, session maker & get_db
 │       │   ├── security.py         # Argon2 password hashing & JWT (fail-closed on missing/short secret)
 │       │   ├── crypto.py           # Fernet resume encryption (fail-closed)
@@ -260,11 +278,11 @@ postcraft-ai/
 │       │   ├── editor.py           # Conversational editor request/response DTOs
 │       │   └── research.py         # Research result and source snippet DTOs
 │       ├── api/                    # HTTP Controllers (FastAPI Routers) — all write endpoints rate-limited
-│       │   ├── auth.py             # POST /api/auth/signup (3/min) and /api/auth/login (5/min)
+│       │   ├── auth.py             # POST /api/auth/signup, /api/auth/login + auto-admin promotion
 │       │   ├── users.py            # GET/PATCH/DELETE /api/users/me, resume upload/get/delete
 │       │   ├── generations.py      # POST /api/generations (10/hour)
 │       │   ├── editor.py           # POST /api/generations/{id}/edit (20/hour) & /finalize (30/hour)
-│       │   ├── admin.py            # GET /api/admin/cost-summary
+│       │   ├── admin.py            # GET /api/admin/metrics, /users, PATCH /users/{id}/admin, /audit-logs
 │       │   └── health.py           # GET /api/health and /api/health/db
 │       └── services/               # Domain business logic & AI engines
 │           ├── research.py         # 4-tier cascading search engine (Cache -> SerpApi -> Tavily -> Synthetic)
@@ -275,7 +293,7 @@ postcraft-ai/
 │               ├── deps.py         # PipelineDeps dependency injection container
 │               ├── state.py        # GraphState TypedDict & structured LLM schemas
 │               ├── prompts.py      # Lead-Gen prompt templates & builder functions
-│               ├── nodes.py        # 6 async worker node functions
+│               ├── nodes.py        # 6 async worker node functions (with resume context injection)
 │               ├── graph.py        # StateGraph topology, async bind & conditional routers
 │               ├── pipeline.py     # PostGenerationPipeline runtime entrypoint
 │               └── README.md       # LangGraph developer guide
@@ -283,7 +301,7 @@ postcraft-ai/
 └── frontend/
     ├── package.json                # Frontend dependencies and scripts
     ├── Dockerfile                  # Multi-stage standalone Next.js container build
-    ├── Caddyfile                   # Local Caddy config (production-like TLS termination)
+    ├── Caddyfile                   # Caddy reverse proxy config (TLS termination)
     ├── next.config.ts              # Next.js configuration
     ├── tailwind.config.ts          # Tailwind CSS design tokens and theme settings
     ├── tsconfig.json               # TypeScript compiler configuration
@@ -291,13 +309,15 @@ postcraft-ai/
         ├── app/
         │   ├── layout.tsx          # Root HTML layout with theme provider
         │   ├── page.tsx            # Main workspace — view dispatcher (home/editor/profile/history/privacy/terms)
+        │   ├── admin/
+        │   │   └── page.tsx        # Admin Control Center (metrics, user table, audit logs)
         │   └── globals.css         # Global CSS variables and Tailwind utilities (light + dark tokens)
         ├── components/
         │   ├── layout/
         │   │   ├── app-shell.tsx     # Full sidebar + top-header wrapper
-        │   │   ├── sidebar.tsx       # Nav, theme toggle, user row, legal footer links
+        │   │   ├── sidebar.tsx       # Nav, theme toggle, user row, admin portal button, legal footer links
         │   │   └── top-header.tsx    # Page title header
-        │   ├── ui/                   # shadcn/ui primitives (button, dialog, card, etc.)
+        │   ├── ui/                   # Tailored UI components (button, dialog, card, input, etc.)
         │   └── theme-provider.tsx
         ├── features/
         │   ├── auth/
@@ -310,16 +330,16 @@ postcraft-ai/
         │   │   └── components/draft-selection-grid.tsx
         │   ├── home/components/home-view.tsx         # Greeting, quick capture, recent drafts
         │   ├── history/components/history-list.tsx   # Archived generations
-        │   ├── profile/components/profile-page.tsx   # Persona Engine + Danger Zone
+        │   ├── profile/components/profile-page.tsx   # Persona Engine (Resume Drag-and-Drop + Danger Zone)
         │   └── legal/                                 # In-app Privacy / ToS / GDPR
         │       ├── legal-content.ts                   # Bundled markdown (mirrors PRIVACY.md)
         │       └── legal-view.tsx                     # react-markdown renderer
         └── lib/
             ├── utils.ts               # CSS class merger utility (`cn`)
-            ├── hooks/                 # Shared React hooks
             └── api/
                 ├── client.ts          # fetchApi: JWT injection, 401 → auth-expired, 429 → specific toast
                 ├── auth.ts            # Auth API calls (login, signup)
+                ├── admin.ts           # Admin API calls (metrics, users, role toggle, audit logs)
                 ├── user.ts            # getCurrentUser, updateCurrentUser, deleteMyAccount
                 ├── generation.ts      # generateDrafts, editDraft, finalizeDraft
                 ├── history.ts         # List + load full generation
@@ -964,39 +984,55 @@ Are you a VP of Engineering or CTO tired of seeing your team's potential eroded 
 | UK  username (String, Index)      |                             | FK  user_id (UUID)                |
 |     password_hash (Argon2)        |                             |     name (String)                 |
 |     profile_context (Text)        |                             |     platform (String)             |
-|     created_at (Timestamp)        |                             |     created_at (Timestamp)        |
-+-----------------+-----------------+                             +-----------------+-----------------+
-                  |                                                                 |
-                  | 1:N                                                             | 1:N
-                  v                                                                 v
-+-----------------------------------+                             +-----------------------------------+
-|          style_profiles           |                             |            generations            |
-+-----------------------------------+                             +-----------------------------------+
-| PK  id (UUID)                     |                             | PK  id (UUID)                     |
-| FK  user_id (UUID)                |                             | FK  project_id (UUID)             |
-|     platform (String)             |                             |     topic (String)                |
-|     structure (Text)              |                             |     raw_thoughts (Text)           |
-|     tone (Text)                   |                             |     draft_1, draft_2, draft_3     |
-|     pacing (Text)                 |                             |     active_draft_index (Int)      |
-|     storytelling_technique (Text) |                             |     status (generating/editing...) |
-|     formatting (Text)             |                             |     created_at, updated_at        |
-|     cta_style (Text)              |                             +-----------------+-----------------+
+|     about_me (Text)               |                             |     created_at (Timestamp)        |
+|     is_admin (Boolean)            |                             +-----------------+-----------------+
 |     created_at (Timestamp)        |                                               |
++-----------------+-----------------+                                               | 1:N
+                  |                                                                 v
+                  | 1:1                                           +-----------------------------------+
+                  v                                               |            generations            |
++-----------------------------------+                             +-----------------------------------+
+|           user_resumes            |                             | PK  id (UUID)                     |
++-----------------------------------+                             | FK  project_id (UUID)             |
+| PK  id (UUID)                     |                             |     topic (String)                |
+| FK  user_id (UUID, Unique)        |                             |     raw_thoughts (Text)           |
+|     filename (String)             |                             |     draft_1, draft_2, draft_3     |
+|     raw_text (Fernet Encrypted)   |                             |     active_draft_index (Int)      |
+|     structured_summary (Fernet)   |                             |     status (generating/editing...) |
+|     uploaded_at (Timestamp)       |                             |     created_at, updated_at        |
 +-----------------------------------+                             +-----------------+-----------------+
-                                                                  |                                   |
-                  1:N                                         1:N |                               1:N |
-+-----------------------------------+                             v                                   v
-|            preferences            |             +-------------------------------+   +-------------------------------+
-+-----------------------------------+             |         chat_history          |   |           cost_logs           |
-| PK  id (UUID)                     |             +-------------------------------+   +-------------------------------+
-| FK  user_id (UUID)                |             | PK  id (UUID)                 |   | PK  id (UUID)                 |
-|     platform (String)             |             | FK  generation_id (UUID)      |   | FK  generation_id (UUID)      |
-|     preference_text (Text)        |             |     role (user / assistant)   |   |     operation (String)        |
-|     created_at (Timestamp)        |             |     content (Text)            |   |     prompt_tokens (Int)       |
-+-----------------------------------+             |     created_at (Timestamp)    |   |     completion_tokens (Int)   |
-                                                  +-------------------------------+   |     estimated_cost_usd (Float)|
-+-----------------------------------+                                                 |     created_at (Timestamp)    |
-|          research_cache           |  (Standalone Global Cache)                      +-------------------------------+
+                  |                                                                 |
+                  | 1:N                                         1:N |           1:N |
+                  v                                                 v               v
++-----------------------------------+             +-------------------+   +---------------------------+
+|          style_profiles           |             |   chat_history    |   |         cost_logs         |
++-----------------------------------+             +-------------------+   +---------------------------+
+| PK  id (UUID)                     |             | PK id (UUID)      |   | PK id (UUID)              |
+| FK  user_id (UUID)                |             | FK gen_id (UUID)  |   | FK generation_id (UUID)   |
+|     platform (String)             |             |    role (user/asst|   |    operation (String)     |
+|     structure (Text)              |             |    content (Text) |   |    prompt_tokens (Int)    |
+|     tone (Text)                   |             |    created_at     |   |    completion_tokens (Int)|
+|     pacing (Text)                 |             +-------------------+   |    estimated_cost_usd     |
+|     storytelling_technique (Text) |                                     |    created_at             |
+|     formatting (Text)             |                                     +---------------------------+
+|     cta_style (Text)              |
+|     created_at (Timestamp)        |
++-----------------------------------+
+                  |
+                  | 1:N
+                  v
++-----------------------------------+             +---------------------------------------------------+
+|            preferences            |             |                 admin_audit_logs                  |
++-----------------------------------+             +---------------------------------------------------+
+| PK  id (UUID)                     |             | PK  id (UUID)                                     |
+| FK  user_id (UUID)                |             | FK  admin_user_id (UUID)                          |
+|     platform (String)             |             | FK  target_user_id (UUID, Optional)               |
+|     preference_text (Text)        |             |     action (String)                               |
+|     created_at (Timestamp)        |             |     details (JSON)                                |
++-----------------------------------+             |     created_at (Timestamp)                        |
+                                                  +---------------------------------------------------+
++-----------------------------------+
+|          research_cache           |  (Standalone Global Cache)
 +-----------------------------------+
 | PK  id (UUID)                     |
 |     topic (String, Index)         |
@@ -1012,6 +1048,8 @@ erDiagram
     users ||--o{ projects : "owns"
     users ||--o{ style_profiles : "has"
     users ||--o{ preferences : "has"
+    users ||--o| user_resumes : "has one"
+    users ||--o{ admin_audit_logs : "admin performing actions"
     projects ||--o{ generations : "contains"
     generations ||--o{ chat_history : "has"
     generations ||--o{ cost_logs : "tracks"
@@ -1022,6 +1060,26 @@ erDiagram
         string username UK
         string password_hash
         text profile_context
+        text about_me
+        boolean is_admin
+        datetime created_at
+    }
+
+    user_resumes {
+        uuid id PK
+        uuid user_id FK
+        string filename
+        text raw_text
+        text structured_summary
+        datetime uploaded_at
+    }
+
+    admin_audit_logs {
+        uuid id PK
+        uuid admin_user_id FK
+        uuid target_user_id FK
+        string action
+        json details
         datetime created_at
     }
 
@@ -1098,14 +1156,16 @@ erDiagram
 
 ### Table Details & Why They Are Separate
 
-1. **`users`**: Represents user accounts. Stores credentials and persistent `profile_context`.
-2. **`projects`**: Organizes generations. A user can have separate projects for different brands or platforms.
-3. **`generations`**: Represents a single post creation attempt. Holds all 3 generated drafts, active draft index, and lifecycle status (`generating` → `editing` → `completed`).
-4. **`style_profiles`**: Stores extracted writing patterns. Kept separate from `generations` so historical styles can be queried across multiple projects.
-5. **`chat_history`**: Stores conversational tweak requests for the inline editor, enabling multi-turn conversation context.
-6. **`preferences`**: Stores explicit user preferences learned over time.
-7. **`research_cache`**: Caches web search results across users to save external API costs and reduce latency.
-8. **`cost_logs`**: Tracks token counts and USD costs per LLM operation for auditing and usage tracking.
+1. **`users`**: Represents user accounts. Stores credentials, `about_me`, `profile_context`, and `is_admin` authorization flag.
+2. **`user_resumes`**: Stores candidate resume files with Fernet-encrypted raw text and Gemini-extracted structured summaries (role, industry, expertise skills, seniority).
+3. **`admin_audit_logs`**: Permanent audit ledger recording all administrative actions (promotions, demotions, user alterations) with JSON payloads and timestamps.
+4. **`projects`**: Organizes generations. A user can have separate projects for different brands or platforms.
+5. **`generations`**: Represents a single post creation attempt. Holds all 3 generated drafts, active draft index, and lifecycle status (`generating` → `editing` → `completed`).
+6. **`style_profiles`**: Stores extracted writing patterns. Kept separate from `generations` so historical styles can be queried across multiple projects.
+7. **`chat_history`**: Stores conversational tweak requests for the inline editor, enabling multi-turn conversation context.
+8. **`preferences`**: Stores explicit user preferences learned over time.
+9. **`research_cache`**: Caches web search results across users to save external API costs and reduce latency.
+10. **`cost_logs`**: Tracks token counts and USD costs per LLM operation for auditing and usage tracking.
 
 ---
 
@@ -1114,6 +1174,13 @@ erDiagram
 ### JWT Fail-Closed Startup
 
 `JWT_SECRET_KEY` is not optional. The module-level import in `security.py` exits the process if the key is missing or under 32 characters. This is deliberate: a hardcoded fallback in production would let anyone forge tokens for any user by simply signing up. Generate the key with `openssl rand -hex 32`.
+
+### Admin Access Control & Zero-Shell Elevation
+
+Administrative privileges are protected by the `is_admin` boolean flag on the User model. To manage platforms without interactive terminal access (such as Render's free tier):
+1. **Zero-Terminal Environment Variable (`ADMIN_USERNAMES`)**: Comma-separated usernames defined in `ADMIN_USERNAMES` (e.g. `ADMIN_USERNAMES=Shikhar-Admin`) are automatically elevated to `is_admin = True` on login or signup.
+2. **Interactive CLI Tool**: Run `python -m app.cli.make_admin <username>` from a terminal session to promote users.
+3. **Audit Ledger**: All admin modifications are written to `admin_audit_logs` for compliance.
 
 ### Fernet Resume Encryption
 
@@ -1182,6 +1249,9 @@ Tokens are stored in `localStorage`. This is simpler than `httpOnly` cookies and
 | **Customize post generation form UI** | [`frontend/src/features/generation/components/generation-form.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/generation/components/generation-form.tsx) |
 | **Customize draft editor and conversational chat UI** | [`frontend/src/features/editor/components/draft-editor.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/editor/components/draft-editor.tsx) |
 | **Customize the Persona Engine / Profile page** | [`frontend/src/features/profile/components/profile-page.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/profile/components/profile-page.tsx) |
+| **Customize Resume parsing, Gemini extraction, or encryption** | [`backend/app/services/resume.py`](file:///c:/Project/Ai%20post/backend/app/services/resume.py) & [`backend/app/core/crypto.py`](file:///c:/Project/Ai%20post/backend/app/core/crypto.py) |
+| **Customize the Admin Control Center & cost metrics** | [`frontend/src/app/admin/page.tsx`](file:///c:/Project/Ai%20post/frontend/src/app/admin/page.tsx) & [`backend/app/api/admin.py`](file:///c:/Project/Ai%20post/backend/app/api/admin.py) |
+| **Manage Admin promotion rules or CLI tool** | [`backend/app/core/config.py`](file:///c:/Project/Ai%20post/backend/app/core/config.py) (`ADMIN_USERNAMES`) & [`backend/app/cli/make_admin.py`](file:///c:/Project/Ai%20post/backend/app/cli/make_admin.py) |
 | **Add or modify 429 error handling in the frontend** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) (parse logic) + all callers that surface errors via Sonner |
 | **Modify API client fetch, token handling, and 429 surfacing** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) |
 | **Change the legal copy (Privacy Policy / ToS / GDPR)** | [`PRIVACY.md`](file:///c:/Project/Ai%20post/PRIVACY.md) (canonical) AND [`frontend/src/features/legal/legal-content.ts`](file:///c:/Project/Ai%20post/frontend/src/features/legal/legal-content.ts) (must be kept in sync) |

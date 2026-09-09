@@ -13,7 +13,8 @@ PostCraft researches live public discussions on a topic, extracts high-leverage 
 - **Cascading Research Engine**: Multi-tiered search (DB Cache → Curated Top Creators → General Search → Synthetic Structure) ensuring real-world context on any topic.
 - **Vector Memory (ChromaDB)**: Learns and indexes your historical writing style to bias future generations toward your unique voice.
 - **Conversational Iteration**: Chat-based inline editor to refine drafts and extract user preferences upon finalization.
-- **Persona Engine**: Structured profile fields (About Me, Resume & Background, Writing Style Profile) that sharpen every generation to read like you.
+- **Persona Engine & Resume Decoding**: Drag-and-drop resume upload (PDF/DOCX/text) with automated Gemini one-shot skill/role extraction, encrypted at rest via Fernet, and persistent context injection into generation prompts.
+- **Admin Control Center**: Dedicated `/admin` dashboard with cost analytics, live token metrics, user management, audit logging, and zero-shell `ADMIN_USERNAMES` promotion.
 - **Rate-Limited Protection**: Per-user rate limits on all write endpoints prevent abuse and runaway costs.
 - **Privacy & ToS**: Privacy Policy and Terms of Service rendered in-app; required agreement checkbox on sign-up; full GDPR disclosure.
 - **Account Deletion**: Self-serve account deletion that cascades across PostgreSQL and ChromaDB — verified by typed username confirmation.
@@ -136,6 +137,7 @@ curl http://localhost:8000/api/health/db
 | `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+asyncpg://...`) |
 | `GEMINI_API_KEY` | Yes | Google Gemini API key (Gemini 2.5 Flash) |
 | `JWT_SECRET_KEY` | Yes | JWT signing secret — **must be at least 32 chars**. Fail-closed at startup if missing or too short. Generate with `openssl rand -hex 32`. |
+| `ADMIN_USERNAMES` | No | Comma-separated list of usernames automatically elevated to admin upon login or registration (e.g. `Shikhar-Admin`). Essential for managed hosting platforms without shell access. |
 | `RESUME_ENCRYPTION_KEY` | No | Fernet (AES-128-CBC + HMAC) key for encrypting resume PII at rest. Generate with `openssl rand -hex 32`. If absent, encryption is skipped but a warning is logged. |
 | `SERP_API_KEY` | No | SerpApi key for Google search research |
 | `TAVILY_API_KEY` | No | Tavily search API key (fallback research) |
@@ -168,6 +170,7 @@ When a 429 is returned, the response includes a `Retry-After` header (seconds). 
 ## Security Model
 
 - **JWT secrets**: Fail-closed at startup — the app refuses to start if `JWT_SECRET_KEY` is missing or under 32 characters.
+- **Admin Access Control**: Dedicated `is_admin` boolean flag on users with zero-terminal bootstrap (`ADMIN_USERNAMES`), terminal CLI tool (`python -m app.cli.make_admin`), and audit logging for all admin actions.
 - **Resume PII**: Encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256). Decryption fails-closed if the key is absent or corrupted.
 - **DB TLS**: Production connections use `sslmode=require`.
 - **Security headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, HSTS (1-year pin) applied via middleware.
@@ -203,10 +206,10 @@ $env:PYTHONPATH="."; pytest -v
 postcraft-ai/
 ├── docker-compose.yml              # Local development orchestration
 ├── docker-compose.prod.yml         # Production container definition (Caddy TLS, no public ports)
-├── Caddyfile                      # Caddy reverse proxy config (auto-https)
 ├── README.md                      # This file
 ├── PRIVACY.md                     # Privacy Policy, ToS, GDPR notes
-├── DEPLOYMENT.md                  # Pre-launch checklist
+├── DEPLOYMENT.md                  # Pre-launch checklist & security scorecard
+├── DEPLOYMENT_ARCHITECTURE.md     # Production split-host architecture & operations guide
 ├── PostCraft_AI_Complete_Documentation.md  # Deep technical architecture reference
 ├── PROJECT_MASTERY_GUIDE.md       # Engineering teaching guide
 │
@@ -216,22 +219,24 @@ postcraft-ai/
 │   ├── start.sh                  # Runs encryption migration, then uvicorn
 │   ├── alembic/                  # DB migrations
 │   │   └── versions/             # Individual migration files
-│   ├── creators/                 # Curated top creator lists
+│   ├── creators/                 # Curated top creator lists (LinkedIn, X)
 │   ├── app/
 │   │   ├── main.py              # FastAPI entrypoint, Sentry, security headers, middleware
-│   │   ├── models.py            # SQLAlchemy models (User, Generation, StyleProfile, etc.)
+│   │   ├── models.py            # SQLAlchemy models (User, Generation, StyleProfile, UserResume, CostLog, etc.)
+│   │   ├── cli/
+│   │   │   └── make_admin.py    # CLI tool to promote users to admin
 │   │   ├── core/
-│   │   │   ├── config.py        # Pydantic Settings (env vars, JWT fail-closed)
+│   │   │   ├── config.py        # Pydantic Settings (env vars, ADMIN_USERNAMES, JWT fail-closed)
 │   │   │   ├── database.py      # Async SQLAlchemy engine & session factory
 │   │   │   ├── security.py      # Argon2 password hashing & JWT (fail-closed)
 │   │   │   ├── crypto.py        # Fernet resume encryption (fail-closed)
 │   │   │   └── migrate_resume_encryption.py  # One-time plaintext→encrypted migration
 │   │   ├── api/
-│   │   │   ├── auth.py          # POST /api/auth/signup, /api/auth/login + rate limits
-│   │   │   ├── users.py         # GET/PATCH/DELETE /api/users/me, resume upload/delete
+│   │   │   ├── auth.py          # POST /api/auth/signup, /api/auth/login + auto-admin promotion
+│   │   │   ├── users.py         # GET/PATCH/DELETE /api/users/me, resume upload/get/delete
 │   │   │   ├── generations.py    # POST /api/generations (rate-limited)
 │   │   │   ├── editor.py        # POST /api/generations/{id}/edit, /finalize (rate-limited)
-│   │   │   ├── admin.py         # GET /api/admin/cost-summary
+│   │   │   ├── admin.py         # GET /api/admin/metrics, /users, PATCH /users/{id}/admin, /audit-logs
 │   │   │   └── health.py        # GET /api/health, /api/health/db
 │   │   ├── schemas/
 │   │   │   ├── api.py
@@ -240,7 +245,7 @@ postcraft-ai/
 │   │   └── services/
 │   │       ├── research.py      # 4-tier cascading search engine
 │   │       ├── vector.py        # ChromaDB vector ops (+ delete_all_for_user)
-│   │       ├── resume.py        # Resume text extraction + Gemini summarization
+│   │       ├── resume.py        # Resume text extraction (PDF/DOCX/TXT) + Gemini summarization
 │   │       └── pipeline/       # LangGraph Post Generation Pipeline
 │   │           ├── deps.py
 │   │           ├── state.py
@@ -252,20 +257,22 @@ postcraft-ai/
 └── frontend/
     ├── package.json
     ├── Dockerfile
-    ├── Caddyfile               # Local Caddy config for production-like TLS
+    ├── Caddyfile               # Caddy reverse proxy config (TLS termination)
     ├── next.config.ts
     ├── tailwind.config.ts
     └── src/
         ├── app/
         │   ├── layout.tsx       # Root layout with theme provider
         │   ├── page.tsx         # Main workspace (view dispatcher: home/editor/profile/history/privacy/terms)
+        │   ├── admin/
+        │   │   └── page.tsx     # Admin Control Center (metrics, user table, audit logs)
         │   └── globals.css      # Design tokens (violet/magenta light, red/amber dark)
         ├── components/
         │   ├── layout/
         │   │   ├── app-shell.tsx   # Full sidebar + header wrapper
-        │   │   ├── sidebar.tsx     # Nav, theme toggle, user row, legal footer links
+        │   │   ├── sidebar.tsx     # Nav, theme toggle, user row, admin link, legal footer links
         │   │   └── top-header.tsx  # Page title header
-        │   ├── ui/               # shadcn/ui primitives (Dialog, Button, etc.)
+        │   ├── ui/               # Tailored UI components (Button, Card, Dialog, Input, etc.)
         │   └── theme-provider.tsx
         ├── features/
         │   ├── auth/            # AuthScreen, useAuth hook
@@ -273,13 +280,17 @@ postcraft-ai/
         │   ├── editor/          # DraftEditor, DraftSelectionGrid
         │   ├── home/            # HomeView (greeting, quick capture)
         │   ├── history/         # HistoryList
-        │   ├── profile/         # ProfilePage (Persona Engine + Danger Zone)
+        │   ├── profile/         # ProfilePage (Persona Engine + Drag-and-drop Resume + Danger Zone)
         │   └── legal/           # LegalView (Privacy Policy / ToS / GDPR via react-markdown)
         └── lib/
             └── api/
                 ├── client.ts    # Central fetch client (429 handling, 401 → auth-expired)
                 ├── auth.ts
+                ├── admin.ts     # getAdminMetrics, getAdminUsers, toggleUserAdmin, getAdminAuditLogs
                 ├── user.ts      # getCurrentUser, updateCurrentUser, deleteMyAccount
+                ├── resume.ts    # uploadResume, getResume, deleteResume
+                ├── style-profile.ts
+                ├── history.ts
                 └── generation.ts
 ```
 
