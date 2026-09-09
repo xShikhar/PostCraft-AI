@@ -121,9 +121,14 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
 
     try:
         response = await structured_llm.ainvoke(prompt)
-        extracted = response["parsed"]
-        raw_msg = response["raw"]
-        await log_cost(deps, "pattern_extraction", raw_msg, state["generation_id"])
+        if isinstance(response, dict):
+            extracted = response.get("parsed")
+            raw_msg = response.get("raw")
+        else:
+            extracted = response
+            raw_msg = None
+        if raw_msg:
+            await log_cost(deps, "pattern_extraction", raw_msg, state["generation_id"])
     except Exception as e:
         logger.warning(f"Structured extraction failed: {e}. Using default scaffold.")
         extracted = ExtractedPattern(
@@ -204,10 +209,11 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
     and mirrors the deletion in ChromaDB via vector_service.
     """
 
+    user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
     stmt = (
         select(StyleProfile)
         .where(
-            StyleProfile.user_id == uuid.UUID(user_id),
+            StyleProfile.user_id == user_uuid,
             StyleProfile.platform == platform,
         )
         .order_by(StyleProfile.id.desc())
@@ -227,11 +233,11 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
     logger.info(f"Cleaned up {len(to_delete)} old StyleProfile rows from DB (kept {keep}).")
 
     # Mirror deletion in ChromaDB
-    deleted = vector_service.delete_oldest_profiles(user_id, platform, keep=keep)
+    deleted = vector_service.delete_oldest_profiles(str(user_id), platform, keep=keep)
     logger.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
 
 
-async def _build_background_context(deps: PipelineDeps, user_id: str) -> str:
+async def _build_background_context(deps: PipelineDeps, user_id: str | uuid.UUID) -> str:
     """
     Builds a compact "background context" block from the user's optional resume
     and about_me. Returns an empty string if the user has neither set.
@@ -239,7 +245,7 @@ async def _build_background_context(deps: PipelineDeps, user_id: str) -> str:
     Reads the DB fresh on every call so that resume deletions or about_me
     edits take effect on the very next generation, not on a later one.
     """
-    user_uuid = uuid.UUID(user_id)
+    user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
     user_stmt = select(User).where(User.id == user_uuid)
     user_res = await deps.session.execute(user_stmt)
     user = user_res.scalars().first()
@@ -337,9 +343,14 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
 
     try:
         response = await structured_llm.ainvoke(prompt)
-        drafts = response["parsed"]
-        raw_msg = response["raw"]
-        await log_cost(deps, "draft_generation", raw_msg, state["generation_id"])
+        if isinstance(response, dict):
+            drafts = response.get("parsed")
+            raw_msg = response.get("raw")
+        else:
+            drafts = response
+            raw_msg = None
+        if raw_msg:
+            await log_cost(deps, "draft_generation", raw_msg, state["generation_id"])
         return {"drafts": drafts}
     except Exception as e:
         logger.error(f"Failed to generate drafts: {e}", exc_info=True)
@@ -348,16 +359,21 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
 
 async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
     logger.info("Executing node_quality_check")
-    if not state.get("drafts"):
+    drafts_obj = state.get("drafts")
+    if not drafts_obj:
         return {"quality_results": "FAIL: No drafts to check."}
 
+    research = state.get("research_result")
     snippets = (
-        state["research_result"].content_snippets
-        if state.get("research_result")
+        research.content_snippets
+        if research and hasattr(research, "content_snippets") and research.content_snippets
         else []
     )
-    drafts_obj = state["drafts"]
-    drafts_list = [drafts_obj.draft_1, drafts_obj.draft_2, drafts_obj.draft_3]
+    drafts_list = [
+        getattr(drafts_obj, "draft_1", "") or "",
+        getattr(drafts_obj, "draft_2", "") or "",
+        getattr(drafts_obj, "draft_3", "") or "",
+    ]
 
     # Gate 1: 6-word originality check against research snippets
     for i, draft in enumerate(drafts_list):
@@ -374,9 +390,14 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
 
     try:
         response = await structured_llm.ainvoke(prompt)
-        verdict: QualityVerdict = response["parsed"]
-        raw_msg = response["raw"]
-        await log_cost(deps, "quality_check", raw_msg, state["generation_id"])
+        if isinstance(response, dict):
+            verdict: QualityVerdict = response.get("parsed")
+            raw_msg = response.get("raw")
+        else:
+            verdict: QualityVerdict = response
+            raw_msg = None
+        if raw_msg:
+            await log_cost(deps, "quality_check", raw_msg, state["generation_id"])
 
         # Build the quality_results feedback string, including substance info
         fail_reason = None

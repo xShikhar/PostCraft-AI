@@ -174,6 +174,8 @@ RESUME TEXT:
 """
     try:
         summary = await structured_llm.ainvoke(prompt)
+        if isinstance(summary, dict):
+            return ResumeSummary(**summary)
         return summary
     except Exception as e:
         logger.error(f"Resume summarization failed: {e}")
