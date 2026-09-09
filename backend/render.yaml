@@ -36,6 +36,8 @@ services:
         generateValue: true
       - key: RESUME_ENCRYPTION_KEY
         generateValue: true
+      - key: ADMIN_USERNAMES
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: SERP_API_KEY

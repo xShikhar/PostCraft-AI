@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     # Fernet key for encrypting resume PII at rest. Same fail-closed pattern.
     RESUME_ENCRYPTION_KEY: str = ""
+    # Comma-separated usernames to automatically promote to admin (useful when Shell is unavailable)
+    ADMIN_USERNAMES: str = ""
+
+    @property
+    def admin_usernames_set(self) -> set[str]:
+        raw = self.ADMIN_USERNAMES.strip()
+        if not raw:
+            return set()
+        return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
     @property
     def allowed_hosts_list(self) -> list[str]:

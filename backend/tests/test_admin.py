@@ -133,3 +133,20 @@ async def test_admin_user_generations_and_audit_log(client: TestClient, db_sessi
     audit_res = await db_session.execute(audit_stmt)
     audit_entry = audit_res.scalars().first()
     assert audit_entry is not None
+
+
+@pytest.mark.asyncio
+async def test_auto_promote_admin_usernames(client: TestClient, db_session: AsyncSession, monkeypatch):
+    bootstrap_admin = f"auto_admin_{uuid.uuid4().hex[:6]}"
+    from app.api.auth import settings
+    monkeypatch.setattr(settings, "ADMIN_USERNAMES", bootstrap_admin)
+
+    # 1. Signup user matching ADMIN_USERNAMES
+    res = client.post("/api/auth/signup", json={"username": bootstrap_admin, "password": "password123"})
+    assert res.status_code == 200
+    token = res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Assert user is already admin and can access /api/admin/stats immediately
+    stats_res = client.get("/api/admin/stats", headers=headers)
+    assert stats_res.status_code == 200
