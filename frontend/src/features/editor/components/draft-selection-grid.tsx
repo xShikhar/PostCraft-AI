@@ -1,8 +1,12 @@
 "use client";
 
 import { Edit3, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { type Drafts } from "@/lib/api/generation";
+
+gsap.registerPlugin(useGSAP);
 
 interface DraftSelectionGridProps {
   drafts: Drafts;
@@ -130,6 +134,63 @@ export function DraftSelectionGrid({
   onCopy,
   renderMarkdown,
 }: DraftSelectionGridProps) {
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const { contextSafe } = useGSAP({ scope: gridRef });
+
+  const handleCardMouseEnter = contextSafe((cardEl: HTMLElement) => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const cards = gridRef.current?.querySelectorAll<HTMLElement>(".draft-card");
+    if (!cards) return;
+
+    cards.forEach((c) => {
+      if (c === cardEl) {
+        gsap.to(c, {
+          scale: isReduced ? 1 : 1.025,
+          opacity: 1,
+          duration: 0.22,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      } else {
+        gsap.to(c, {
+          scale: isReduced ? 1 : 0.975,
+          opacity: 0.55,
+          duration: 0.22,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      }
+    });
+  });
+
+  const handleGridMouseLeave = contextSafe(() => {
+    const cards = gridRef.current?.querySelectorAll<HTMLElement>(".draft-card");
+    if (!cards) return;
+
+    gsap.to(cards, {
+      scale: 1,
+      opacity: 1,
+      duration: 0.25,
+      ease: "power2.out",
+      overwrite: "auto",
+    });
+  });
+
+  useGSAP(() => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (isReduced) return;
+
+    gsap.from(".draft-card", {
+      opacity: 0,
+      y: 12,
+      duration: 0.22,
+      stagger: 0.05,
+      ease: "power2.out",
+      clearProps: "all",
+    });
+  }, { scope: gridRef });
+
   return (
     <section className="flex flex-col gap-space-lg">
       <div className="flex flex-col gap-space-xs">
@@ -144,17 +205,21 @@ export function DraftSelectionGrid({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg draft-grid">
-        {[1, 2, 3].map((num, idx) => (
+      <div
+        ref={gridRef}
+        onMouseLeave={handleGridMouseLeave}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg draft-grid"
+      >
+        {[1, 2, 3].map((num) => (
           <div
             key={num}
+            onMouseEnter={(e) => handleCardMouseEnter(e.currentTarget)}
             onMouseMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
               e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
             }}
-            className="draft-card history-card spotlight-card animate-fade-slide-up"
-            style={{ animationDelay: `${idx * 80}ms` }}
+            className="draft-card history-card spotlight-card"
           >
             <DraftCard
               number={num as 1 | 2 | 3}

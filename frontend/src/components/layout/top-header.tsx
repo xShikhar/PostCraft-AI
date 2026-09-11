@@ -96,7 +96,7 @@ export function TopHeader({ title, username, initials, collapsed = false, onNavi
       className={`
         fixed top-0 right-0 h-16 bg-surface-card/80 backdrop-blur-xl z-40 px-space-2xl
         flex items-center justify-between border-b border-border-subtle
-        transition-all duration-300 ease-in-out
+        transition-[left] duration-[240ms] ease-out
         ${collapsed ? "left-16" : "left-sidebar-width"}
       `}
     >

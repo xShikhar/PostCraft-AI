@@ -73,3 +73,28 @@ async def test_resume_lifecycle_and_context(client: TestClient, db_session: Asyn
     get_res3 = client.get("/api/users/me/resume", headers=headers)
     assert get_res3.status_code == 200
     assert get_res3.json() is None
+
+
+def test_extract_text_formats():
+    from app.services.resume import extract_text
+    import io
+    import pypdf
+
+    # 1. Plain text extraction
+    txt_content = b"Senior Software Engineer with 8 years experience"
+    assert extract_text(txt_content, "text/plain", "resume.txt") == txt_content.decode("utf-8")
+
+    # 2. PDF extraction using pypdf writer
+    writer = pypdf.PdfWriter()
+    page = writer.add_blank_page(width=200, height=200)
+    buf = io.BytesIO()
+    writer.write(buf)
+    pdf_bytes = buf.getvalue()
+    # Empty PDF returns empty string (or raises if no text)
+    extracted = extract_text(pdf_bytes, "application/pdf", "resume.pdf")
+    assert extracted == ""
+
+    # 3. Unsupported file type raises ValueError
+    with pytest.raises(ValueError, match="Unsupported resume file type"):
+        extract_text(b"\x00\x01\x02\x03\x04\x05", "image/png", "photo.png")
+

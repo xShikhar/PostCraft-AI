@@ -20,26 +20,7 @@ import { toast } from "sonner";
 import { Drafts, ChatMessage, SourceItem, generateDrafts, editDraft, finalizeDraft } from "@/lib/api/generation";
 import { getGenerationFull } from "@/lib/api/history";
 import { ApiError } from "@/lib/api/client";
-import ReactMarkdown from "react-markdown";
-
-const renderMarkdown = (text: string): string => {
-  if (!text) return '';
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/^### (.+)$/gm, '<h4 class="text-base font-semibold mt-4 mb-2">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="text-lg font-semibold mt-5 mb-2">$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2 class="text-xl font-bold mt-6 mb-3">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-text-display">$1</strong>')
-    .replace(/(?<![*])\*(?![*])(.+?)(?<![*])\*(?![*])/g, '<em class="italic text-text-body/90">$1</em>')
-    .replace(/^[*\-] (.+)$/gm, '<li class="ml-6 list-disc mt-1 text-text-muted">$1</li>')
-    .replace(/\n/g, '<br/>');
-
-  // Sanitize the generated HTML to prevent XSS from malicious AI content
-  // DOMPurify removes dangerous attributes, tags, and JS while preserving formatting
-  return DOMPurify.sanitize(html);
-};
+import { renderMarkdown } from "@/lib/utils/markdown";
 
 function getHeaderTitle(view: string): string {
   switch (view) {
@@ -76,10 +57,11 @@ export default function Home() {
 
   // Editor State
   const [activeDraftIndex, setActiveDraftIndex] = useState<number | null>(null);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatHistories, setChatHistories] = useState<Record<number, ChatMessage[]>>({ 1: [], 2: [], 3: [] });
   const [editInstruction, setEditInstruction] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isFinalized, setIsFinalized] = useState(false);
+  const [finalizedDraftIndex, setFinalizedDraftIndex] = useState<number | null>(null);
 
   // Sources
   const [sources, setSources] = useState<SourceItem[]>([]);
@@ -126,8 +108,9 @@ export default function Home() {
     setLoading(true);
     setDrafts(null);
     setActiveDraftIndex(null);
-    setChatHistory([]);
+    setChatHistories({ 1: [], 2: [], 3: [] });
     setIsFinalized(false);
+    setFinalizedDraftIndex(null);
     setSources([]);
 
     try {
@@ -169,17 +152,25 @@ export default function Home() {
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editInstruction.trim() || !generationId || activeDraftIndex === null) return;
+    if (!editInstruction.trim() || !generationId || activeDraftIndex === null || isFinalized) return;
 
     setIsEditing(true);
     const newInstruction = editInstruction;
+    const currentIdx = activeDraftIndex;
     setEditInstruction("");
-    setChatHistory(prev => [...prev, { role: "user", content: newInstruction }]);
+    setChatHistories(prev => ({
+      ...prev,
+      [currentIdx]: [...(prev[currentIdx] || []), { role: "user", content: newInstruction, draft_index: currentIdx }]
+    }));
 
     try {
-      const data = await editDraft(generationId, activeDraftIndex, newInstruction);
-      setChatHistory(prev => [...prev, { role: "assistant", content: "Draft revised successfully." }]);
-      setDrafts(prev => prev ? { ...prev, [`draft_${activeDraftIndex}`]: data.revised_draft } : prev);
+      const data = await editDraft(generationId, currentIdx, newInstruction);
+      const botReply = data.reply || "Draft revised successfully.";
+      setChatHistories(prev => ({
+        ...prev,
+        [currentIdx]: [...(prev[currentIdx] || []), { role: "assistant", content: botReply, draft_index: currentIdx }]
+      }));
+      setDrafts(prev => prev ? { ...prev, [`draft_${currentIdx}`]: data.revised_draft } : prev);
       toast.success("Draft updated!");
     } catch (err: unknown) {
       const message = err instanceof ApiError
@@ -188,7 +179,10 @@ export default function Home() {
           ? err.message
           : "Edit failed";
       toast.error(message);
-      setChatHistory(prev => [...prev, { role: "assistant", content: `Error: ${message}` }]);
+      setChatHistories(prev => ({
+        ...prev,
+        [currentIdx]: [...(prev[currentIdx] || []), { role: "assistant", content: `Error: ${message}`, draft_index: currentIdx }]
+      }));
     } finally {
       setIsEditing(false);
     }
@@ -200,6 +194,7 @@ export default function Home() {
     try {
       await finalizeDraft(generationId, activeDraftIndex);
       setIsFinalized(true);
+      setFinalizedDraftIndex(activeDraftIndex);
       toast.success("Draft finalized and preferences saved!");
     } catch (err: unknown) {
       const message = err instanceof ApiError
@@ -218,7 +213,7 @@ export default function Home() {
     toast("Copied to clipboard!");
   };
 
-  const handleOpenHistoryItem = async (genId: string) => {
+  const handleOpenHistoryItem = async (genId: string, preferredDraftIndex?: number) => {
     setLoading(true);
     try {
       const full = await getGenerationFull(genId);
@@ -228,9 +223,22 @@ export default function Home() {
         draft_2: full.draft_2 || "",
         draft_3: full.draft_3 || "",
       });
-      setActiveDraftIndex(full.active_draft_index || 1);
-      setChatHistory(full.chat_history || []);
-      setIsFinalized(full.status === "finalized");
+      const initialIdx = preferredDraftIndex || full.active_draft_index || 1;
+      setActiveDraftIndex(initialIdx);
+
+      // Partition chat history per draft
+      const partitioned: Record<number, ChatMessage[]> = { 1: [], 2: [], 3: [] };
+      if (full.chat_history) {
+        full.chat_history.forEach((msg) => {
+          const idx = msg.draft_index || 1;
+          if (!partitioned[idx]) partitioned[idx] = [];
+          partitioned[idx].push(msg);
+        });
+      }
+      setChatHistories(partitioned);
+      const isFin = full.status === "finalized";
+      setIsFinalized(isFin);
+      setFinalizedDraftIndex(isFin ? (full.active_draft_index || 1) : null);
       setTopic(full.topic);
       setRawThoughts(full.raw_thoughts);
       setPlatform(full.platform);
@@ -248,8 +256,9 @@ export default function Home() {
     setView("home");
     setActiveDraftIndex(null);
     setDrafts(null);
-    setChatHistory([]);
+    setChatHistories({ 1: [], 2: [], 3: [] });
     setIsFinalized(false);
+    setFinalizedDraftIndex(null);
     setTopic("");
     setRawThoughts("");
   };
@@ -309,7 +318,8 @@ export default function Home() {
             activeDraftIndex={activeDraftIndex}
             draftContent={drafts[`draft_${activeDraftIndex}` as keyof Drafts]}
             isFinalized={isFinalized}
-            chatHistory={chatHistory}
+            finalizedDraftIndex={finalizedDraftIndex}
+            chatHistory={chatHistories[activeDraftIndex] || []}
             editInstruction={editInstruction}
             setEditInstruction={setEditInstruction}
             isEditing={isEditing}
@@ -319,6 +329,11 @@ export default function Home() {
             onBack={() => { setActiveDraftIndex(null); setView("home"); }}
             onCopy={copyToClipboard}
             renderMarkdown={renderMarkdown}
+            allDrafts={drafts}
+            onSelectDraftIndex={(idx) => {
+              setActiveDraftIndex(idx);
+              setEditInstruction("");
+            }}
           />
         ) : (
           <>

@@ -1,5 +1,8 @@
 "use client";
 
+import { useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { Loader2, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +48,120 @@ export function GenerationForm({
   activeStep,
   onSubmit,
 }: GenerationFormProps) {
+  const formContainerRef = useRef<HTMLDivElement>(null);
+  const trackerRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const stepTextRef = useRef<HTMLSpanElement>(null);
+  const labelsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Subtle focus elevation for input and textarea fields
+  useGSAP(() => {
+    const container = formContainerRef.current;
+    if (!container) return;
+
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const handleFocusIn = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+          gsap.to(target, {
+            scale: 1.006,
+            duration: 0.18,
+            ease: "power2.out",
+          });
+        }
+      };
+
+      const handleFocusOut = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+          gsap.to(target, {
+            scale: 1.0,
+            duration: 0.18,
+            ease: "power2.out",
+            clearProps: "transform",
+          });
+        }
+      };
+
+      container.addEventListener("focusin", handleFocusIn);
+      container.addEventListener("focusout", handleFocusOut);
+
+      return () => {
+        container.removeEventListener("focusin", handleFocusIn);
+        container.removeEventListener("focusout", handleFocusOut);
+      };
+    });
+
+    return () => mm.revert();
+  }, { scope: formContainerRef });
+
+  // Entrance animation for tracker card when loading begins
+  useGSAP(() => {
+    if (!loading || !trackerRef.current) return;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!prefersReduced) {
+      gsap.from(trackerRef.current, {
+        opacity: 0,
+        y: -8,
+        duration: 0.24,
+        ease: "power2.out",
+      });
+    }
+  }, { dependencies: [loading], scope: trackerRef });
+
+  // State-to-state sequential pipeline step transition animation
+  useGSAP(() => {
+    if (!loading) return;
+
+    const mm = gsap.matchMedia();
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      // Smooth progress bar fill
+      if (progressBarRef.current) {
+        gsap.to(progressBarRef.current, {
+          scaleX: (activeStep + 1) / PIPELINE_STEPS.length,
+          duration: 0.35,
+          ease: "power2.out",
+        });
+      }
+      // Subtitle cross-fade
+      if (stepTextRef.current) {
+        gsap.fromTo(
+          stepTextRef.current,
+          { opacity: 0, y: 3 },
+          { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
+        );
+      }
+      // Pulse active step label
+      if (labelsContainerRef.current) {
+        const labels = labelsContainerRef.current.querySelectorAll(".pipeline-step-label");
+        const activeLabel = labels[activeStep];
+        if (activeLabel) {
+          gsap.fromTo(
+            activeLabel,
+            { scale: 1.12 },
+            { scale: 1, duration: 0.22, ease: "back.out(2)" }
+          );
+        }
+      }
+    });
+
+    mm.add("(prefers-reduced-motion: reduce)", () => {
+      if (progressBarRef.current) {
+        gsap.set(progressBarRef.current, {
+          scaleX: (activeStep + 1) / PIPELINE_STEPS.length,
+        });
+      }
+      if (stepTextRef.current) {
+        gsap.set(stepTextRef.current, { opacity: 1, y: 0 });
+      }
+    });
+
+    return () => mm.revert();
+  }, { dependencies: [loading, activeStep, loadingStepText], scope: trackerRef });
   return (
-    <div className="w-full max-w-5xl mx-auto">
+    <div ref={formContainerRef} className="w-full max-w-5xl mx-auto">
       {/* Section header */}
       <div className="mb-space-lg">
         <p className="font-label-xs text-label-xs text-text-muted uppercase tracking-widest mb-space-2xs">
@@ -182,25 +297,31 @@ export function GenerationForm({
 
           {/* Pipeline tracker */}
           {loading && (
-            <div className="bg-surface-card rounded-xl border border-border-subtle p-space-md">
+            <div
+              ref={trackerRef}
+              className="bg-surface-card rounded-xl border border-border-subtle p-space-md"
+            >
               <div className="flex items-center justify-between mb-space-md">
-                <span className="font-label-xs text-label-xs text-text-muted">{loadingStepText}</span>
+                <span ref={stepTextRef} className="font-label-xs text-label-xs text-text-muted">
+                  {loadingStepText}
+                </span>
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
               </div>
               {/* Single horizontal progress bar that fills to the current step's
                  midpoint. Using scaleX (GPU) instead of width to avoid layout thrash. */}
               <div className="w-full h-1.5 rounded-full bg-surface-container overflow-hidden mb-space-sm">
                 <div
+                  ref={progressBarRef}
                   className="h-full w-full bg-primary pipeline-fill rounded-full"
                   style={{ transform: `scaleX(${(activeStep + 1) / PIPELINE_STEPS.length})` }}
                 />
               </div>
               {/* Step labels — highlighted if reached, all visible at once */}
-              <div className="flex justify-between">
+              <div ref={labelsContainerRef} className="flex justify-between">
                 {PIPELINE_STEPS.map((step, i) => (
                   <span
                     key={step.label}
-                    className={`font-label-xs text-label-xs transition-colors duration-300 ${
+                    className={`pipeline-step-label inline-block font-label-xs text-label-xs transition-colors duration-300 ${
                       i <= activeStep ? "text-primary font-semibold" : "text-text-muted"
                     }`}
                   >

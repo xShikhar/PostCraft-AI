@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Loader2, Copy, ArrowLeft, Check, MessageSquare, Send } from "lucide-react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+import { Loader2, Copy, ArrowLeft, Check, Lock, MessageSquare, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -10,6 +12,7 @@ interface DraftEditorProps {
   activeDraftIndex: number;
   draftContent: string;
   isFinalized: boolean;
+  finalizedDraftIndex?: number | null;
   chatHistory: ChatMessage[];
   editInstruction: string;
   setEditInstruction: (v: string) => void;
@@ -20,6 +23,8 @@ interface DraftEditorProps {
   onBack: () => void;
   onCopy: (text: string) => void;
   renderMarkdown: (text: string) => string;
+  allDrafts?: { draft_1?: string; draft_2?: string; draft_3?: string } | null;
+  onSelectDraftIndex?: (index: number) => void;
 }
 
 const QUICK_CHIPS = [
@@ -34,6 +39,7 @@ export function DraftEditor({
   activeDraftIndex,
   draftContent,
   isFinalized,
+  finalizedDraftIndex,
   chatHistory,
   editInstruction,
   setEditInstruction,
@@ -44,18 +50,50 @@ export function DraftEditor({
   onBack,
   onCopy,
   renderMarkdown,
+  allDrafts,
+  onSelectDraftIndex,
 }: DraftEditorProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatListRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(chatHistory.length);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory]);
+  }, [chatHistory.length, isEditing]);
+
+  // Stagger in new chat bubbles when a response or message is added
+  useGSAP(() => {
+    if (chatHistory.length > prevCountRef.current) {
+      const bubbles = chatListRef.current?.querySelectorAll(".chat-bubble");
+      if (bubbles && bubbles.length > 0) {
+        const last = bubbles[bubbles.length - 1];
+        const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (!isReduced) {
+          gsap.fromTo(
+            last,
+            { opacity: 0, y: 8, scale: 0.98 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.2,
+              ease: "power2.out",
+              clearProps: "transform",
+            }
+          );
+        }
+      }
+    }
+    prevCountRef.current = chatHistory.length;
+  }, { dependencies: [chatHistory.length], scope: chatListRef });
+
+  const isCurrentDraftFinalized = isFinalized && (finalizedDraftIndex ? activeDraftIndex === finalizedDraftIndex : true);
 
   return (
     <div className="w-full max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header row */}
-      <div className="flex items-center justify-between mb-space-lg">
-        <div className="flex items-center gap-space-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md mb-space-lg">
+        <div className="flex items-center gap-space-md flex-wrap">
           <button
             onClick={onBack}
             className="w-9 h-9 rounded-lg bg-surface-subtle hover:bg-surface-container-high flex items-center justify-center text-text-muted hover:text-text-display transition-colors"
@@ -65,20 +103,68 @@ export function DraftEditor({
           </button>
           <div>
             <h2 className="font-serif text-headline-md text-text-display">
-              Draft {activeDraftIndex}
+              Draft Edition
             </h2>
             <p className="font-body-sm text-body-sm text-text-muted">
               Refine your post with natural language instructions
             </p>
           </div>
+
+          {/* Draft switcher tabs */}
+          {allDrafts && (
+            <div className="flex items-center gap-1 bg-surface-subtle p-1 rounded-xl border border-border-subtle ml-0 sm:ml-space-md flex-wrap">
+              {([1, 2, 3] as const).map((idx) => {
+                const text = allDrafts[`draft_${idx}` as keyof typeof allDrafts];
+                if (!text) return null;
+                const isActive = activeDraftIndex === idx;
+                const isThisDraftFinalized = isFinalized && (finalizedDraftIndex ? finalizedDraftIndex === idx : activeDraftIndex === idx);
+                const isThisDraftLocked = isFinalized && !isThisDraftFinalized;
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onSelectDraftIndex?.(idx)}
+                    className={`
+                      px-space-sm py-1 rounded-lg font-label-xs text-label-xs font-semibold transition-all flex items-center gap-1.5
+                      ${isActive
+                        ? "bg-surface-card text-text-display shadow-sm font-bold border border-border-subtle"
+                        : "text-text-muted hover:text-text-display hover:bg-surface-container"
+                      }
+                    `}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isThisDraftFinalized ? "bg-green-500" : isThisDraftLocked ? "bg-text-muted/40" : isActive ? "bg-primary" : "bg-text-muted/40"}`} />
+                    <span>Draft {idx}</span>
+                    {isThisDraftFinalized && (
+                      <span className="text-[10px] font-bold text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                        <Check className="w-2.5 h-2.5" /> Finalized
+                      </span>
+                    )}
+                    {isThisDraftLocked && (
+                      <span className="text-[10px] font-medium text-text-muted bg-surface-container px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-space-xs">
           {isFinalized ? (
-            <span className="inline-flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-green-500/10 text-green-600 font-label-xs text-label-xs font-semibold">
-              <Check className="w-3.5 h-3.5" />
-              Finalized
-            </span>
+            isCurrentDraftFinalized ? (
+              <span className="inline-flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-green-500/10 text-green-600 font-label-xs text-label-xs font-semibold">
+                <Check className="w-3.5 h-3.5" />
+                Finalized
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-surface-container text-text-muted font-label-xs text-label-xs font-semibold">
+                <Lock className="w-3.5 h-3.5" />
+                Locked
+              </span>
+            )
           ) : (
             <Button
               onClick={onFinalize}
@@ -101,11 +187,11 @@ export function DraftEditor({
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-space-lg">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-space-lg items-start">
 
         {/* Draft preview (left, 3/5) */}
         <div className="lg:col-span-3 flex flex-col gap-space-md">
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-lg flex-1 min-h-[400px]">
+          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-lg flex-1 min-h-[400px] max-h-[75vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between mb-space-md">
               <span className="font-label-xs text-label-xs text-text-muted uppercase tracking-wider">
                 Draft Preview
@@ -115,63 +201,107 @@ export function DraftEditor({
               </span>
             </div>
             <div
-              className="font-body-md text-body-md text-text-display leading-relaxed prose-editor"
+              className="font-body-md text-body-md text-text-display leading-relaxed prose-editor [&_strong]:text-text-display [&_strong]:font-bold"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(draftContent) }}
             />
           </div>
         </div>
 
         {/* Chat stream (right, 2/5) */}
-        <div className="lg:col-span-2 flex flex-col bg-surface-card rounded-xl border border-border-subtle overflow-hidden">
+        <div className="lg:col-span-2 flex flex-col bg-surface-card rounded-xl border border-border-subtle overflow-hidden max-h-[75vh] sticky top-6">
           {/* Chat header */}
-          <div className="flex items-center gap-space-sm px-space-md py-space-sm border-b border-border-subtle bg-surface-subtle">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            <span className="font-label-sm text-label-sm font-semibold text-text-display">
-              Edit Stream
-            </span>
+          <div className="flex items-center justify-between px-space-md py-space-sm border-b border-border-subtle bg-surface-subtle">
+            <div className="flex items-center gap-space-sm">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <span className="font-label-sm text-label-sm font-semibold text-text-display">
+                Edit Stream
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-label-xs text-label-xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-text-muted">
+                Draft {activeDraftIndex}
+              </span>
+              {isFinalized && (
+                isCurrentDraftFinalized ? (
+                  <span className="text-[10px] uppercase font-bold text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5" /> Finalized
+                  </span>
+                ) : (
+                  <span className="text-[10px] uppercase font-medium text-text-muted bg-surface-container px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Locked
+                  </span>
+                )
+              )}
+            </div>
           </div>
 
           {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto p-space-md space-y-space-md max-h-[420px]">
+          <div ref={chatListRef} className="flex-1 overflow-y-auto p-space-md space-y-space-md custom-scrollbar min-h-[200px]">
             {chatHistory.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center py-space-xl">
                 <MessageSquare className="w-8 h-8 text-outline mb-space-sm" />
                 <p className="font-body-sm text-body-sm text-text-muted">
-                  Your edits and responses will appear here
+                  {isFinalized
+                    ? (isCurrentDraftFinalized
+                        ? `Draft ${activeDraftIndex} was finalized. Chat stream is closed.`
+                        : `Draft ${activeDraftIndex} is locked. Draft ${finalizedDraftIndex || 1} was finalized.`)
+                    : `Your revisions for Draft ${activeDraftIndex} will appear here`}
                 </p>
               </div>
             )}
             {chatHistory.map((msg, i) => (
               <div
                 key={i}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`chat-bubble flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
               >
+                <span className="font-label-xs text-[10px] text-text-muted mb-1 px-1 flex items-center gap-1">
+                  {msg.role === "user" ? (
+                    "You"
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span className="font-semibold text-primary">PostCraft AI</span>
+                    </>
+                  )}
+                </span>
                 <div
-                  className={`max-w-[90%] rounded-xl px-space-sm py-space-xs text-body-sm text-body-sm ${
+                  className={`max-w-[90%] rounded-xl px-space-sm py-space-xs text-body-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-primary text-on-primary"
-                      : "bg-surface-subtle text-text-display"
+                      ? "bg-primary text-on-primary rounded-tr-sm"
+                      : "bg-surface-subtle text-text-display border border-border-subtle rounded-tl-sm"
                   }`}
                 >
                   {msg.content}
                 </div>
               </div>
             ))}
+            {isEditing && (
+              <div className="chat-bubble flex flex-col items-start">
+                <span className="font-label-xs text-[10px] text-text-muted mb-1 px-1 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-primary animate-pulse" />
+                  <span className="font-semibold text-primary">PostCraft AI</span>
+                </span>
+                <div className="rounded-xl px-space-sm py-space-xs text-body-sm bg-surface-subtle text-text-muted border border-border-subtle flex items-center gap-space-xs">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span>Revising Draft {activeDraftIndex} &amp; updating preview...</span>
+                </div>
+              </div>
+            )}
             <div ref={chatEndRef} />
           </div>
 
-          {/* Quick chips */}
-          {chatHistory.length === 0 && (
-            <div className="px-space-md pb-space-sm">
-              <p className="font-label-xs text-label-xs text-text-muted mb-space-2xs">
-                Quick prompts
+          {/* Quick chips (only when draft is editable and no conversation yet) */}
+          {chatHistory.length === 0 && !isFinalized && (
+            <div className="px-space-md py-space-xs border-t border-border-subtle/50 bg-surface-card">
+              <p className="font-label-xs text-[11px] text-text-muted mb-1.5">
+                Quick prompts for Draft {activeDraftIndex}
               </p>
-              <div className="flex flex-wrap gap-space-2xs">
+              <div className="flex flex-wrap gap-1.5">
                 {QUICK_CHIPS.map((chip) => (
                   <button
                     key={chip}
                     onClick={() => setEditInstruction(chip)}
-                    className="px-space-xs py-space-2xs rounded-full bg-surface-subtle hover:bg-surface-container-high text-text-muted hover:text-text-display font-label-xs text-label-xs transition-colors"
+                    className="px-2.5 py-1 rounded-full bg-surface-subtle hover:bg-surface-container-high text-text-muted hover:text-text-display font-label-xs text-[11px] transition-colors"
                   >
                     {chip}
                   </button>
@@ -180,31 +310,69 @@ export function DraftEditor({
             </div>
           )}
 
-          {/* Input */}
-          {!isFinalized && (
+          {/* Input or Finalized State */}
+          {isFinalized ? (
+            isCurrentDraftFinalized ? (
+              <div className="p-space-md border-t border-border-subtle bg-surface-subtle flex items-center gap-space-sm">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0 text-green-600">
+                  <Check className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
+                    Draft {activeDraftIndex} Finalized
+                  </span>
+                  <span className="font-label-xs text-label-xs text-text-muted">
+                    This draft was chosen and finalized. Style preferences have been saved.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-space-md border-t border-border-subtle bg-surface-subtle flex items-center gap-space-sm">
+                <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 text-text-muted">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
+                    Draft {activeDraftIndex} Locked
+                  </span>
+                  <span className="font-label-xs text-label-xs text-text-muted">
+                    Draft {finalizedDraftIndex || 1} was finalized for this post. Other drafts are locked.
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
             <form
               onSubmit={onEditSubmit}
-              className="p-space-sm border-t border-border-subtle bg-surface-subtle"
+              className="p-2 sm:p-2.5 border-t border-border-subtle bg-surface-subtle"
             >
-              <div className="flex gap-space-xs">
+              <div className="flex gap-2 items-end">
                 <textarea
                   value={editInstruction}
                   onChange={(e) => setEditInstruction(e.target.value)}
-                  placeholder="Describe how you'd like to change this draft..."
-                  rows={2}
-                  className="flex-1 bg-surface-card border border-border-subtle rounded-lg px-space-sm py-space-xs text-body-sm text-text-display placeholder:text-outline resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!isEditing && editInstruction.trim()) {
+                        onEditSubmit(e);
+                      }
+                    }
+                  }}
+                  placeholder={`Change Draft ${activeDraftIndex}... (Enter to send)`}
+                  rows={1}
+                  className="flex-1 bg-surface-card border border-border-subtle rounded-lg px-2.5 py-1.5 text-body-xs sm:text-body-sm text-text-display placeholder:text-outline resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 min-h-[34px] max-h-[72px] leading-tight custom-scrollbar"
                   disabled={isEditing}
                 />
                 <button
                   type="submit"
                   disabled={isEditing || !editInstruction.trim()}
-                  className="w-9 h-9 rounded-lg bg-primary hover:bg-primary-container text-on-primary flex items-center justify-center transition-colors disabled:opacity-40 disabled:pointer-events-none self-end"
+                  className="w-8 h-8 rounded-lg bg-primary hover:bg-primary-container text-on-primary flex items-center justify-center transition-colors disabled:opacity-40 disabled:pointer-events-none self-end flex-shrink-0 mb-0.5"
                   aria-label="Send edit instruction"
                 >
                   {isEditing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Send className="w-4 h-4" />
+                    <Send className="w-3.5 h-3.5" />
                   )}
                 </button>
               </div>

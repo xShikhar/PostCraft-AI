@@ -9,6 +9,9 @@ export type HistoryItem = {
   active_draft_index: number;
   created_at: string | null;
   preview: string;
+  draft_1?: string | null;
+  draft_2?: string | null;
+  draft_3?: string | null;
 };
 
 export type HistoryListResponse = {
@@ -36,7 +39,7 @@ export async function listGenerations(params: HistoryListParams = {}): Promise<H
   return fetchApi<HistoryListResponse>(`/api/generations${qs ? `?${qs}` : ""}`);
 }
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatMessage = { role: "user" | "assistant"; content: string; draft_index?: number };
 
 export type GenerationFull = {
   generation_id: string;

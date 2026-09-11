@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, ForeignKey, Uuid
+from sqlalchemy import String, Text, DateTime, ForeignKey, Uuid, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -87,6 +87,7 @@ class ChatHistory(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     generation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("generations.id"))
+    draft_index: Mapped[int | None] = mapped_column(Integer, nullable=True, default=1)
     role: Mapped[str] = mapped_column(String(50)) # 'user' or 'assistant'
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

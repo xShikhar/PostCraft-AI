@@ -162,6 +162,9 @@ async def list_generations(
             "created_at": gen.created_at.isoformat() if gen.created_at else None,
             # Short preview: first 80 chars of draft_1 (or the active draft)
             "preview": _draft_preview(gen),
+            "draft_1": gen.draft_1,
+            "draft_2": gen.draft_2,
+            "draft_3": gen.draft_3,
         })
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -207,7 +210,7 @@ async def get_generation_full(
     )
     hist_res = await session.execute(hist_stmt)
     chat_history = [
-        {"role": h.role, "content": h.content}
+        {"role": h.role, "content": h.content, "draft_index": h.draft_index or 1}
         for h in hist_res.scalars().all()
     ]
 

@@ -27,7 +27,17 @@ class VectorService:
     @property
     def client(self):
         if self._client is None:
-            self._client = chromadb.PersistentClient(path=self._persist_path)
+            chroma_host = os.getenv("CHROMA_HOST")
+            chroma_port = os.getenv("CHROMA_PORT", "8000")
+            if chroma_host:
+                try:
+                    logger.info(f"Connecting to ChromaDB HttpClient at {chroma_host}:{chroma_port}...")
+                    self._client = chromadb.HttpClient(host=chroma_host, port=int(chroma_port))
+                except Exception as e:
+                    logger.warning(f"Failed to connect to ChromaDB at {chroma_host}:{chroma_port}: {e}. Falling back to PersistentClient.")
+                    self._client = chromadb.PersistentClient(path=self._persist_path)
+            else:
+                self._client = chromadb.PersistentClient(path=self._persist_path)
         return self._client
 
     @property

@@ -54,3 +54,11 @@ next-env.d.ts
 .playwright-cli/
 .agents/
 skills-lock.json
+.impeccable/
+test_token*.json
+test_*.mjs
+verify_*.mjs
+screenshot-*.png
+item*.png
+perf_check.mjs
+

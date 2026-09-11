@@ -1,5 +1,7 @@
+import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -41,6 +43,9 @@ async def edit_generation(
         
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
+    if generation.status == "finalized":
+        raise HTTPException(status_code=400, detail="This post has been finalized. Editing is closed.")
+
     current_draft = ""
     if req.draft_index == 1: current_draft = generation.draft_1
     elif req.draft_index == 2: current_draft = generation.draft_2
@@ -49,26 +54,41 @@ async def edit_generation(
     if not current_draft:
         raise HTTPException(status_code=400, detail="Draft is empty or invalid index")
 
-    # Fetch Chat History
-    hist_stmt = select(ChatHistory).where(ChatHistory.generation_id == gen_id).order_by(ChatHistory.created_at)
+    # Fetch Chat History specific to this draft (or unassigned legacy messages)
+    hist_stmt = (
+        select(ChatHistory)
+        .where(
+            ChatHistory.generation_id == gen_id,
+            (ChatHistory.draft_index == req.draft_index) | (ChatHistory.draft_index.is_(None))
+        )
+        .order_by(ChatHistory.created_at)
+    )
     hist_res = await session.execute(hist_stmt)
     history = hist_res.scalars().all()
     
     history_text = "\n".join([f"{h.role.upper()}: {h.content}" for h in history])
     
     prompt = f"""
-    You are an expert editor. Below is the chat history of revisions, the current draft, and the user's new instruction.
+    You are an expert social media post editor collaborating directly with the writer.
     
-    CHAT HISTORY:
-    {history_text}
+    CHAT HISTORY OF REVISIONS:
+    {history_text if history_text else "None yet."}
     
     CURRENT DRAFT:
     {current_draft}
     
-    USER'S INSTRUCTION:
+    WRITER'S REVISION REQUEST:
     {req.instruction}
     
-    Revise the draft based on the user's instruction. Return ONLY the fully revised text. Do not include commentary.
+    Perform two tasks:
+    1. Revise the current draft to incorporate the writer's request precisely.
+    2. Write a short, engaging conversational reply (1-2 sentences) directly to the writer explaining what you changed and why it makes the post stronger.
+    
+    Respond in valid JSON format with exactly two fields:
+    {{
+      "reply": "<your brief 1-2 sentence response to the writer>",
+      "revised_draft": "<the full revised post text>"
+    }}
     """
     
     response = client.models.generate_content(
@@ -76,11 +96,28 @@ async def edit_generation(
         contents=prompt
     )
     
-    revised_text = response.text.strip()
+    reply_text = "I've revised your draft based on your instructions."
+    revised_text = current_draft
     
-    # Save history
-    user_chat = ChatHistory(generation_id=gen_id, role="user", content=req.instruction)
-    asst_chat = ChatHistory(generation_id=gen_id, role="assistant", content=revised_text)
+    try:
+        raw = response.text.strip()
+        if raw.startswith("```json"):
+            raw = raw[7:]
+        if raw.startswith("```"):
+            raw = raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        parsed = json.loads(raw.strip())
+        if isinstance(parsed, dict):
+            revised_text = parsed.get("revised_draft") or revised_text
+            reply_text = parsed.get("reply") or reply_text
+    except Exception:
+        # Fallback if model output is plain text
+        revised_text = response.text.strip()
+    
+    # Save history partitioned by draft_index with the real conversational assistant reply
+    user_chat = ChatHistory(generation_id=gen_id, draft_index=req.draft_index, role="user", content=req.instruction)
+    asst_chat = ChatHistory(generation_id=gen_id, draft_index=req.draft_index, role="assistant", content=reply_text)
     session.add_all([user_chat, asst_chat])
     
     # Update generation
@@ -93,7 +130,7 @@ async def edit_generation(
     
     await session.commit()
     
-    return EditResponse(revised_draft=revised_text, status="success")
+    return EditResponse(revised_draft=revised_text, reply=reply_text, status="success")
 
 @router.post("/{gen_id}/finalize")
 @auth_limiter.limit("30/hour")
@@ -164,6 +201,11 @@ async def finalize_generation(
         )
         session.add(pref)
     
+    # Flush chat history for this generation upon finalization as requested
+    await session.execute(delete(ChatHistory).where(ChatHistory.generation_id == gen_id))
+    
+    if req.final_draft_index in (1, 2, 3):
+        generation.active_draft_index = req.final_draft_index
     generation.status = "finalized"
     session.add(generation)
     await session.commit()

@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { listGenerations, type HistoryItem } from "@/lib/api/history";
+import { DraftPreviewModal } from "@/features/history/components/draft-preview-modal";
+import { stripMarkdown } from "@/lib/utils/markdown";
+
+gsap.registerPlugin(useGSAP);
 import {
   Plus,
   ArrowUpRight,
@@ -10,14 +16,17 @@ import {
   RotateCcw,
   AudioLines,
   ArrowRight,
+  Maximize2,
   History as HistoryIcon,
+  Check,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 
 interface HomeViewProps {
   username: string;
   onNewPost: () => void;
-  onOpenHistory: (id: string) => void;
+  onOpenHistory: (id: string, draftIndex?: number) => void;
   onGoHistory: () => void;
 }
 
@@ -56,9 +65,70 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
   const [recent, setRecent] = useState<HistoryItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
 
+  // Enlarged draft modal state
+  const [enlargedItem, setEnlargedItem] = useState<HistoryItem | null>(null);
+  const [enlargedDraftIndex, setEnlargedDraftIndex] = useState<number>(1);
+
   // Cadence data (real, from history)
   const [allGenerations, setAllGenerations] = useState<HistoryItem[]>([]);
   const [loadingCadence, setLoadingCadence] = useState(true);
+
+  const recentGridRef = useRef<HTMLDivElement>(null);
+  const { contextSafe } = useGSAP({ scope: recentGridRef });
+
+  const handleRecentCardMouseEnter = contextSafe((cardEl: HTMLElement) => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const cards = recentGridRef.current?.querySelectorAll<HTMLElement>(".recent-card");
+    if (!cards) return;
+
+    cards.forEach((c) => {
+      if (c === cardEl) {
+        gsap.to(c, {
+          scale: isReduced ? 1 : 1.02,
+          opacity: 1,
+          duration: 0.22,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      } else {
+        gsap.to(c, {
+          scale: isReduced ? 1 : 0.98,
+          opacity: 0.6,
+          duration: 0.22,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      }
+    });
+  });
+
+  const handleRecentGridMouseLeave = contextSafe(() => {
+    const cards = recentGridRef.current?.querySelectorAll<HTMLElement>(".recent-card");
+    if (!cards) return;
+
+    gsap.to(cards, {
+      scale: 1,
+      opacity: 1,
+      duration: 0.25,
+      ease: "power2.out",
+      overwrite: "auto",
+    });
+  });
+
+  useGSAP(() => {
+    if (loadingRecent || recent.length === 0) return;
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (isReduced) return;
+
+    gsap.from(".recent-card", {
+      opacity: 0,
+      y: 12,
+      duration: 0.22,
+      stagger: 0.05,
+      ease: "power2.out",
+      clearProps: "all",
+    });
+  }, { scope: recentGridRef, dependencies: [recent, loadingRecent] });
 
   useEffect(() => {
     let cancelled = false;
@@ -271,18 +341,26 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
+          <div
+            ref={recentGridRef}
+            onMouseLeave={handleRecentGridMouseLeave}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg"
+          >
             {recent.map((item, idx) => (
               <button
                 key={item.generation_id}
-                onClick={() => onOpenHistory(item.generation_id)}
+                onClick={() => {
+                  setEnlargedItem(item);
+                  setEnlargedDraftIndex(1);
+                }}
+                onMouseEnter={(e) => handleRecentCardMouseEnter(e.currentTarget)}
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
                   e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
                 }}
-                className="history-card spotlight-card group relative bg-surface-card rounded-xl p-space-lg shadow-card-light transition-all duration-300 flex flex-col justify-between min-h-[300px] text-left btn-press animate-fade-slide-up"
-                style={{ animationDelay: `${idx * 80}ms` }}
+                className="history-card recent-card spotlight-card group relative bg-surface-card rounded-xl p-space-lg shadow-card-light transition-colors flex flex-col justify-between min-h-[300px] text-left cursor-pointer"
+                title="Click to enlarge and read all drafts"
               >
                 <div className="flex flex-col gap-space-sm relative z-10">
                   <div className="flex items-center justify-between">
@@ -306,19 +384,78 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
                     </h3>
                     {item.preview && (
                       <p className="font-body-md text-body-md text-text-muted line-clamp-3">
-                        {item.preview}...
+                        {stripMarkdown(item.preview)}...
                       </p>
                     )}
                   </div>
+
+                  {/* Multi-draft indicators */}
+                  <div className="flex items-center gap-1.5 pt-space-xs flex-wrap">
+                    {([1, 2, 3] as const).map((dIdx) => {
+                      const hasDraft = Boolean(item[`draft_${dIdx}` as keyof HistoryItem]);
+                      if (!hasDraft && dIdx > 1) return null;
+                      const isPostFinalized = item.status === "finalized";
+                      const isThisDraftFinalized = isPostFinalized && (item.active_draft_index || 1) === dIdx;
+                      const isThisDraftLocked = isPostFinalized && !isThisDraftFinalized;
+
+                      return (
+                        <span
+                          key={dIdx}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEnlargedItem(item);
+                            setEnlargedDraftIndex(dIdx);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-label-xs text-label-xs font-semibold transition-colors ${
+                            isThisDraftFinalized
+                              ? "bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/25"
+                              : isThisDraftLocked
+                              ? "bg-surface-container text-text-muted hover:bg-surface-subtle"
+                              : "bg-surface-container hover:bg-primary/10 hover:text-primary text-text-muted"
+                          }`}
+                          title={
+                            isThisDraftFinalized
+                              ? `Draft ${dIdx} (Finalized)`
+                              : isThisDraftLocked
+                              ? `Draft ${dIdx} (Locked)`
+                              : `View Draft ${dIdx}`
+                          }
+                        >
+                          {isThisDraftFinalized ? (
+                            <Check className="w-2.5 h-2.5" />
+                          ) : isThisDraftLocked ? (
+                            <Lock className="w-2.5 h-2.5 text-text-muted/60" />
+                          ) : null}
+                          <span>Draft {dIdx}</span>
+                          {isThisDraftFinalized && (
+                            <span className="text-[10px] uppercase font-bold tracking-wide opacity-90">
+                              Finalized
+                            </span>
+                          )}
+                          {isThisDraftLocked && (
+                            <span className="text-[10px] uppercase font-medium tracking-wide opacity-75">
+                              Locked
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="pt-space-md flex items-center justify-between mt-space-md relative z-10">
+
+                <div className="pt-space-md flex items-center justify-between mt-space-md relative z-10 border-t border-border-subtle/50">
                   <div className="flex items-center gap-space-xs">
                     <span className="font-label-xs text-label-xs text-text-muted">
                       Edited {relativeTime(item.created_at)}
                     </span>
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-surface-subtle flex items-center justify-center shadow-sm history-arrow">
-                    <ArrowUpRight className="w-4 h-4 text-text-display" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-label-xs text-label-xs text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">
+                      Enlarge
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-surface-subtle group-hover:bg-primary/10 flex items-center justify-center shadow-sm history-arrow transition-colors">
+                      <Maximize2 className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />
+                    </div>
                   </div>
                 </div>
               </button>
@@ -436,6 +573,15 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
           </div>
         </div>
       </section>
+
+      {/* Enlarged Draft Modal */}
+      <DraftPreviewModal
+        isOpen={Boolean(enlargedItem)}
+        onClose={() => setEnlargedItem(null)}
+        item={enlargedItem}
+        initialDraftIndex={enlargedDraftIndex}
+        onOpenInEditor={(genId, dIdx) => onOpenHistory(genId, dIdx)}
+      />
     </div>
   );
 }

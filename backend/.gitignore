@@ -35,7 +35,8 @@ chroma_db/
 chroma_data/
 postcraft.db
 
-# Testing
+# Testing & Linting
 .coverage
 htmlcov/
 .pytest_cache/
+.ruff_cache/

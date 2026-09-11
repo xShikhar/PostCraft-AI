@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import {
   ArrowLeft,
   Save,
@@ -76,7 +78,7 @@ function ProfileField({ value, onChange, placeholder, rows = 6, initial }: Profi
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full bg-surface-subtle text-text-display font-body-md text-body-md placeholder:text-text-muted rounded-lg p-space-sm border border-border-subtle focus:outline-none focus:border-primary focus:bg-surface-card transition-colors resize-y leading-relaxed"
+      className="w-full bg-surface-subtle text-text-display font-body-md text-body-md placeholder:text-text-muted rounded-lg p-space-sm border border-border-subtle focus:outline-none focus:border-primary focus:bg-surface-card input-focus-smooth transition-colors resize-y leading-relaxed"
       data-initial={initial}
     />
   );
@@ -116,6 +118,7 @@ export interface ProfilePageProps {
 }
 
 export function ProfilePage({ onBack }: ProfilePageProps) {
+  const [loading, setLoading] = useState(true);
   // Field-level state — initialized from the API once on mount.
   const [aboutMe, setAboutMe] = useState("");
   const [resumeBackground, setResumeBackground] = useState("");
@@ -127,6 +130,49 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [deletingResume, setDeletingResume] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const profileContainerRef = useRef<HTMLDivElement>(null);
+
+  // Subtle focus elevation for input and textarea fields across the profile
+  useGSAP(() => {
+    const container = profileContainerRef.current;
+    if (!container) return;
+
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const handleFocusIn = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+          gsap.to(target, {
+            scale: 1.006,
+            duration: 0.18,
+            ease: "power2.out",
+          });
+        }
+      };
+
+      const handleFocusOut = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+          gsap.to(target, {
+            scale: 1.0,
+            duration: 0.18,
+            ease: "power2.out",
+            clearProps: "transform",
+          });
+        }
+      };
+
+      container.addEventListener("focusin", handleFocusIn);
+      container.addEventListener("focusout", handleFocusOut);
+
+      return () => {
+        container.removeEventListener("focusin", handleFocusIn);
+        container.removeEventListener("focusout", handleFocusOut);
+      };
+    });
+
+    return () => mm.revert();
+  }, { scope: profileContainerRef, dependencies: [loading] });
 
   // Per-section saving flags + initial values for the dirty check.
   const [savingAbout, setSavingAbout] = useState(false);
@@ -136,8 +182,6 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [initialAbout, setInitialAbout] = useState("");
   const [initialResume, setInitialResume] = useState("");
   const [initialStyle, setInitialStyle] = useState("");
-
-  const [loading, setLoading] = useState(true);
 
   // Account deletion state — the dialog is the only path to the API call,
   // and the call is gated by typed confirmation.
@@ -336,7 +380,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   }
 
   return (
-    <div className="flex flex-col w-full gap-space-2xl">
+    <div ref={profileContainerRef} className="flex flex-col w-full gap-space-2xl">
       {/* Header */}
       <header className="flex flex-col gap-space-sm">
         <button
@@ -727,7 +771,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
               placeholder={initialUsername || "your username"}
               autoComplete="off"
               spellCheck={false}
-              className="w-full bg-surface-subtle text-text-display font-body-md text-body-md placeholder:text-text-muted rounded-lg p-space-sm border border-border-subtle focus:outline-none focus:border-red-400 focus:bg-surface-card transition-colors"
+              className="w-full bg-surface-subtle text-text-display font-body-md text-body-md placeholder:text-text-muted rounded-lg p-space-sm border border-border-subtle focus:outline-none focus:border-red-400 focus:bg-surface-card input-focus-smooth transition-colors"
             />
           </div>
 

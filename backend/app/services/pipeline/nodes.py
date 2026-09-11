@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -114,7 +115,14 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
         else []
     )
 
-    historical_bias = _build_temporal_style_bias(state["user_id"], state["platform"])
+    try:
+        historical_bias = await asyncio.wait_for(
+            asyncio.to_thread(_build_temporal_style_bias, state["user_id"], state["platform"]),
+            timeout=3.0,
+        )
+    except Exception as e:
+        logger.warning(f"Could not load temporal style bias (non-fatal): {e}")
+        historical_bias = ""
 
     prompt = build_pattern_prompt(state, historical_bias, snippets_text)
     structured_llm = deps.llm.with_structured_output(ExtractedPattern, include_raw=True)
@@ -159,9 +167,16 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
         f"Pacing: {extracted.pacing} | Storytelling: {extracted.storytelling_technique} | "
         f"Format: {extracted.formatting} | CTA: {extracted.cta_style}"
     )
-    vector_service.save_style_profile(
-        str(profile.id), state["user_id"], state["platform"], style_concat
-    )
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                vector_service.save_style_profile,
+                str(profile.id), state["user_id"], state["platform"], style_concat
+            ),
+            timeout=5.0,
+        )
+    except Exception as e:
+        logger.warning(f"Could not save style profile to vector store (non-fatal): {e}")
 
     # Cleanup: keep only the last 10 style profiles per user+platform
     await _cleanup_old_style_profiles(deps, state["user_id"], state["platform"])
@@ -233,8 +248,17 @@ async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform
     logger.info(f"Cleaned up {len(to_delete)} old StyleProfile rows from DB (kept {keep}).")
 
     # Mirror deletion in ChromaDB
-    deleted = vector_service.delete_oldest_profiles(str(user_id), platform, keep=keep)
-    logger.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
+    try:
+        deleted = await asyncio.wait_for(
+            asyncio.to_thread(
+                vector_service.delete_oldest_profiles,
+                str(user_id), platform, keep=keep
+            ),
+            timeout=5.0,
+        )
+        logger.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
+    except Exception as e:
+        logger.warning(f"ChromaDB cleanup mirror failed (non-fatal): {e}")
 
 
 async def _build_background_context(deps: PipelineDeps, user_id: str | uuid.UUID) -> str:

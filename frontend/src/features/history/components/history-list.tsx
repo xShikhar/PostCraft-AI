@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { listGenerations, type HistoryItem } from "@/lib/api/history";
-import { ArrowLeft, Calendar, ChevronDown, FileText, ArrowRight } from "lucide-react";
+import { DraftPreviewModal } from "@/features/history/components/draft-preview-modal";
+import { stripMarkdown } from "@/lib/utils/markdown";
+
+gsap.registerPlugin(useGSAP);
+import { ArrowLeft, Calendar, ChevronDown, FileText, ArrowRight, Maximize2, Sparkles, Check, Lock } from "lucide-react";
 
 interface HistoryListProps {
   onBack: () => void;
-  onOpen: (genId: string) => void;
+  onOpen: (genId: string, draftIndex?: number) => void;
 }
 
 const PAGE_SIZE = 20;
@@ -90,6 +96,11 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
 
+  // Enlarged preview modal state
+  const [enlargedItem, setEnlargedItem] = useState<HistoryItem | null>(null);
+  const [enlargedDraftIndex, setEnlargedDraftIndex] = useState<number>(1);
+  const [cardActiveDraft, setCardActiveDraft] = useState<Record<string, 1 | 2 | 3>>({});
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -107,6 +118,23 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
       });
     return () => { cancelled = true; };
   }, []);
+
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(() => {
+    if (loading || items.length === 0) return;
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (isReduced) return;
+
+    gsap.from(".history-list-item", {
+      opacity: 0,
+      y: 12,
+      duration: 0.22,
+      stagger: 0.04,
+      ease: "power2.out",
+      clearProps: "all",
+    });
+  }, { scope: listRef, dependencies: [items, loading] });
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
@@ -164,64 +192,175 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-space-md">
-          {items.map((item, idx) => (
-            <button
-              key={item.generation_id}
-              onClick={() => onOpen(item.generation_id)}
-              className="history-card group w-full text-left bg-surface-card rounded-xl p-space-lg shadow-card-light transition-all duration-300 btn-press animate-fade-slide-up"
-              style={{ animationDelay: `${idx * 60}ms` }}
-            >
-              <div className="flex items-start justify-between gap-space-md">
-                {/* Left: topic + preview */}
-                <div className="flex flex-col gap-space-xs flex-1 min-w-0">
-                  {/* Badges row */}
-                  <div className="flex items-center gap-space-xs flex-wrap">
-                    <span className="px-space-xs py-space-2xs bg-surface-subtle text-text-body rounded-full font-label-xs text-label-xs uppercase tracking-wider">
-                      {platformLabel(item.platform)}
-                    </span>
-                    <span
-                      className={`px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider ${statusColor(
-                        item.status
-                      )}`}
-                    >
-                      {statusLabel(item.status)}
-                    </span>
+        <div ref={listRef} className="flex flex-col gap-space-md">
+          {items.map((item) => {
+            const activeDraftIdx = cardActiveDraft[item.generation_id] || 1;
+            const activeDraftContent =
+              (activeDraftIdx === 1
+                ? item.draft_1
+                : activeDraftIdx === 2
+                ? item.draft_2
+                : item.draft_3) || item.preview || "";
+
+            return (
+              <div
+                key={item.generation_id}
+                onClick={() => {
+                  setEnlargedItem(item);
+                  setEnlargedDraftIndex(activeDraftIdx);
+                }}
+                className="history-card history-list-item group w-full text-left bg-surface-card rounded-xl p-space-lg shadow-card-light transition-all cursor-pointer hover:border-primary/30"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+                  {/* Left: badges + topic + draft tabs + preview */}
+                  <div className="flex flex-col gap-space-xs flex-1 min-w-0">
+                    {/* Badges row */}
+                    <div className="flex items-center gap-space-xs flex-wrap">
+                      <span className="px-space-xs py-space-2xs bg-surface-subtle text-text-body rounded-full font-label-xs text-label-xs uppercase tracking-wider">
+                        {platformLabel(item.platform)}
+                      </span>
+                      {item.status === "finalized" ? (
+                        activeDraftIdx === (item.active_draft_index || 1) ? (
+                          <span className="inline-flex items-center gap-1 px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider bg-green-500/10 text-green-600 dark:text-green-400 font-semibold">
+                            <Check className="w-3 h-3" />
+                            Finalized
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider bg-surface-subtle text-text-muted font-medium">
+                            <Lock className="w-3 h-3" />
+                            Locked
+                          </span>
+                        )
+                      ) : (
+                        <span
+                          className={`px-space-xs py-space-2xs rounded-full font-label-xs text-label-xs uppercase tracking-wider ${statusColor(
+                            item.status
+                          )}`}
+                        >
+                          {statusLabel(item.status)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Topic */}
+                    <h2 className="font-serif text-title-md text-text-display line-clamp-2 mt-space-2xs">
+                      {item.topic}
+                    </h2>
+
+                    {/* Multi-draft switcher buttons */}
+                    <div className="flex items-center gap-1.5 pt-space-2xs flex-wrap">
+                      {([1, 2, 3] as const).map((dIdx) => {
+                        const hasDraft = Boolean(item[`draft_${dIdx}` as keyof HistoryItem]);
+                        if (!hasDraft && dIdx > 1) return null;
+                        const isSelected = activeDraftIdx === dIdx;
+                        const isPostFinalized = item.status === "finalized";
+                        const isThisDraftFinalized = isPostFinalized && (item.active_draft_index || 1) === dIdx;
+                        const isThisDraftLocked = isPostFinalized && !isThisDraftFinalized;
+
+                        return (
+                          <button
+                            key={dIdx}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCardActiveDraft((prev) => ({
+                                ...prev,
+                                [item.generation_id]: dIdx,
+                              }));
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-label-xs text-label-xs font-semibold transition-all ${
+                              isSelected
+                                ? isThisDraftFinalized
+                                  ? "bg-green-600 text-white shadow-xs font-bold"
+                                  : "bg-primary text-on-primary shadow-xs font-bold"
+                                : isThisDraftFinalized
+                                ? "bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/25"
+                                : "bg-surface-subtle text-text-muted hover:text-text-display hover:bg-surface-container"
+                            }`}
+                            title={
+                              isThisDraftFinalized
+                                ? `Draft ${dIdx} (Finalized)`
+                                : isThisDraftLocked
+                                ? `Draft ${dIdx} (Locked)`
+                                : `Inspect Draft ${dIdx}`
+                            }
+                          >
+                            {isThisDraftFinalized ? (
+                              <Check className="w-2.5 h-2.5" />
+                            ) : isThisDraftLocked ? (
+                              <Lock className="w-2.5 h-2.5 text-text-muted/70" />
+                            ) : null}
+                            <span>Draft {dIdx}</span>
+                            {isThisDraftFinalized && (
+                              <span className="text-[10px] uppercase tracking-wide opacity-90">
+                                Finalized
+                              </span>
+                            )}
+                            {isThisDraftLocked && (
+                              <span className="text-[10px] uppercase tracking-wide opacity-75">
+                                Locked
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Preview snippet */}
+                    {activeDraftContent && (
+                      <p className="font-body-sm text-body-sm text-text-muted line-clamp-2 mt-1">
+                        {stripMarkdown(activeDraftContent)}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Topic */}
-                  <h2 className="font-serif text-title-md text-text-display line-clamp-2 mt-space-2xs">
-                    {item.topic}
-                  </h2>
+                  {/* Right: date & action buttons */}
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-space-sm flex-shrink-0 pt-space-xs sm:pt-0">
+                    <div className="flex flex-col items-start sm:items-end gap-0.5">
+                      <div className="flex items-center gap-space-2xs text-text-muted">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span className="font-label-xs text-label-xs">
+                          {formatDate(item.created_at)}
+                        </span>
+                      </div>
+                      <span className="font-label-xs text-label-xs text-text-muted">
+                        {relativeTime(item.created_at)}
+                      </span>
+                    </div>
 
-                  {/* Preview */}
-                  {item.preview && (
-                    <p className="font-body-sm text-body-sm text-text-muted line-clamp-2">
-                      {item.preview}
-                    </p>
-                  )}
-                </div>
-
-                {/* Right: date */}
-                <div className="flex flex-col items-end gap-space-2xs flex-shrink-0">
-                  <div className="flex items-center gap-space-2xs text-text-muted">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span className="font-label-xs text-label-xs">
-                      {formatDate(item.created_at)}
-                    </span>
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 mt-sm:space-xs">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEnlargedItem(item);
+                          setEnlargedDraftIndex(activeDraftIdx);
+                        }}
+                        className="w-8 h-8 rounded-full bg-surface-subtle hover:bg-surface-container flex items-center justify-center text-text-muted hover:text-text-display transition-colors"
+                        title="Enlarge and read draft in full"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpen(item.generation_id, activeDraftIdx);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary hover:bg-primary-container text-on-primary font-label-xs text-label-xs font-semibold shadow-xs transition-all btn-press"
+                        title={`Edit Draft ${activeDraftIdx} in Studio`}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>Edit</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                  <span className="font-label-xs text-label-xs text-text-muted">
-                    {relativeTime(item.created_at)}
-                  </span>
-                </div>
-
-                {/* Hover arrow indicator */}
-                <div className="flex-shrink-0 self-center w-8 h-8 rounded-full bg-surface-subtle flex items-center justify-center history-arrow">
-                  <ArrowRight className="w-4 h-4 text-text-muted" />
                 </div>
               </div>
-            </button>
-          ))}
+            );
+          })}
 
           {/* Load more */}
           {hasMore && (
@@ -232,9 +371,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
                 className="flex items-center gap-space-xs px-space-lg py-space-sm bg-surface-card hover:bg-surface-container text-text-display hover:text-primary rounded-full font-label-md text-label-md shadow-card-light hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed btn-press"
               >
                 {loadingMore ? (
-                  <>
-                    <span>Loading...</span>
-                  </>
+                  <span>Loading...</span>
                 ) : (
                   <>
                     <span>Load more</span>
@@ -246,6 +383,15 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
           )}
         </div>
       )}
+
+      {/* Enlarged Draft Modal */}
+      <DraftPreviewModal
+        isOpen={Boolean(enlargedItem)}
+        onClose={() => setEnlargedItem(null)}
+        item={enlargedItem}
+        initialDraftIndex={enlargedDraftIndex}
+        onOpenInEditor={(genId, dIdx) => onOpen(genId, dIdx)}
+      />
     </div>
   );
 }

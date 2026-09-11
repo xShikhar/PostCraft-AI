@@ -1,13 +1,16 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useRef, useEffect } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { Sidebar } from "./sidebar";
 import { TopHeader } from "./top-header";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Home, History, Mic, Plus, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect } from "react";
 import Image from "next/image";
+
+gsap.registerPlugin(useGSAP);
 
 function CollapsedLogo() {
   const { theme, resolvedTheme } = useTheme();
@@ -51,6 +54,40 @@ export function AppShell({
 }: AppShellProps) {
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const railRef = useRef<HTMLElement>(null);
+  const isFirstRender = useRef(true);
+
+  useGSAP(() => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (collapsed) {
+        gsap.set(railRef.current, { x: 0, autoAlpha: 1 });
+      } else {
+        gsap.set(railRef.current, { x: -64, autoAlpha: 0 });
+      }
+      return;
+    }
+
+    if (collapsed) {
+      gsap.to(railRef.current, {
+        x: 0,
+        autoAlpha: 1,
+        duration: isReduced ? 0 : 0.24,
+        ease: "power2.out",
+        overwrite: "auto",
+      });
+    } else {
+      gsap.to(railRef.current, {
+        x: -64,
+        autoAlpha: 0,
+        duration: isReduced ? 0 : 0.2,
+        ease: "power2.in",
+        overwrite: "auto",
+      });
+    }
+  }, { scope: railRef, dependencies: [collapsed] });
 
   const railIcons: { view: "home" | "history" | "profile"; icon: React.ReactNode; label: string }[] = [
     { view: "home", icon: <Home className="w-5 h-5" />, label: "Home" },
@@ -70,76 +107,78 @@ export function AppShell({
         onLogout={logout}
       />
 
-      {/* Collapsed rail (shown when sidebar is collapsed) */}
-      {collapsed && (
-        <aside className="fixed top-0 left-0 bottom-0 w-16 bg-surface-card border-r border-border-subtle z-50 flex flex-col items-center justify-between py-space-lg shadow-sidebar">
-          <div className="flex flex-col items-center gap-space-md">
-            {/* Logo */}
-            <CollapsedLogo />
+      {/* Collapsed rail (always in DOM, animated via GSAP) */}
+      <aside
+        ref={railRef}
+        className="fixed top-0 left-0 bottom-0 w-16 bg-surface-card border-r border-border-subtle z-50 flex flex-col items-center justify-between py-space-lg shadow-sidebar"
+        style={{ visibility: collapsed ? "visible" : "hidden" }}
+      >
+        <div className="flex flex-col items-center gap-space-md">
+          {/* Logo */}
+          <CollapsedLogo />
 
-            {/* Expand button */}
-            <button
-              onClick={() => setCollapsed(false)}
-              className="p-space-2xs text-text-muted hover:text-text-display rounded-lg transition-colors flex items-center justify-center"
-              aria-label="Expand sidebar"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-
-            {/* New post */}
-            <button
-              onClick={onNewPost}
-              className="w-9 h-9 rounded-full bg-text-display dark:bg-primary text-surface-card dark:text-on-primary flex items-center justify-center transition-transform hover:scale-[1.05] active:scale-[0.95] shadow-md"
-              aria-label="New post"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-
-            {/* Nav icons */}
-            <nav className="flex flex-col items-center gap-space-2xs mt-space-xs">
-              {railIcons.map((item) => {
-                const active = currentView === item.view;
-                return (
-                  <button
-                    key={item.view}
-                    onClick={() => onNavigate(item.view)}
-                    className={`
-                      w-9 h-9 rounded-lg flex items-center justify-center transition-colors
-                      ${active
-                        ? "bg-surface-container-high text-primary"
-                        : "text-text-muted hover:bg-surface-subtle hover:text-text-display"
-                      }
-                    `}
-                    aria-label={item.label}
-                    title={item.label}
-                  >
-                    {item.icon}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Sign out at the bottom */}
+          {/* Expand button */}
           <button
-            onClick={logout}
-            className="p-space-2xs text-text-muted hover:text-secondary rounded-lg transition-colors flex items-center justify-center"
-            aria-label="Sign out"
-            title="Sign out"
+            onClick={() => setCollapsed(false)}
+            className="p-space-2xs text-text-muted hover:text-text-display rounded-lg transition-colors flex items-center justify-center"
+            aria-label="Expand sidebar"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <Menu className="w-5 h-5" />
           </button>
-        </aside>
-      )}
+
+          {/* New post */}
+          <button
+            onClick={onNewPost}
+            className="w-9 h-9 rounded-full bg-text-display dark:bg-primary text-surface-card dark:text-on-primary flex items-center justify-center transition-transform hover:scale-[1.05] active:scale-[0.95] shadow-md"
+            aria-label="New post"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Nav icons */}
+          <nav className="flex flex-col items-center gap-space-2xs mt-space-xs">
+            {railIcons.map((item) => {
+              const active = currentView === item.view;
+              return (
+                <button
+                  key={item.view}
+                  onClick={() => onNavigate(item.view)}
+                  className={`
+                    w-9 h-9 rounded-lg flex items-center justify-center transition-colors
+                    ${active
+                      ? "bg-surface-container-high text-primary"
+                      : "text-text-muted hover:bg-surface-subtle hover:text-text-display"
+                    }
+                  `}
+                  aria-label={item.label}
+                  title={item.label}
+                >
+                  {item.icon}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Sign out at the bottom */}
+        <button
+          onClick={logout}
+          className="p-space-2xs text-text-muted hover:text-secondary rounded-lg transition-colors flex items-center justify-center"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
+      </aside>
 
       {/* Main content area — adjusts left padding based on collapsed state */}
       <div
         className={`
-          flex flex-col min-h-screen transition-all duration-300 ease-in-out
+          flex flex-col min-h-screen transition-[padding-left] duration-[240ms] ease-out
           ${collapsed ? "pl-16" : "pl-sidebar-width"}
         `}
       >

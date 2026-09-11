@@ -22,6 +22,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "python-multipart>=0.0.9",
     "pdfplumber>=0.11.0",
+    "pypdf>=4.0.0",
     "docx2txt>=0.8",
     "slowapi>=0.1.9",
     "sentry-sdk[fastapi]>=2.0.0",

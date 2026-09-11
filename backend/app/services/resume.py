@@ -8,6 +8,7 @@ derived once at upload time and injected as a compact context block into
 generation prompts.
 """
 
+import io
 import logging
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -43,12 +44,11 @@ def extract_text(file_bytes: bytes, mime_type: str = "", filename: str = "") -> 
     ):
         return _extract_docx(file_bytes)
     elif fname.endswith((".txt", ".md")) or mtype in ("text/plain", "text/markdown"):
-        return file_bytes.decode("utf-8", errors="replace")
+        return _fallback_text_extraction(file_bytes)
     else:
-        # If MIME type is octet-stream but bytes start with %PDF, handled above.
-        # Otherwise fallback to text decode if printable
+        # If MIME type is octet-stream or unknown, check if printable plain text
         try:
-            decoded = file_bytes.decode("utf-8")
+            decoded = _fallback_text_extraction(file_bytes)
             if len(decoded.strip()) > 10:
                 return decoded
         except Exception:
@@ -63,9 +63,10 @@ def extract_text(file_bytes: bytes, mime_type: str = "", filename: str = "") -> 
 def _extract_pdf(file_bytes: bytes) -> str:
     """Extract text from a PDF using pdfplumber, falling back to pypdf if available."""
     text_parts: list[str] = []
+
+    # 1. Primary extractor: pdfplumber
     try:
         import pdfplumber
-        import io
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
@@ -74,11 +75,10 @@ def _extract_pdf(file_bytes: bytes) -> str:
     except Exception as e:
         logger.warning(f"pdfplumber extraction failed, trying fallback: {e}")
 
-    # Fallback to pypdf if pdfplumber didn't extract text
+    # 2. Fallback to pypdf if pdfplumber didn't extract text
     if not text_parts:
         try:
             import pypdf
-            import io
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             for page in reader.pages:
                 pt = page.extract_text()
@@ -89,8 +89,8 @@ def _extract_pdf(file_bytes: bytes) -> str:
 
     result = "\n".join(text_parts)
     if not result.strip():
-        logger.warning("PDF text extraction returned empty; using raw fallback")
-        return _fallback_text_extraction(file_bytes)
+        logger.warning("PDF text extraction returned empty")
+        return ""
     return result
 
 
@@ -99,23 +99,22 @@ def _extract_docx(file_bytes: bytes) -> str:
     try:
         import docx2txt
     except ImportError:
-        logger.warning("docx2txt not installed; using fallback raw text extraction")
-        return _fallback_text_extraction(file_bytes)
+        logger.warning("docx2txt not installed; cannot extract DOCX text")
+        return ""
 
     try:
-        import io
         result = docx2txt.process(io.BytesIO(file_bytes))
         if not result or not result.strip():
-            logger.warning("DOCX extraction returned empty; using fallback")
-            return _fallback_text_extraction(file_bytes)
+            logger.warning("DOCX extraction returned empty")
+            return ""
         return result
     except Exception as e:
         logger.error(f"DOCX extraction failed: {e}")
-        return _fallback_text_extraction(file_bytes)
+        return ""
 
 
 def _fallback_text_extraction(file_bytes: bytes) -> str:
-    """Last-resort extraction: try UTF-8, then latin-1."""
+    """Fallback text decode for plain text files: try UTF-8, then latin-1."""
     for encoding in ("utf-8", "latin-1"):
         try:
             return file_bytes.decode(encoding)

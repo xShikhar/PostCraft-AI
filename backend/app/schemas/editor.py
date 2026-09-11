@@ -6,6 +6,7 @@ class EditRequest(BaseModel):
 
 class EditResponse(BaseModel):
     revised_draft: str
+    reply: str = "Draft revised successfully."
     status: str
 
 class FinalizeRequest(BaseModel):

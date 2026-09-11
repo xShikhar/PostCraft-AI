@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+
+gsap.registerPlugin(useGSAP);
 import Image from "next/image";
 import {
   Plus,
@@ -84,17 +88,92 @@ export function Sidebar({
     ? user.username.slice(0, 2).toUpperCase()
     : "?";
 
+  const sidebarRef = useRef<HTMLElement>(null);
+  const isFirstRender = useRef(true);
+
+  useGSAP(() => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (collapsed) {
+        gsap.set(sidebarRef.current, { xPercent: -100, autoAlpha: 0 });
+      } else {
+        gsap.set(sidebarRef.current, { xPercent: 0, autoAlpha: 1 });
+      }
+      return;
+    }
+
+    if (collapsed) {
+      gsap.to(sidebarRef.current, {
+        xPercent: -100,
+        autoAlpha: 0,
+        duration: isReduced ? 0 : 0.24,
+        ease: "power2.inOut",
+        overwrite: "auto",
+      });
+    } else {
+      gsap.to(sidebarRef.current, {
+        xPercent: 0,
+        autoAlpha: 1,
+        duration: isReduced ? 0 : 0.24,
+        ease: "power2.out",
+        overwrite: "auto",
+      });
+    }
+  }, { scope: sidebarRef, dependencies: [collapsed] });
+
+  const pillContainerRef = useRef<HTMLDivElement>(null);
+  const pillThumbRef = useRef<HTMLDivElement>(null);
+  const sunIconRef = useRef<HTMLSpanElement>(null);
+  const moonIconRef = useRef<HTMLSpanElement>(null);
+  const isPillFirstRender = useRef(true);
+
+  useGSAP(() => {
+    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isDark = theme === "dark";
+
+    if (isPillFirstRender.current) {
+      isPillFirstRender.current = false;
+      if (pillThumbRef.current) {
+        gsap.set(pillThumbRef.current, { xPercent: isDark ? 100 : 0 });
+      }
+      return;
+    }
+
+    if (pillThumbRef.current) {
+      gsap.to(pillThumbRef.current, {
+        xPercent: isDark ? 100 : 0,
+        duration: isReduced ? 0 : 0.22,
+        ease: "power2.out",
+        overwrite: "auto",
+      });
+    }
+
+    if (!isReduced) {
+      if (isDark && moonIconRef.current) {
+        gsap.fromTo(
+          moonIconRef.current,
+          { rotation: -25, scale: 0.85 },
+          { rotation: 0, scale: 1, duration: 0.25, ease: "back.out(1.7)" }
+        );
+      } else if (!isDark && sunIconRef.current) {
+        gsap.fromTo(
+          sunIconRef.current,
+          { rotation: 30, scale: 0.85 },
+          { rotation: 0, scale: 1, duration: 0.25, ease: "back.out(1.7)" }
+        );
+      }
+    }
+  }, { scope: pillContainerRef, dependencies: [theme] });
+
   return (
     <aside
-      className={`
-        fixed top-0 left-0 bottom-0 z-50 flex flex-col justify-between p-space-lg
-        bg-surface-card border-r border-border-subtle shadow-sidebar
-        transition-all duration-300 ease-in-out
-        ${collapsed ? "w-0 overflow-hidden p-0" : "w-sidebar-width"}
-      `}
+      ref={sidebarRef}
+      className="fixed top-0 left-0 bottom-0 z-50 flex flex-col justify-between p-space-lg bg-surface-card border-r border-border-subtle shadow-sidebar w-sidebar-width"
     >
-      {/* Inner content — always rendered but hidden when collapsed */}
-      <div className={`flex flex-col gap-space-lg ${collapsed ? "opacity-0 pointer-events-none" : ""}`}>
+      {/* Inner content */}
+      <div className="flex flex-col gap-space-lg">
         {/* Brand row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-space-sm">
@@ -143,34 +222,42 @@ export function Sidebar({
         </nav>
       </div>
 
-      {/* Bottom section — theme + user (always visible even when collapsed via icon-only mode) */}
-      <div className={`flex flex-col gap-space-md ${collapsed ? "opacity-0 pointer-events-none" : "pt-space-md"}`}>
+      {/* Bottom section — theme + user */}
+      <div className="flex flex-col gap-space-md pt-space-md">
         {/* Theme toggle pill */}
-        <div className="p-space-2xs bg-surface-subtle rounded-full flex items-center justify-between">
+        <div ref={pillContainerRef} className="relative p-space-2xs bg-surface-subtle rounded-full flex items-center justify-between">
+          <div
+            ref={pillThumbRef}
+            className="absolute top-[3px] bottom-[3px] left-[3px] w-[calc(50%-3px)] bg-surface-card rounded-full shadow-sm pointer-events-none"
+          />
           <button
             onClick={() => setTheme("light")}
             className={`
-              flex-1 flex items-center justify-center gap-space-xs py-space-2xs rounded-full transition-colors text-label-xs
+              relative z-10 flex-1 flex items-center justify-center gap-space-xs py-space-2xs rounded-full transition-colors text-label-xs
               ${theme === "light"
-                ? "bg-surface-card text-text-display shadow-sm font-semibold"
+                ? "text-text-display font-semibold"
                 : "text-text-muted hover:text-text-display"
               }
             `}
           >
-            <Sun className="w-3.5 h-3.5" />
+            <span ref={sunIconRef} className="inline-flex items-center justify-center">
+              <Sun className="w-3.5 h-3.5" />
+            </span>
             <span>Light</span>
           </button>
           <button
             onClick={() => setTheme("dark")}
             className={`
-              flex-1 flex items-center justify-center gap-space-xs py-space-2xs rounded-full transition-colors text-label-xs
+              relative z-10 flex-1 flex items-center justify-center gap-space-xs py-space-2xs rounded-full transition-colors text-label-xs
               ${theme === "dark"
-                ? "bg-surface-card text-text-display shadow-sm font-semibold"
+                ? "text-text-display font-semibold"
                 : "text-text-muted hover:text-text-display"
               }
             `}
           >
-            <Moon className="w-3.5 h-3.5" />
+            <span ref={moonIconRef} className="inline-flex items-center justify-center">
+              <Moon className="w-3.5 h-3.5" />
+            </span>
             <span>Dark</span>
           </button>
         </div>

@@ -14,7 +14,7 @@ export type Drafts = {
   draft_3: string;
 };
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatMessage = { role: "user" | "assistant"; content: string; draft_index?: number };
 
 export type SourceItem = {
   title: string;
@@ -49,7 +49,7 @@ export async function generateDrafts(params: GenerationParams): Promise<Generati
 }
 
 export async function editDraft(generationId: string, draftIndex: number, instruction: string) {
-  return fetchApi<{ revised_draft: string }>(`/api/generations/${generationId}/edit`, {
+  return fetchApi<{ revised_draft: string; reply?: string }>(`/api/generations/${generationId}/edit`, {
     method: "POST",
     body: JSON.stringify({ instruction, draft_index: draftIndex }),
   });
