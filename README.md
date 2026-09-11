@@ -12,8 +12,10 @@ PostCraft researches live public discussions on a topic, extracts high-leverage 
 - **Lead-Gen & Conversion-First CTAs**: Replaces generic engagement bait ("Thoughts?", "Agree?") with high-converting Call-to-Actions customized to the user's specific bio, role, or product.
 - **Cascading Research Engine**: Multi-tiered search (DB Cache → Curated Top Creators → General Search → Synthetic Structure) ensuring real-world context on any topic.
 - **Vector Memory (ChromaDB)**: Learns and indexes your historical writing style to bias future generations toward your unique voice.
-- **Conversational Iteration**: Chat-based inline editor to refine drafts and extract user preferences upon finalization.
-- **Persona Engine & Resume Decoding**: Drag-and-drop resume upload (PDF/DOCX/text) with automated Gemini one-shot skill/role extraction, encrypted at rest via Fernet, and persistent context injection into generation prompts.
+- **Per-Draft Conversational Iteration**: Chat-based inline editor with isolated revisions per draft (`draft_index=1, 2, 3`). Chat contexts never bleed between drafts.
+- **Finalized vs. Locked Enforcement**: When a post is finalized, only the selected draft displays **Finalized**; all other drafts are strictly marked as **Locked** across the editor, modal, history, and home views. The chosen draft is persisted in `Generation.active_draft_index`.
+- **Interactive UI Polish & GSAP Motion**: Smooth cursor radial spotlight glow tracking, centered modal portal rendering, clean markdown parsing (no raw `**` asterisks), and theme-specific cadence glow (reduced 20%, purple for light mode, warm coral for dark mode).
+- **Persona Engine & Resume Decoding**: Drag-and-drop resume upload (PDF/DOCX/text) with automated Gemini one-shot skill/role extraction, encrypted at rest via Fernet (AES-128-CBC + HMAC-SHA256), and persistent context injection into generation prompts.
 - **Admin Control Center**: Dedicated `/admin` dashboard with cost analytics, live token metrics, user management, audit logging, and zero-shell `ADMIN_USERNAMES` promotion.
 - **Rate-Limited Protection**: Per-user rate limits on all write endpoints prevent abuse and runaway costs.
 - **Privacy & ToS**: Privacy Policy and Terms of Service rendered in-app; required agreement checkbox on sign-up; full GDPR disclosure.
@@ -193,10 +195,43 @@ When a 429 is returned, the response includes a `Retry-After` header (seconds). 
 
 ## Running Tests
 
+PostCraft AI includes a complete automated test suite verifying auth isolation, pipeline graph execution, quality checker logic, research cascading, resume encryption/extraction, and draft editing/finalization locking:
+
 ```bash
 cd backend
 $env:PYTHONPATH="."; pytest -v
+# Or with uv / standard virtualenv:
+PYTHONPATH=. pytest -v
 ```
+
+**13 automated test cases passing**:
+- `test_admin.py` (5 tests): Unauthenticated, non-admin forbidden, metrics, audit logging, `ADMIN_USERNAMES` auto-promotion.
+- `test_auth.py` (1 test): Multi-user credential isolation.
+- `test_editor.py` (1 test): Per-draft chat revision isolation (`draft_index`), persistence of `active_draft_index`, and post-finalization edit lock (HTTP 400).
+- `test_pipeline_graph.py` (2 tests): Graph compilation and full execution.
+- `test_quality_checker.py` (1 test): Plagiarism and originality evaluation.
+- `test_research.py` (1 test): Cascading research cache miss and hit.
+- `test_resume.py` (2 tests): Resume upload lifecycle, Fernet encryption, and format extraction (PDF, text).
+
+---
+
+## Cloud Deployment (Render & Vercel)
+
+### Backend on Render
+1. Create a **Web Service** pointing to the repository root with root directory `backend`.
+2. Environment: **Python 3**.
+3. Build Command: `uv pip install -r pyproject.toml` (or standard `pip install -e .`).
+4. Start Command: `./start.sh` (executes Alembic database migrations and resume encryption checks before starting Uvicorn on `$PORT`).
+5. Provision a managed **PostgreSQL** instance on Render and supply `DATABASE_URL` (using `postgresql+asyncpg://`).
+6. Set required environment variables: `GEMINI_API_KEY`, `JWT_SECRET_KEY`, `RESUME_ENCRYPTION_KEY`, `ADMIN_USERNAMES`, `ENVIRONMENT=production`.
+
+### Frontend on Vercel
+1. Create a new Vercel project pointing to the repository with root directory `frontend`.
+2. Framework Preset: **Next.js**.
+3. Build Command: `npm run build`.
+4. Environment Variables:
+   - `NEXT_PUBLIC_API_URL`: Your deployed Render backend URL (e.g. `https://api.postcraft.example.com` or `https://postcraft-backend.onrender.com`).
+5. Output Directory: `.next`.
 
 ---
 
@@ -208,6 +243,7 @@ postcraft-ai/
 ├── docker-compose.prod.yml         # Production container definition (Caddy TLS, no public ports)
 ├── README.md                      # This file
 ├── PRIVACY.md                     # Privacy Policy, ToS, GDPR notes
+├── POLISH_CHANGELOG.md            # GSAP animation and motion design changelog
 ├── DEPLOYMENT.md                  # Pre-launch checklist & security scorecard
 ├── DEPLOYMENT_ARCHITECTURE.md     # Production split-host architecture & operations guide
 ├── PostCraft_AI_Complete_Documentation.md  # Deep technical architecture reference
@@ -216,10 +252,19 @@ postcraft-ai/
 ├── backend/
 │   ├── pyproject.toml
 │   ├── Dockerfile                 # Multi-stage production build
-│   ├── start.sh                  # Runs encryption migration, then uvicorn
+│   ├── start.sh                  # Runs alembic migrations + encryption check + uvicorn
 │   ├── alembic/                  # DB migrations
-│   │   └── versions/             # Individual migration files
+│   │   └── versions/             # Individual migration files (including 9c3e6b8d4f2a)
 │   ├── creators/                 # Curated top creator lists (LinkedIn, X)
+│   ├── tests/                    # Automated pytest suite
+│   │   ├── conftest.py
+│   │   ├── test_admin.py
+│   │   ├── test_auth.py
+│   │   ├── test_editor.py        # Draft chat isolation & finalization locking
+│   │   ├── test_pipeline_graph.py
+│   │   ├── test_quality_checker.py
+│   │   ├── test_research.py
+│   │   └── test_resume.py
 │   ├── app/
 │   │   ├── main.py              # FastAPI entrypoint, Sentry, security headers, middleware
 │   │   ├── models.py            # SQLAlchemy models (User, Generation, StyleProfile, UserResume, CostLog, etc.)
@@ -279,10 +324,12 @@ postcraft-ai/
         │   ├── generation/      # GenerationForm
         │   ├── editor/          # DraftEditor, DraftSelectionGrid
         │   ├── home/            # HomeView (greeting, quick capture)
-        │   ├── history/         # HistoryList
+        │   ├── history/         # HistoryList, DraftPreviewModal
         │   ├── profile/         # ProfilePage (Persona Engine + Drag-and-drop Resume + Danger Zone)
         │   └── legal/           # LegalView (Privacy Policy / ToS / GDPR via react-markdown)
         └── lib/
+            ├── utils/
+            │   └── markdown.ts  # Markdown rendering and text sanitization (DOMPurify)
             └── api/
                 ├── client.ts    # Central fetch client (429 handling, 401 → auth-expired)
                 ├── auth.ts

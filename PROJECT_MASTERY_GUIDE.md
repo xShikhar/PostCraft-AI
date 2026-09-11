@@ -1009,11 +1009,11 @@ Are you a VP of Engineering or CTO tired of seeing your team's potential eroded 
 +-----------------------------------+             +-------------------+   +---------------------------+
 | PK  id (UUID)                     |             | PK id (UUID)      |   | PK id (UUID)              |
 | FK  user_id (UUID)                |             | FK gen_id (UUID)  |   | FK generation_id (UUID)   |
-|     platform (String)             |             |    role (user/asst|   |    operation (String)     |
-|     structure (Text)              |             |    content (Text) |   |    prompt_tokens (Int)    |
-|     tone (Text)                   |             |    created_at     |   |    completion_tokens (Int)|
-|     pacing (Text)                 |             +-------------------+   |    estimated_cost_usd     |
-|     storytelling_technique (Text) |                                     |    created_at             |
+|     platform (String)             |             |    draft_index(Int|   |    operation (String)     |
+|     structure (Text)              |             |    role (user/asst|   |    prompt_tokens (Int)    |
+|     tone (Text)                   |             |    content (Text) |   |    completion_tokens (Int)|
+|     pacing (Text)                 |             |    created_at     |   |    estimated_cost_usd     |
+|     storytelling_technique (Text) |             +-------------------+   |    created_at             |
 |     formatting (Text)             |                                     +---------------------------+
 |     cta_style (Text)              |
 |     created_at (Timestamp)        |
@@ -1121,6 +1121,7 @@ erDiagram
     chat_history {
         uuid id PK
         uuid generation_id FK
+        int draft_index
         string role
         text content
         datetime created_at
@@ -1160,10 +1161,10 @@ erDiagram
 2. **`user_resumes`**: Stores candidate resume files with Fernet-encrypted raw text and Gemini-extracted structured summaries (role, industry, expertise skills, seniority).
 3. **`admin_audit_logs`**: Permanent audit ledger recording all administrative actions (promotions, demotions, user alterations) with JSON payloads and timestamps.
 4. **`projects`**: Organizes generations. A user can have separate projects for different brands or platforms.
-5. **`generations`**: Represents a single post creation attempt. Holds all 3 generated drafts, active draft index, and lifecycle status (`generating` → `editing` → `completed`).
+5. **`generations`**: Represents a single post creation attempt. Holds all 3 generated drafts, active draft index (`active_draft_index`), and lifecycle status (`generating` → `editing` → `finalized`).
 6. **`style_profiles`**: Stores extracted writing patterns. Kept separate from `generations` so historical styles can be queried across multiple projects.
-7. **`chat_history`**: Stores conversational tweak requests for the inline editor, enabling multi-turn conversation context.
-8. **`preferences`**: Stores explicit user preferences learned over time.
+7. **`chat_history`**: Stores conversational revision requests for the inline editor. Each record is scoped via `draft_index` (1, 2, or 3) so revisions to one draft never corrupt or alter context for other drafts.
+8. **`preferences`**: Stores explicit user preferences learned over time during post finalization.
 9. **`research_cache`**: Caches web search results across users to save external API costs and reduce latency.
 10. **`cost_logs`**: Tracks token counts and USD costs per LLM operation for auditing and usage tracking.
 
@@ -1260,4 +1261,7 @@ Tokens are stored in `localStorage`. This is simpler than `httpOnly` cookies and
 | **Change rate limits** | [`backend/app/api/auth.py`](file:///c:/Project/Ai%20post/backend/app/api/auth.py) (auth limits) and [`generations.py`](file:///c:/Project/Ai%20post/backend/app/api/generations.py) / [`editor.py`](file:///c:/Project/Ai%20post/backend/app/api/editor.py) (generation limits) |
 | **Change container startup or migration commands** | [`backend/start.sh`](file:///c:/Project/Ai%20post/backend/start.sh) & [`backend/Dockerfile`](file:///c:/Project/Ai%20post/backend/Dockerfile) |
 | **Migrate frontend to httpOnly cookies** | [`frontend/src/lib/api/client.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/api/client.ts) (drop `Authorization` header, add `credentials: 'include'`) + [`backend/app/main.py`](file:///c:/Project/Ai%20post/backend/app/main.py) (cookie middleware) + [`DEPLOYMENT.md`](file:///c:/Project/Ai%20post/DEPLOYMENT.md) (Item E) |
-| **Add or update automated tests** | [`backend/tests/`](file:///c:/Project/Ai%20post/backend/tests) |
+| **Add or update automated tests** | [`backend/tests/`](file:///c:/Project/Ai%20post/backend/tests) (including `test_editor.py` and `test_resume.py`) |
+| **Customize Draft Preview Modal or markdown formatting** | [`frontend/src/features/history/components/draft-preview-modal.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/history/components/draft-preview-modal.tsx) & [`frontend/src/lib/utils/markdown.ts`](file:///c:/Project/Ai%20post/frontend/src/lib/utils/markdown.ts) |
+| **Customize per-draft chat streams or finalization locking** | [`backend/app/api/editor.py`](file:///c:/Project/Ai%20post/backend/app/api/editor.py) & [`frontend/src/features/editor/components/draft-editor.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/editor/components/draft-editor.tsx) |
+| **Adjust GSAP micro-animations or card spotlight glow** | [`frontend/src/features/editor/components/draft-selection-grid.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/editor/components/draft-selection-grid.tsx), [`frontend/src/features/home/components/home-view.tsx`](file:///c:/Project/Ai%20post/frontend/src/features/home/components/home-view.tsx), and [`POLISH_CHANGELOG.md`](file:///c:/Project/Ai%20post/POLISH_CHANGELOG.md) |

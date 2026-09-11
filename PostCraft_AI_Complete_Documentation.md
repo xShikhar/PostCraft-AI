@@ -290,10 +290,18 @@ PostCraft AI uses ChromaDB to maintain long-term memory of a user's writing styl
 
 Following generation, users refine their chosen draft through an inline chat interface (`/api/generations/{id}/edit`):
 
-1. **Iterative Refinement**: Users issue natural-language revision instructions (e.g., *"Shorten the hook and emphasize ROI"*).
-2. **Context-Aware Editing**: The LLM edits the draft while maintaining conversation history.
-3. **Rate-Limited**: 20 edits / hour / user.
-4. **Preference Learning on Finalization**: Upon clicking "Finalize" (30 / hour / user), the system diffs the initial draft against the final user-approved text, extracts stylistic preferences, and saves them to the `Preference` table for future generations.
+1. **Per-Draft Revision Isolation**: Each draft (Draft 1, Draft 2, Draft 3) maintains its own independent conversational stream tagged with `draft_index`. Revisions requested for Draft 1 do not alter Draft 2 or Draft 3 context.
+2. **Context-Aware Editing**: The LLM receives the active draft's text alongside its specific revision history to produce accurate incremental improvements without forgetting previous instructions.
+3. **Strict Post-Finalization Lock**:
+   - Calling `POST /api/generations/{id}/finalize` accepts `final_draft_index` (1, 2, or 3).
+   - The chosen index is saved to `Generation.active_draft_index`, and status transitions to `"finalized"`.
+   - Once finalized, all edit endpoints are strictly locked: any subsequent edit requests return HTTP `400 Bad Request` (*"This post has been finalized. Editing is closed."*).
+4. **Finalized vs. Locked UI Distinction**:
+   - Only the chosen draft displays the green `✓ Finalized` badge.
+   - All other non-finalized drafts on that post display a muted `🔒 Locked` badge.
+   - In the Draft Editor, viewing a locked draft disables the input box, shows a locked header indicator, and informs the user: *"Draft X Locked — Draft Y was finalized for this post. Other drafts are locked."*
+5. **Preference Learning on Finalization**: Upon clicking "Finalize" (30 / hour / user), the system diffs the initial draft against the final user-approved text, extracts stylistic preferences via Gemini, and saves them to the `Preference` table for future generations.
+6. **Rate-Limited**: 20 edits / hour / user.
 
 ---
 
@@ -384,6 +392,7 @@ erDiagram
     chat_history {
         uuid id PK
         uuid generation_id FK
+        integer draft_index
         string role
         text content
         datetime created_at
@@ -479,15 +488,15 @@ When a user calls `DELETE /api/users/me`:
 | Method | Endpoint | Rate Limit | Description |
 |---|---|---|---|
 | `POST` | `/api/generations` | 10/hour | Generate 3 draft posts. Accepts `topic`, `platform`, `raw_thoughts`, optional `profile_context`. |
-| `POST` | `/api/generations/{id}/edit` | 20/hour | Submit natural-language edit instruction for an active draft. |
-| `POST` | `/api/generations/{id}/finalize` | 30/hour | Finalize draft, save preferences, and complete generation cycle. |
+| `POST` | `/api/generations/{id}/edit` | 20/hour | Submit natural-language edit instruction for an active draft. Accepts `draft_index: int = 1` and `instruction: str`. Isolated to the specified draft. |
+| `POST` | `/api/generations/{id}/finalize` | 30/hour | Finalize draft (`final_draft_index: int = 1`), persists `active_draft_index` in DB, extracts stylistic preferences, and locks editing permanently. |
 
 ### History Endpoints
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/generations` | ✅ Bearer | List recent generations for the user. |
-| `GET` | `/api/generations/{id}` | ✅ Bearer | Full generation record including chat history. |
+| `GET` | `/api/generations` | ✅ Bearer | List recent generations for the user (includes `draft_1`, `draft_2`, `draft_3`, `active_draft_index`, and `status`). |
+| `GET` | `/api/generations/{id}/full` | ✅ Bearer | Full generation record including partitioned `chat_history` with `draft_index`. |
 
 ### Administration Endpoints (Admin Only)
 
@@ -626,13 +635,15 @@ frontend/src/
 ├── features/
 │   ├── auth/                         # AuthScreen, Login/Signup, useAuth hook
 │   ├── generation/                   # GenerationForm
-│   ├── editor/                       # DraftEditor, DraftSelectionGrid
-│   ├── home/                         # HomeView
-│   ├── history/                      # HistoryList
-│   ├── profile/                      # ProfilePage (Persona Engine + Danger Zone)
+│   ├── editor/                       # DraftEditor (per-draft chat, finalized/locked pills), DraftSelectionGrid
+│   ├── home/                         # HomeView (recent drafts cards, cadence activity, quick prompt)
+│   ├── history/                      # HistoryList, DraftPreviewModal (centered dialog portal)
+│   ├── profile/                      # ProfilePage (Persona Engine + Drag-and-drop Resume + Danger Zone)
 │   └── legal/                        # LegalView (Privacy / ToS / GDPR)
 └── lib/
     ├── utils.ts                      # cn() class merger
+    ├── utils/
+    │   └── markdown.ts               # renderMarkdown with DOMPurify sanitization & stripMarkdown
     ├── hooks/                        # Shared React hooks
     └── api/                          # client.ts, auth.ts, generation.ts, user.ts, history.ts, resume.ts
 ```
@@ -651,7 +662,10 @@ The `!isAuthenticated` branch short-circuits to `<AuthScreen />` (or `<LegalView
 
 - **Persona Engine**: Three free-text fields (About Me, Resume & Background, Writing Style Profile) with per-section save buttons and a destructive "Danger Zone" for account deletion.
 - **Per-Generation Override**: Textarea on the main creation form allows temporary override of profile context for specific post angles.
-- **Interactive Editor**: Side-by-side post viewer and chat sidebar for natural-language post revisions.
+- **Interactive Multi-Draft Editor**: Side-by-side post viewer and per-draft chat sidebar. Revisions are isolated per `draft_index`. Finalized draft is styled green with `✓ Finalized`, while other drafts display `🔒 Locked`.
+- **Centered Draft Preview Modal**: Hooks to the exact center of the screen via React DOM portal (`createPortal(..., document.body)`), rendering formatted Markdown with headings, lists, bold text, and no raw markdown artifacts (`**`).
+- **GSAP Motion & Cursor Spotlight Glow**: Hovered cards smoothly scale (`scale: 1.025`) while sibling cards dim. The cursor spotlight glow tracks mouse coordinates viewport-relative (`e.clientX - rect.left`) so it never sticks to inner elements or text boundaries.
+- **Cadence Activity Glow**: Real calendar post frequency with reduced 20% glow and theme-appropriate palettes (royal purple for light mode, warm coral for dark mode).
 - **Legal pages**: Privacy / Terms / GDPR rendered with the design system, accessible from auth footer and sidebar.
 - **429 error handling**: All API calls surface a specific, honest rate-limit message — never a generic error.
 
@@ -667,7 +681,7 @@ The local development stack orchestrates 4 services:
 - **`postcraft-backend`**: FastAPI application on port `8000` with hot reloading
 - **`postcraft-frontend`**: Next.js application on port `3000`
 
-### Production Multi-Stage Setup
+### Production Multi-Stage Setup (Docker Compose)
 
 `docker-compose.prod.yml` orchestrates 5 services:
 
@@ -676,6 +690,20 @@ The local development stack orchestrates 4 services:
 - **`postcraft-backend`** — FastAPI on internal port 8000, no public ports.
 - **`postcraft-frontend`** — Next.js on internal port 3000, no public ports.
 - **`postcraft-caddy`** — Caddy 2 on public ports 80 + 443. Issues and renews Let's Encrypt certs automatically. Routes `/api/*` to the backend and everything else to the frontend.
+
+### Cloud Deployment (Render + Vercel Split-Host)
+
+1. **Backend on Render**:
+   - Web Service pointing to `backend` directory.
+   - Build command: `uv pip install -r pyproject.toml`.
+   - Start command: `./start.sh` (runs database migrations via `alembic upgrade head` and one-time resume encryption migration, then launches Uvicorn on `$PORT`).
+   - Managed PostgreSQL database on Render.
+   - Environment variables: `GEMINI_API_KEY`, `JWT_SECRET_KEY`, `RESUME_ENCRYPTION_KEY`, `ADMIN_USERNAMES`, `ENVIRONMENT=production`.
+
+2. **Frontend on Vercel**:
+   - Next.js framework preset with root directory `frontend`.
+   - Build command: `npm run build`.
+   - Environment variable: `NEXT_PUBLIC_API_URL` pointing to the Render backend service.
 
 ### Production Multi-Stage Backend Dockerfile
 
@@ -697,7 +725,7 @@ EXPOSE 8000
 CMD ["start.sh"]
 ```
 
-`start.sh` runs the resume encryption migration first, then `uvicorn` — so a freshly-restored DB always has encrypted resume rows.
+`start.sh` runs database migrations and the resume encryption migration first, then `uvicorn` — so a freshly-restored DB always has the latest schema and encrypted resume rows.
 
 ### Pre-Launch Checklist
 
