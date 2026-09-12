@@ -6,15 +6,15 @@ services:
     container_name: postcraft-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postcraft}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postcraft}
-      POSTGRES_DB: ${POSTGRES_DB:-postcraft}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in the environment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the environment}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in the environment}
     # No ports exposed — backend reaches postgres via internal Docker network (postgres:5432).
     # Only expose port if you need host access for debugging (remember to firewall it).
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postcraft}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -42,7 +42,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postcraft}:${POSTGRES_PASSWORD:-postcraft}@postgres:5432/${POSTGRES_DB:-postcraft}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,postcraft-backend}
