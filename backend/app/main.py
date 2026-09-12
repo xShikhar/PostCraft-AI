@@ -32,7 +32,12 @@ if _sentry_dsn:
         # Don't send PII by default. Resumes, draft text, and chat history
         # are user-generated content — must never end up in error reports.
         send_default_pii=False,
-        before_send=lambda event, hint: event,  # placeholder for future scrubbing
+    before_send=lambda event, hint: (
+            # Scrub request data (query params, cookies, headers) before sending to Sentry.
+            # Resume text, chat history, and user-generated content must never appear in error reports.
+            event.update({"request": {k: v for k, v in event.get("request", {}).items() if k in ("url", "method")}})
+            or event
+        ),
     )
     logger.info("Sentry error reporting initialized.")
 else:
@@ -97,6 +102,12 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=(), payment=()"
     )
+    # HSTS: tell browsers to only connect over HTTPS for the next year.
+    # Only applies in production (pointless for localhost dev).
+    if IS_PROD:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
 
 # 3. CORS — must be last so it can short-circuit preflight

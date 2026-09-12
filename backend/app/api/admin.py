@@ -125,12 +125,14 @@ async def get_admin_users(
         .outerjoin(gen_subquery, User.id == gen_subquery.c.user_id)
     )
 
-    if q and q.strip():
-        search_pattern = f"%{q.strip()}%"
+    # Compute search_pattern once to avoid variable scope issues across two conditional blocks
+    search_pattern = f"%{q.strip()}%" if (q and q.strip()) else None
+
+    if search_pattern:
         query = query.where(User.username.ilike(search_pattern))
 
     count_stmt = select(func.count(User.id))
-    if q and q.strip():
+    if search_pattern:
         count_stmt = count_stmt.where(User.username.ilike(search_pattern))
     total_res = await session.execute(count_stmt)
     total = total_res.scalar() or 0

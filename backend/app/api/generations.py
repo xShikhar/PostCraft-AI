@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -100,8 +100,8 @@ async def generate_post(
 async def list_generations(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    limit: int = 20,
-    offset: int = 0,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     platform: str | None = None,
     q: str | None = None,
 ):

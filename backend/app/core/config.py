@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://postcraft:postcraft@localhost:5432/postcraft"
+    DATABASE_URL: str = ""
     GEMINI_API_KEY: str = ""
     SERP_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8000
     ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     CORS_ORIGINS: list[str] | str = ["http://localhost:3000"]
     ALLOWED_HOSTS: str = "localhost,127.0.0.1,testserver,*.onrender.com"
     # JWT signing key — REQUIRED in production. The `security` module
@@ -56,9 +56,21 @@ class Settings(BaseSettings):
     @field_validator('DATABASE_URL')
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
-        if v and v.startswith("postgres://"):
+        if not v:
+            # Allow empty in test/CI environments where DB isn't available.
+            # Production deployments MUST set DATABASE_URL via env/secrets.
+            import os
+            if os.getenv("ENVIRONMENT", "development") == "production":
+                print(
+                    "FATAL: DATABASE_URL is not set in production. "
+                    "Set it via Render/Docker environment variables.",
+                    file=__import__('sys').stderr,
+                )
+                __import__('sys').exit(1)
+            return v
+        if v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql+asyncpg://", 1)
-        if v and v.startswith("postgresql://"):
+        if v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
     

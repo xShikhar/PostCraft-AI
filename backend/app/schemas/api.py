@@ -1,20 +1,28 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field, field_validator
 import uuid
 
+
 class GenerateRequest(BaseModel):
-    topic: str
-    platform: str
-    raw_thoughts: str
-    profile_context: Optional[str] = None  # Optional user bio/profile/resume text for lead-gen CTA context
+    topic: str = Field(..., min_length=1, max_length=500)
+    platform: Literal["linkedin", "x"] = Field(..., description="Target platform: 'linkedin' or 'x'")
+    raw_thoughts: str = Field(..., min_length=1, max_length=5000)
+    profile_context: Optional[str] = Field(default=None, max_length=3000)
     use_context: bool = True  # When False, skip injecting resume/about-me into the generation prompt
-    username: str = "default_user"  # hardcoded for prototype to avoid full auth flow
-    project_name: str = "Default Project"
+
+    @field_validator("topic", "raw_thoughts", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
 
 class SourceItemResponse(BaseModel):
     title: str = ""
     snippet: str = ""
     url: str = ""
+
 
 class GenerateResponse(BaseModel):
     generation_id: uuid.UUID
@@ -31,12 +39,14 @@ class GenerateResponse(BaseModel):
     )
     error: Optional[str] = None
 
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     username: str
     profile_context: Optional[str] = None
     about_me: Optional[str] = None
 
+
 class UserUpdate(BaseModel):
-    profile_context: Optional[str] = None
-    about_me: Optional[str] = None
+    profile_context: Optional[str] = Field(default=None, max_length=3000)
+    about_me: Optional[str] = Field(default=None, max_length=2000)
