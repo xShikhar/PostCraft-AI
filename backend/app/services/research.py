@@ -76,12 +76,15 @@ async def _search_tavily(query: str, api_key: str) -> tuple[List[str], List[Sour
             snippets = []
             sources = []
             for r in data.get("results", []):
-                content = r.get("raw_content") or r.get("content", "")
+                raw = (r.get("raw_content") or "").strip()
+                summary = (r.get("content") or "").strip()
+                # Cap raw content per result to 1,500 chars to avoid 100k+ token prompt bloat and 429 quota exhaustion
+                content = raw[:1500].strip() if raw else summary
                 if content:
                     snippets.append(content)
                     sources.append(SourceItem(
                         title=r.get("title", ""),
-                        snippet=r.get("content", content[:200]),
+                        snippet=summary[:200] if summary else content[:200],
                         url=r.get("url", "")
                     ))
             return snippets, sources
@@ -130,9 +133,13 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
         logger.warning("No Gemini API Key found for fallback.")
         return [], 0, 0, 0
     
-    client = ChatGoogleGenerativeAI(
+    from app.services.pipeline.llm_utils import create_gemini_client, invoke_with_bounded_backoff
+
+    client = create_gemini_client(
         model=settings.GEMINI_MODEL,
-        google_api_key=settings.GEMINI_API_KEY
+        google_api_key=settings.GEMINI_API_KEY,
+        max_retries=1,
+        timeout=60.0,
     )
     prompt = (
         f"Provide 3 distinct examples of high-quality structural patterns for {platform} posts about '{topic}'. "
@@ -141,7 +148,12 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
     
     try:
         t0 = time.perf_counter()
-        response = await client.ainvoke(prompt)
+        response = await invoke_with_bounded_backoff(
+            client.ainvoke,
+            prompt,
+            telemetry=telemetry,
+            node_name="research",
+        )
         t_call = time.perf_counter() - t0
         usage = getattr(response, "usage_metadata", None) or {}
         p_tok = usage.get("input_tokens", 0)

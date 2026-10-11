@@ -9,6 +9,7 @@ from app.services.pipeline.deps import PipelineDeps
 from app.services.pipeline.state import PipelineState, GraphState
 from app.services.pipeline.graph import build_graph
 from app.services.pipeline.telemetry import PipelineTelemetry
+from app.services.pipeline.llm_utils import create_gemini_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,11 @@ class PostGenerationPipeline:
         
         llm = None
         if settings.GEMINI_API_KEY:
-            llm = ChatGoogleGenerativeAI(
+            llm = create_gemini_client(
                 model=settings.GEMINI_MODEL,
                 google_api_key=settings.GEMINI_API_KEY,
+                max_retries=1,
+                timeout=60.0,
             )
 
         self.deps = PipelineDeps(session=session, llm=llm, settings=settings)

@@ -29,7 +29,8 @@ class VectorService:
         if self._client is None:
             chroma_host = os.getenv("CHROMA_HOST")
             chroma_port = os.getenv("CHROMA_PORT", "8000")
-            if chroma_host:
+            # Only attempt remote HttpClient if an explicit non-local host is specified (e.g. dedicated container)
+            if chroma_host and chroma_host not in ("localhost", "127.0.0.1", ""):
                 try:
                     logger.info(f"Connecting to ChromaDB HttpClient at {chroma_host}:{chroma_port}...")
                     self._client = chromadb.HttpClient(host=chroma_host, port=int(chroma_port))

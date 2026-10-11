@@ -155,11 +155,12 @@ async def summarize_to_structured(
     Calls Gemini once to summarize a resume's raw text into a structured profile.
     Runs at upload time only — no cost on subsequent generations.
     """
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from app.services.pipeline.llm_utils import create_gemini_client, invoke_with_bounded_backoff
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+    llm = create_gemini_client(
         google_api_key=gemini_api_key,
+        max_retries=1,
+        timeout=30.0,
     )
     structured_llm = llm.with_structured_output(ResumeSummary, include_raw=False)
 
@@ -172,7 +173,11 @@ RESUME TEXT:
 {raw_text[:8000]}
 """
     try:
-        summary = await structured_llm.ainvoke(prompt)
+        summary = await invoke_with_bounded_backoff(
+            structured_llm.ainvoke,
+            prompt,
+            node_name="resume_summary",
+        )
         if isinstance(summary, dict):
             return ResumeSummary(**summary)
         return summary

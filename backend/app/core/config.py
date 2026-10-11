@@ -8,7 +8,7 @@ load_dotenv()
 class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
     SERP_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     CHROMA_HOST: str = "localhost"

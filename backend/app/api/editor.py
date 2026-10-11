@@ -92,7 +92,7 @@ async def edit_generation(
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=settings.GEMINI_MODEL,
         contents=prompt
     )
     
@@ -190,7 +190,7 @@ async def finalize_generation(
         Write a concise, 2-sentence summary of their true stylistic preference based on this final result.
         """
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=settings.GEMINI_MODEL,
             contents=prompt
         )
         

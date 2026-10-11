@@ -14,6 +14,7 @@ from app.core.crypto import decrypt
 from app.services.pipeline.deps import PipelineDeps
 from app.services.pipeline.state import GraphState, ExtractedPattern, GeneratedDrafts, QualityVerdict
 from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prompt, build_quality_prompt
+from app.services.pipeline.llm_utils import invoke_with_bounded_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,12 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
 
         t0 = time.perf_counter()
         try:
-            response = await structured_llm.ainvoke(prompt)
+            response = await invoke_with_bounded_backoff(
+                structured_llm.ainvoke,
+                prompt,
+                telemetry=telemetry,
+                node_name="pattern_extraction",
+            )
             t_llm = time.perf_counter() - t0
             if isinstance(response, dict):
                 extracted = response.get("parsed")
@@ -456,7 +462,12 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
 
         t0 = time.perf_counter()
         try:
-            response = await structured_llm.ainvoke(prompt)
+            response = await invoke_with_bounded_backoff(
+                structured_llm.ainvoke,
+                prompt,
+                telemetry=telemetry,
+                node_name="draft_generation",
+            )
             t_llm = time.perf_counter() - t0
             if isinstance(response, dict):
                 drafts = response.get("parsed")
@@ -544,7 +555,12 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
 
         t0 = time.perf_counter()
         try:
-            response = await structured_llm.ainvoke(prompt)
+            response = await invoke_with_bounded_backoff(
+                structured_llm.ainvoke,
+                prompt,
+                telemetry=telemetry,
+                node_name="quality_check",
+            )
             t_llm = time.perf_counter() - t0
             if isinstance(response, dict):
                 verdict: QualityVerdict = response.get("parsed")

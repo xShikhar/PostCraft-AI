@@ -50,7 +50,7 @@ export default function Home() {
   const [profileContext, setProfileContext] = useState("");
   const [useContext, setUseContext] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Drafts | null>(null);
@@ -69,13 +69,6 @@ export default function Home() {
   // User info
   const [username, setUsername] = useState("");
 
-  const steps = [
-    "Researching topic...",
-    "Analyzing tone and patterns...",
-    "Generating drafts...",
-    "Quality check and polish...",
-  ];
-
   useEffect(() => {
     if (isAuthenticated) {
       getCurrentUser()
@@ -93,12 +86,13 @@ export default function Home() {
     }
   }, [isAuthenticated]);
 
+  // Honest elapsed timer during pipeline generation
   useEffect(() => {
     if (loading) {
-      setLoadingStep(0);
+      setElapsedSeconds(0);
       const interval = setInterval(() => {
-        setLoadingStep(prev => (prev + 1) % steps.length);
-      }, 2000);
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
       return () => clearInterval(interval);
     }
   }, [loading]);
@@ -359,8 +353,8 @@ export default function Home() {
                 useContext={useContext}
                 setUseContext={setUseContext}
                 loading={loading}
-                loadingStepText={steps[loadingStep]}
-                activeStep={loadingStep}
+                loadingStepText={elapsedSeconds === 0 ? "Initiating pipeline..." : `Synthesizing research & generating drafts... (${elapsedSeconds}s)`}
+                activeStep={2}
                 onSubmit={handleGenerate}
               />
             )}
