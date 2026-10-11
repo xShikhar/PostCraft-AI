@@ -9,3 +9,4 @@ class PipelineDeps:
     session: AsyncSession
     llm: Optional[ChatGoogleGenerativeAI]
     settings: Settings
+    draft_llm: Optional[ChatGoogleGenerativeAI] = None

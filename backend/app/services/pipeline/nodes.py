@@ -15,6 +15,7 @@ from app.services.pipeline.deps import PipelineDeps
 from app.services.pipeline.state import GraphState, ExtractedPattern, GeneratedDrafts, QualityVerdict
 from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prompt, build_quality_prompt
 from app.services.pipeline.llm_utils import invoke_with_bounded_backoff
+from app.services.pipeline.structural_checks import check_structural_tells
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
         t0 = time.perf_counter()
         try:
             historical_bias = await asyncio.wait_for(
-                asyncio.to_thread(_build_temporal_style_bias, state["user_id"], state["platform"]),
+                _build_temporal_style_bias(deps, state["user_id"], state["platform"]),
                 timeout=3.0,
             )
         except Exception as e:
@@ -274,14 +275,47 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
         return {"extracted_pattern": extracted}
 
 
-def _build_temporal_style_bias(user_id: str, platform: str) -> str:
+async def _build_temporal_style_bias(deps: PipelineDeps, user_id: str, platform: str) -> str:
     """
     Builds a recency-weighted historical style context from the last 3-5 style profiles.
     Most recent gets the highest weight, older ones get progressively less.
-    Falls back to single profile if fewer than 2 exist.
+    If ChromaDB is empty (e.g. after container restart on Render free tier), queries
+    PostgreSQL StyleProfile table as resilient fallback and re-seeds ChromaDB.
     """
+    recent = await asyncio.to_thread(vector_service.get_recent_profiles, str(user_id), platform, limit=5)
+    if not recent:
+        # Fallback to PostgreSQL
+        try:
+            user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+            stmt = (
+                select(StyleProfile)
+                .where(
+                    StyleProfile.user_id == user_uuid,
+                    StyleProfile.platform == platform,
+                )
+                .order_by(StyleProfile.id.desc())
+                .limit(5)
+            )
+            res = await deps.session.execute(stmt)
+            db_profiles = res.scalars().all()
+            if db_profiles:
+                logger.info(f"ChromaDB empty/reset. Restored temporal style bias from {len(db_profiles)} PostgreSQL StyleProfile rows.")
+                recent = []
+                for p in db_profiles:
+                    style_concat = (
+                        f"Structure: {p.structure} | Tone: {p.tone} | "
+                        f"Pacing: {p.pacing} | Storytelling: {p.storytelling_technique} | "
+                        f"Format: {p.formatting} | CTA: {p.cta_style}"
+                    )
+                    recent.append({"id": str(p.id), "text": style_concat, "created_at": str(getattr(p, 'created_at', ''))})
+                    # Re-seed Chroma in background thread
+                    try:
+                        vector_service.save_style_profile(str(p.id), str(user_id), platform, style_concat)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning(f"Failed to query PostgreSQL fallback for style profiles: {e}")
 
-    recent = vector_service.get_recent_profiles(user_id, platform, limit=5)
     if not recent:
         return ""
 
@@ -458,7 +492,8 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
             snippets_text += feedback_injection
 
         prompt = build_draft_prompt(state, pattern, snippets_text)
-        structured_llm = deps.llm.with_structured_output(GeneratedDrafts, include_raw=True)
+        draft_model = deps.draft_llm or deps.llm
+        structured_llm = draft_model.with_structured_output(GeneratedDrafts, include_raw=True)
 
         t0 = time.perf_counter()
         try:
@@ -544,6 +579,32 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                 node_name="quality_check",
                 target="python",
                 operation="check_originality",
+                duration_s=time.perf_counter() - t0,
+            )
+
+        # Gate 1.5: Deterministic checks for structural AI tells (em-dash density, 'not X, it's Y', triple parallel lists)
+        t0 = time.perf_counter()
+        for i, draft in enumerate(drafts_list):
+            is_clean, reason = check_structural_tells(draft)
+            if not is_clean:
+                if telemetry:
+                    telemetry.record_call(
+                        node_name="quality_check",
+                        target="python",
+                        operation="check_structural_tells",
+                        duration_s=time.perf_counter() - t0,
+                        status="fail",
+                    )
+                fail_msg = f"FAIL [structural_tells]: Draft {i+1} failed — {reason}"
+                return {
+                    "quality_results": fail_msg,
+                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Rewrite this draft avoiding formulaic AI contrast tropes ('not X, it's Y'), triple parallel lists, or excessive em-dashes.",
+                }
+        if telemetry:
+            telemetry.record_call(
+                node_name="quality_check",
+                target="python",
+                operation="check_structural_tells",
                 duration_s=time.perf_counter() - t0,
             )
 

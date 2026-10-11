@@ -24,15 +24,27 @@ class PostGenerationPipeline:
         settings = get_settings()
         
         llm = None
+        draft_llm = None
         if settings.GEMINI_API_KEY:
+            fast_model = settings.GEMINI_FAST_MODEL or settings.GEMINI_MODEL
             llm = create_gemini_client(
-                model=settings.GEMINI_MODEL,
+                model=fast_model,
                 google_api_key=settings.GEMINI_API_KEY,
                 max_retries=1,
                 timeout=60.0,
             )
+            draft_model_name = settings.GEMINI_DRAFT_MODEL or settings.GEMINI_MODEL
+            if draft_model_name != fast_model:
+                draft_llm = create_gemini_client(
+                    model=draft_model_name,
+                    google_api_key=settings.GEMINI_API_KEY,
+                    max_retries=1,
+                    timeout=60.0,
+                )
+            else:
+                draft_llm = llm
 
-        self.deps = PipelineDeps(session=session, llm=llm, settings=settings)
+        self.deps = PipelineDeps(session=session, llm=llm, settings=settings, draft_llm=draft_llm)
         self.graph = build_graph(self.deps)
 
     async def run(self, state: PipelineState) -> PipelineState:

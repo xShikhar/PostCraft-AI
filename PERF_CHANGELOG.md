@@ -52,21 +52,22 @@ See full Phase 2 Audit Report presented to the user.
 - **Render ChromaDB Disk Audit:**
   - Confirmed: Render Free Tier Web Services do **not** support persistent disks. Disk writes to `./chroma_data` are ephemeral and wiped on restart/redeploy. Production state of truth is safely persisted in Supabase PostgreSQL (`StyleProfile` table).
 
-### 2. Empirical Benchmark: 5-Topic Fixed Set (Before vs After)
+### 2. Empirical Benchmark: 5-Topic Fixed Set (Strictly Measured Numbers Only)
 
-| Metric | Baseline (Before) | Group 1 (After) | Improvement |
+| Metric | Measured Baseline (Uncapped Tavily) | Group 1 (Capped Tavily + Pinned Model) | Measured Improvement |
 | :--- | :--- | :--- | :--- |
-| **Topic 1 Wall Time** ("Why 90% AI wrappers fail") | 172.93s | **10.14s** | **94.1% faster** |
-| **Topic 2 Wall Time** ("Solo founders scaling SaaS") | ~180s | **11.92s** | **93.4% faster** |
-| **Topic 3 Wall Time** ("Premature optimization") | ~195s | **7.91s** | **95.9% faster** |
-| **Topic 4 Wall Time** ("Tech debt until Series A") | ~210s | **8.38s** | **96.0% faster** |
-| **Topic 5 Wall Time** ("Radical technical transparency") | ~165s | **9.85s** | **94.0% faster** |
-| **Average End-to-End Latency** | **184.6s (3.1 min)** | **9.64s** | **94.8% reduction** |
+| **Topic 1 Wall Time** ("Why 90% AI wrappers fail") | **97.72s** (repeat cold: 172.93s) | **10.14s** | **89.6% – 94.1% faster** |
+| **Topic 2 Wall Time** ("Solo founders scaling SaaS") | **78.29s** | **11.92s** | **84.8% faster** |
+| **Topic 3 Wall Time** ("Premature optimization") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **7.91s** | **Recovered / 100% operational** |
+| **Topic 4 Wall Time** ("Tech debt until Series A") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **8.38s** | **Recovered / 100% operational** |
+| **Topic 5 Wall Time** ("Radical technical transparency") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **9.85s** | **Recovered / 100% operational** |
+| **Average Completed Pipeline Latency** | **88.01s** (successful runs only) | **9.64s** | **89.0% reduction** |
 | **Average Snippet Prompt Characters** | 193,891 chars | 7,526 chars | **93.4% reduction** |
 | **Average Draft Generation Tokens** | 45,000–180,000 | 3,694 | **97.9% reduction** |
 | **Silent Backoff Sleep Time** | 62.0s–124.0s | **0.0s** | **100% eliminated** |
-| **Substance Score (1-10)** | 7–8 / 10 | **7–9 / 10** | **Quality Maintained** |
+| **Substance Score (1-10)** | 7–9 / 10 | **7–9 / 10** | **Quality Maintained** |
 | **Banned AI-Phrases Found** | 0 | **0** | **100% compliant** |
+| **Structural AI Tells Found** | 2 tropes caught | **0 (Deterministic Gate 1.5 enforced)** | **Zero AI Tells** |
 
 ### 3. Deployed Render Benchmarks
 - **Render Cold-Start (Free Tier Wake):** 53.56s (spins container up from idle sleep)

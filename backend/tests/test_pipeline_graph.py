@@ -83,6 +83,7 @@ async def test_pipeline_full_execution(db_session: AsyncSession):
     # 3. Instantiate and run pipeline
     pipeline = PostGenerationPipeline(session=db_session)
     pipeline.deps.llm = mock_llm
+    pipeline.deps.draft_llm = mock_llm
     # Rebuild graph with mocked LLM
     pipeline.graph = build_graph(pipeline.deps)
 

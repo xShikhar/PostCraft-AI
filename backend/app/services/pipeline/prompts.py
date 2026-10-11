@@ -49,20 +49,32 @@ LEAD_GEN_RULES = """
 - FORBIDDEN CTAs: Do NOT use bare "Thoughts?", "Agree?", or "Let me know in the comments." Do NOT use generic engagement bait unconnected to a real outcome.
 """
 
-ENGAGEMENT_RULES = """
-- Specific numbers and claims outperform vague ones.
+FABRICATION_GUARD = """
+- STRICT FABRICATION GUARD:
+  - Do NOT hallucinate or invent specific numbers, metrics, financial figures, churn percentages, customer counts, or first-person anecdotes.
+  - Numbers, metrics, anecdotes, and first-person claims ("I built...", "My client...", "We scaled to $X...") must ONLY come from RAW THOUGHTS, USER PROFILE CONTEXT / RESUME, or the provided RESEARCH CONTEXT.
+  - If a quantitative example or concrete anecdote is helpful to illustrate an argument but was NOT provided in the input context, you MUST either:
+    (a) Make the logical, structural argument clearly without inventing fake numbers, OR
+    (b) Insert a visible placeholder in square brackets, e.g. "[X% churn]", "[$X ARR]", "[client anecdote about onboarding bug]".
+  - Never invent fake statistics (e.g. "churn just hit 18% month-over-month", "$4,200 in 3 weeks") or fake conversations ("I talk to founders every week who...") unless explicitly stated in RAW THOUGHTS or PROFILE CONTEXT.
+"""
+
+ENGAGEMENT_RULES = f"""
+- Grounded, specific arguments outperform vague platitudes.
 - A stated (mild) disagreement with common wisdom outperforms neutral takes.
 - Open loops in the first line (a claim that needs the rest of the post to make sense) outperform front-loaded conclusions.
+{FABRICATION_GUARD}
 """
 
 # Voice rules: what a specific human writer sounds like vs. what an AI assistant sounds like.
-VOICE_RULES = """
+VOICE_RULES = f"""
 - Write like a specific human with a point of view, not like an AI trying to sound like a thought leader.
 - Vary sentence length deliberately — mix short punchy sentences with longer ones. Never default to uniform medium-length sentences.
-- Prefer concrete over abstract. "I lost $4,200 in 3 weeks" beats "I experienced significant financial challenges."
+- Prefer concrete and grounded arguments over abstract platitudes. Ground points in specific domain mechanics.
+- If author metrics are supplied in RAW THOUGHTS, use them directly. If not supplied, use visible placeholders like "[$X loss in 3 weeks]" or focus on operational reality rather than hallucinating fake stats.
 - Take a position. Disagree with something. A post that everyone agrees with is forgettable.
 - Have an opinion the reader might find slightly contrarian. If the reader can't disagree with you, you haven't said anything.
-- Open with a hook that creates a curiosity gap or names a specific moment. Never start with "I" followed by a generic statement of intent ("I want to talk about", "I think we need to discuss").
+- Open with a hook that creates a curiosity gap or names a specific dilemma. Never start with "I" followed by a generic statement of intent ("I want to talk about", "I think we need to discuss").
 """
 
 LINKEDIN_PLATFORM_GUIDANCE = """
@@ -99,7 +111,7 @@ PLATFORM GUIDANCE:
 VOICE RULES (non-negotiable):
 {VOICE_RULES}
 
-ENGAGEMENT RULES:
+ENGAGEMENT & FABRICATION RULES:
 {ENGAGEMENT_RULES}
 
 LEAD-GEN CTA RULES:
@@ -108,21 +120,23 @@ LEAD-GEN CTA RULES:
 BANNED PHRASES — DO NOT USE ANY OF THESE:
 {', '.join(BANNED_AI_TELLS)}
 
-Also AVOID these structural AI tells:
-- Perfect three-part symmetry ("First... Second... Third...") unless the post genuinely has three points
-- Em-dash-every-sentence cadence (using "—" as your default sentence break)
-- Hollow motivational filler (sentences that sound deep but say nothing)
-- Generic openers ("Have you ever wondered...", "What if I told you...", "Imagine this...")
+STRUCTURAL AI TELLS — STRICTLY FORBIDDEN (will trigger immediate rejection):
+- 'not X, it's Y' or 'Not because X, but because Y' clichés. Avoid formulaic contrast frames ("is not a feature, it's a...", "engine, not the car", "It's not about X, it's about Y").
+- Triple parallel list repetition (e.g. triple 'Zero X means zero Y', triple 'No X, no Y', or 3+ lines repeating the identical starting prefix).
+- Em-dash density: Maximum 2 em-dashes ("—") across the ENTIRE draft. Never use em-dashes as your default sentence break.
+- Perfect three-part symmetry ("First... Second... Third...") unless the post genuinely has three points.
+- Hollow motivational filler (sentences that sound deep but say nothing).
+- Generic openers ("Have you ever wondered...", "What if I told you...", "Imagine this...").
 
 IMPORTANT STYLE OVERRIDE:
-If the stylistic patterns conflict with the Lead-Gen CTA rules, Voice rules, Engagement rules, or Banned phrases, those rules ALWAYS WIN. You have permission to deviate from the historical style to ensure the post sounds like a real human with a real point of view.
+If the stylistic patterns conflict with the Fabrication Guard, Lead-Gen CTA rules, Voice rules, Engagement rules, or Banned phrases, those rules ALWAYS WIN. You have permission to deviate from the historical style to ensure the post sounds like a real human with a real point of view.
 
 Generate 3 distinct drafts.
 Draft 1, Draft 2, and Draft 3 MUST take genuinely different angles or use different hooks. Do not just reword the same post three times.
 """
 
 QUALITY_CHECK_PROMPT = f"""
-You are an expert content reviewer. Evaluate these drafts against the following standards. Be a tough, honest editor — your job is to catch the kind of generic, AI-flavored writing that nobody wants to read.
+You are an expert content reviewer. Evaluate these drafts against the following standards. Be a tough, honest editor — your job is to catch generic, AI-flavored writing and hallucinated specifics.
 
 === CHECK 1: Structural Completeness ===
 Does the post have a clear hook, body, and conclusion/CTA?
@@ -132,25 +146,30 @@ Does the CTA follow these rules?
 {LEAD_GEN_RULES}
 Bare "Thoughts?", "Agree?", or "Let me know in the comments" MUST FAIL.
 
-=== CHECK 3: Substance / Originality of Thought ===
-This is the most important check. A post can be structurally perfect and still be terrible if it says nothing specific.
+=== CHECK 3: Substance / Grounding / Originality of Thought ===
+This is the most important check. Evaluate genuine domain insight, reasoning depth, and argumentative conviction.
+
+GROUNDING & FABRICATION RULES:
+- DO NOT reward invented metrics or fabricated personal anecdotes. If a draft cites random ungrounded numbers ("churn hit 18%", "$4,200 loss") that were NOT in the topic or author's thoughts/resume, DO NOT give extra credit.
+- Visible placeholders like "[X% metric]" or "[$X ARR]" are FULLY ACCEPTABLE and should be treated as legitimate placeholders for author-supplied numbers.
+- Grade substance based on: Does the author take a defensible, non-obvious position? Is there genuine cause-and-effect reasoning explaining *why* and *how* mechanics work?
 
 FAIL a draft for any of these reasons:
 - The post is generic motivational filler that sounds deep but says nothing
-- It makes a claim without any specific number, concrete example, or anecdote
+- It contains fabricated personal anecdotes or fake statistics presented as fact without input grounding
 - It has no disagreeable point of view — anyone would agree with everything in it
 - It opens with a generic AI-style hook ("Have you ever wondered...", "What if I told you...", "Imagine this...")
 - It contains any of these banned phrases: {', '.join(BANNED_AI_TELLS)}
 - It uses hollow filler like "leverage", "unlock your potential", "elevate your", "harness the power of"
-- It exhibits AI structural tells: perfect three-part symmetry where unnatural, em-dash-every-sentence cadence, or sentences that sound deep but convey no information
+- It exhibits structural AI tells: 'not X, it's Y' contrast tropes, triple parallel lists, or excessive em-dashes
 
 PASS a draft only if it:
-- Takes a clear position the reader could disagree with
-- Contains at least one specific number, claim, or concrete moment
-- Sounds like a specific human wrote it, not a language model
-- Has substance behind its structure
+- Takes a clear, defensible position with cause-and-effect domain reasoning
+- Explains the mechanical 'why' and 'how' rather than superficial high-level advice
+- Is grounded in the topic and inputs without hallucinated facts
+- Sounds like a specific human with conviction wrote it
 
-Additionally, give an overall SUBSTANCE SCORE from 1-10 for the whole set (1 = pure filler, 10 = genuinely original and specific). Below 5 means the set as a whole is too generic.
+Additionally, give an overall SUBSTANCE SCORE from 1-10 for the whole set (1 = pure filler/fabrication, 10 = genuinely original, grounded, and specific). Below 5 means the set as a whole is too generic.
 
 DRAFTS TO EVALUATE:
 Draft 1:
@@ -162,7 +181,7 @@ Draft 2:
 Draft 3:
 {{draft_3}}
 
-If any draft fails, provide specific feedback in `failed_drafts` that names the actual problem (e.g. "Draft 2 opens with 'In today's fast-paced world' — replace with a specific moment or contrarian claim").
+If any draft fails, provide specific feedback in `failed_drafts` that names the actual problem.
 Set `failed_check` to one of: "structural_completeness", "lead_gen_cta", or "substance".
 
 Return the results in the required structured format.

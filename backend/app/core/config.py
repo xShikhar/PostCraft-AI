@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_FAST_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_DRAFT_MODEL: str | None = None
     SERP_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     CHROMA_HOST: str = "localhost"
