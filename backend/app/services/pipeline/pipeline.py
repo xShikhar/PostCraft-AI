@@ -8,10 +8,9 @@ from app.core.config import get_settings
 from app.services.pipeline.deps import PipelineDeps
 from app.services.pipeline.state import PipelineState, GraphState
 from app.services.pipeline.graph import build_graph
+from app.services.pipeline.telemetry import PipelineTelemetry
 
 logger = logging.getLogger(__name__)
-
-GEMINI_MODEL = "gemini-2.5-flash"
 
 class PostGenerationPipeline:
     """
@@ -26,7 +25,7 @@ class PostGenerationPipeline:
         llm = None
         if settings.GEMINI_API_KEY:
             llm = ChatGoogleGenerativeAI(
-                model=GEMINI_MODEL,
+                model=settings.GEMINI_MODEL,
                 google_api_key=settings.GEMINI_API_KEY,
             )
 
@@ -40,6 +39,7 @@ class PostGenerationPipeline:
         Accepts and returns PipelineState for API compatibility.
         Internally maps to GraphState (TypedDict) for LangGraph execution.
         """
+        telemetry = PipelineTelemetry(generation_id=str(state.generation_id))
         initial_state: GraphState = {
             "generation_id": str(state.generation_id),
             "project_id": str(state.project_id),
@@ -57,14 +57,17 @@ class PostGenerationPipeline:
             "substance_score": None,
             "error": "",
             "skip_extraction": False,
+            "telemetry": telemetry,
         }
 
         try:
             logger.info(f"Starting LangGraph pipeline for Generation {state.generation_id}")
             final = await self.graph.ainvoke(initial_state)
+            state.telemetry = telemetry.finish()
         except Exception as e:
             logger.error(f"LangGraph pipeline error: {e}", exc_info=True)
             state.error = str(e)
+            state.telemetry = telemetry.finish()
             try:
                 gen_id = state.generation_id
                 stmt = select(Generation).where(Generation.id == gen_id)

@@ -125,13 +125,13 @@ async def _perform_search(query: str, settings) -> tuple[List[str], List[SourceI
         return await _search_serp_api(query, settings.SERP_API_KEY)
     return [], []
 
-async def _generate_synthetic_structure(topic: str, platform: str, settings) -> List[str]:
+async def _generate_synthetic_structure(topic: str, platform: str, settings, telemetry=None) -> tuple[List[str], int, int, int]:
     if not settings.GEMINI_API_KEY:
         logger.warning("No Gemini API Key found for fallback.")
-        return []
+        return [], 0, 0, 0
     
     client = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=settings.GEMINI_MODEL,
         google_api_key=settings.GEMINI_API_KEY
     )
     prompt = (
@@ -140,20 +140,55 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings) -> 
     )
     
     try:
+        t0 = time.perf_counter()
         response = await client.ainvoke(prompt)
+        t_call = time.perf_counter() - t0
+        usage = getattr(response, "usage_metadata", None) or {}
+        p_tok = usage.get("input_tokens", 0)
+        c_tok = usage.get("output_tokens", 0)
+        r_tok = (usage.get("output_token_details") or {}).get("reasoning", 0)
+        if telemetry:
+            telemetry.record_call(
+                node_name="research",
+                target="gemini",
+                operation="synthetic_structure",
+                duration_s=t_call,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
+                reasoning_tokens=r_tok,
+            )
         if response.content:
-            return [str(response.content)]
+            return [str(response.content)], p_tok, c_tok, r_tok
     except Exception as e:
         logger.error(f"Fallback generation failed: {e}")
+        if telemetry:
+            telemetry.record_call(
+                node_name="research",
+                target="gemini",
+                operation="synthetic_structure",
+                duration_s=0.0,
+                status="error",
+                error_message=str(e),
+            )
         
-    return []
+    return [], 0, 0, 0
 
 
-async def cascading_search(topic: str, platform: str, session: AsyncSession) -> ResearchResult:
+async def cascading_search(topic: str, platform: str, session: AsyncSession, telemetry=None) -> ResearchResult:
+    import time
     settings = get_settings()
     
     # 1. Check Cache
+    t0 = time.perf_counter()
     cached_result = await _check_cache(topic, platform, session)
+    t_cache = time.perf_counter() - t0
+    if telemetry:
+        telemetry.record_call(
+            node_name="research",
+            target="postgres",
+            operation="cache_check",
+            duration_s=t_cache,
+        )
     if cached_result:
         return cached_result
 
@@ -168,11 +203,19 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
         # 2. Curated Search
         creators = load_creators(platform)
         if creators:
-            # Build a query biasing towards these creators
             site_modifier = "site:linkedin.com/in/" if platform.lower() == "linkedin" else "site:x.com/"
             creator_query = " OR ".join([f"{site_modifier}{c.replace(' ', '').lower()}" for c in creators[:3]])
             query = f"{topic} ({creator_query})"
+            t0 = time.perf_counter()
             snippets, sources = await _perform_search(query, settings)
+            t_search = time.perf_counter() - t0
+            if telemetry:
+                telemetry.record_call(
+                    node_name="research",
+                    target="tavily" if settings.TAVILY_API_KEY else "serpapi",
+                    operation="curated_search",
+                    duration_s=t_search,
+                )
             if snippets:
                 source = "curated_search"
                 confidence = "high"
@@ -180,14 +223,24 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
         # 3. General Search Fallback
         if not snippets:
             query = f"{topic} {platform} post examples"
+            t0 = time.perf_counter()
             snippets, sources = await _perform_search(query, settings)
+            t_search = time.perf_counter() - t0
+            if telemetry:
+                telemetry.record_call(
+                    node_name="research",
+                    target="tavily" if settings.TAVILY_API_KEY else "serpapi",
+                    operation="general_search",
+                    duration_s=t_search,
+                )
             if snippets:
                 source = "general_search"
                 confidence = "medium"
 
     # 4. Model Synthetic Structure
     if not snippets:
-        snippets = await _generate_synthetic_structure(topic, platform, settings)
+        synth_snippets, _, _, _ = await _generate_synthetic_structure(topic, platform, settings, telemetry=telemetry)
+        snippets = synth_snippets
         sources = []  # No URLs for synthetic content
         if snippets:
             source = "synthetic_structure"
@@ -195,7 +248,16 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession) -> 
 
     # Save to Cache if we got something
     if snippets and source:
+        t0 = time.perf_counter()
         await _save_cache(topic, platform, snippets, session)
+        t_save = time.perf_counter() - t0
+        if telemetry:
+            telemetry.record_call(
+                node_name="research",
+                target="postgres",
+                operation="cache_save",
+                duration_s=t_save,
+            )
         return ResearchResult(
             topic=topic,
             platform=platform,

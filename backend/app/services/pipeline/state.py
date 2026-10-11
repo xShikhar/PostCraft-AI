@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Any
 from pydantic import BaseModel, Field
 from app.schemas.research import ResearchResult
 
@@ -63,6 +63,7 @@ class PipelineState(BaseModel):
 
     # Any errors that occurred
     error: Optional[str] = None
+    telemetry: Optional[Any] = None
 
 class GraphState(TypedDict, total=False):
     """LangGraph state representation. A flat dict matching PipelineState fields + skip_extraction flag."""
@@ -86,3 +87,4 @@ class GraphState(TypedDict, total=False):
     substance_score: Optional[int]  # 1-10 score from substance gate
     error: Optional[str]
     skip_extraction: bool
+    telemetry: Any
