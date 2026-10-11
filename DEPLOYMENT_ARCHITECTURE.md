@@ -35,7 +35,7 @@ PostCraft AI is designed around a **split-host platform-managed architecture** i
 | :--- | :--- | :--- | :--- |
 | **Frontend** | **Vercel** | Next.js 16 (Turbopack, Serverless/Edge) | `https://<project-name>.vercel.app` (Custom domain supported) |
 | **Backend** | **Render** | Docker Container (`python:3.12-slim`) running `uvicorn` | `https://<service-name>.onrender.com` (TLS terminated by Render) |
-| **Database** | **Render** | PostgreSQL (Managed Service, SSL required) | Private internal connection or external `postgres://...` |
+| **Database** | **Supabase** | PostgreSQL 16 (Permanent Free Tier, Supavisor Session Pooler) | `aws-0-<region>.pooler.supabase.com:5432` / `postgresql+asyncpg://...` |
 | **Vector DB** | **Render Disk** | ChromaDB (local persistence on `/var/data`) | Local filesystem volume attached to the Render web service |
 
 ### How Frontend & Backend Communicate
@@ -81,7 +81,7 @@ The table below lists every environment variable required across production serv
 | :--- | :--- | :--- | :--- | :--- |
 | `JWT_SECRET_KEY` | Backend | Render Dashboard | Signs & verifies HS256 auth tokens | **CRASHES AT STARTUP**: Fail-closed guard exits with status 1 if missing or <32 chars. |
 | `RESUME_ENCRYPTION_KEY` | Backend | Render Dashboard | Fernet (AES-128-CBC + HMAC) key for encrypting resume PII at rest | **CRASHES ON RESUME ACTIONS**: Migration skips with warning; upload/view endpoints fail closed with status 1. |
-| `DATABASE_URL` | Backend | Render Dashboard (Auto-bound from Postgres) | Connection string for PostgreSQL | **CRASHES AT STARTUP**: SQLAlchemy engine cannot connect; migrations fail. |
+| `DATABASE_URL` | Backend | Render Dashboard | Connection string for Supabase PostgreSQL (e.g. `postgresql+asyncpg://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:5432/postgres`) | **CRASHES AT STARTUP**: SQLAlchemy engine cannot connect; migrations fail. |
 | `ALLOWED_HOSTS` | Backend | Render Dashboard | Trusted host whitelist for `TrustedHostMiddleware` | **HTTP 400 BAD REQUEST**: Returns 400 to any request with an unrecognized Host header. Defaults to `localhost,127.0.0.1,testserver,*.onrender.com`. |
 | `CORS_ORIGINS` | Backend | Render Dashboard | Allowed origins for browser CORS preflights | **BROWSER CORS BLOCK**: Requests from Vercel fail in the browser console. |
 | `GEMINI_API_KEY` | Backend | Render Dashboard | Google Gemini AI API key | **HTTP 500 / GENERATION FAILURE**: Pipeline nodes crash when calling the Gemini model. |

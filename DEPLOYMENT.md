@@ -67,10 +67,20 @@ Set this in the Google AI Studio console:
 3. The rate limits (10 gen/hour) cap per-user abuse but you still need
    the billing alarm for aggregate cost surprises.
 
-### ⚠️ Item D: Postgres password — rotate before first public deploy
+### ⚠️ Item D: Database (Supabase PostgreSQL — Permanent Free Tier)
 
-Set `POSTGRES_PASSWORD` to a strong random value in your env/secrets
-manager. Update `docker-compose.prod.yml` to use the env var (already wired).
+Render's free PostgreSQL instances expire after 30 days. In production, PostCraft AI uses **Supabase PostgreSQL** on its permanent free tier:
+
+1. **Provision Database**: Create a project in [Supabase](https://supabase.com) in your preferred AWS region (e.g. `ap-south-1`).
+2. **Use Connection Pooler (Session Mode, Port 5432)**:
+   - Supabase direct connections use IPv6, while Render containers use IPv4.
+   - Always use the **Supavisor Session Pooler** on port `5432` for seamless IPv4 routing and SQLAlchemy compatibility:
+     ```text
+     DATABASE_URL=postgresql+asyncpg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+     ```
+3. **Automated Migrations**: When Render boots the backend web service, `start.sh` runs `alembic upgrade head`, automatically generating all tables (`users`, `projects`, `drafts`, `resumes`, `admin_logs`).
+4. **Inactivity Rule**: Free Supabase projects pause after 7 days of 0 API requests. If inactive, unpause in 1 click from the Supabase dashboard.
+
 
 ### ⚠️ Item E: httpOnly cookie + CSRF
 

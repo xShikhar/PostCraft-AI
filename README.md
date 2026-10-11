@@ -222,7 +222,7 @@ PYTHONPATH=. pytest -v
 2. Environment: **Python 3**.
 3. Build Command: `uv pip install -r pyproject.toml` (or standard `pip install -e .`).
 4. Start Command: `./start.sh` (executes Alembic database migrations and resume encryption checks before starting Uvicorn on `$PORT`).
-5. Provision a managed **PostgreSQL** instance on Render and supply `DATABASE_URL` (using `postgresql+asyncpg://`).
+5. Provision a **Supabase PostgreSQL** instance (Permanent Free Tier). Copy the **Supavisor Session Pooler** URI (port 5432 for IPv4 compatibility) and supply DATABASE_URL formatted as postgresql+asyncpg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres. Alembic auto-creates all tables on deploy via start.sh.
 6. Set required environment variables: `GEMINI_API_KEY`, `JWT_SECRET_KEY`, `RESUME_ENCRYPTION_KEY`, `ADMIN_USERNAMES`, `ENVIRONMENT=production`.
 
 ### Frontend on Vercel
