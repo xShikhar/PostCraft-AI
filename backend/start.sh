@@ -10,13 +10,15 @@ until alembic upgrade head; do
     echo "FATAL: Database migrations failed after $MAX_RETRIES attempts."
     exit 1
   fi
-  echo "Migration failed (attempt $RETRY_COUNT/$MAX_RETRIES). Waiting 3s for DB to be ready..."
-  sleep 3
+  echo "Migration failed (attempt $RETRY_COUNT/$MAX_RETRIES). Waiting 2s for DB to be ready..."
+  sleep 2
 done
 
-echo "==> Running one-time resume encryption migration (if needed)..."
-# Safe to re-run: already-encrypted rows are skipped. Won't block on failure.
-python -m app.core.migrate_resume_encryption || echo "WARNING: Resume encryption migration failed. Existing plaintext rows are still readable — investigate and re-run manually."
+if [ "${RUN_RESUME_MIGRATION:-false}" = "true" ]; then
+  echo "==> Running one-time resume encryption migration..."
+  # Safe to re-run: already-encrypted rows are skipped. Won't block on failure.
+  python -m app.core.migrate_resume_encryption || echo "WARNING: Resume encryption migration failed. Existing plaintext rows are still readable — investigate and re-run manually."
+fi
 
 PORT_TO_USE="${PORT:-8000}"
 echo "==> Starting FastAPI with uvicorn on port $PORT_TO_USE..."

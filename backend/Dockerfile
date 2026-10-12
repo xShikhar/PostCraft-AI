@@ -46,7 +46,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 # Copy application code and ensure start script is executable
 COPY . .
-RUN chmod +x /app/start.sh
+RUN chmod +x /app/start.sh && python -m compileall -q /app
 
 EXPOSE 8000
 

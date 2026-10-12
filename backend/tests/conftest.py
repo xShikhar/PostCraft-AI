@@ -35,11 +35,16 @@ TestingSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    from app.services.pipeline.background_tasks import wait_background_tasks
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
-    async with TestingSessionLocal() as session:
-        yield session
+    with mock.patch("app.core.database._session_maker", TestingSessionLocal), \
+         mock.patch("app.services.pipeline.background_tasks._session_maker", TestingSessionLocal):
+        async with TestingSessionLocal() as session:
+            yield session
+        await wait_background_tasks(timeout=2.0)
         
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

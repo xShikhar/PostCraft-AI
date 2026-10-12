@@ -25,6 +25,10 @@ async def test_cascading_search_cache_miss_and_hit(db_session: AsyncSession):
         assert len(res1.content_snippets) == 2
         mock_tavily.assert_called_once()
         
+        # Await background cache write
+        from app.services.pipeline.background_tasks import wait_background_tasks
+        await wait_background_tasks()
+
         # Check DB
         stmt = select(ResearchCache).where(ResearchCache.topic == topic)
         db_res = await db_session.execute(stmt)
@@ -72,6 +76,10 @@ async def test_synthetic_fallback_tier(db_session: AsyncSession):
         assert "Synthetic Hook 1" in res.content_snippets[0]
         mock_synth.assert_called_once()
         
+        # Await background cache write
+        from app.services.pipeline.background_tasks import wait_background_tasks
+        await wait_background_tasks()
+
         # Confirm cached in database
         stmt = select(ResearchCache).where(ResearchCache.topic == topic)
         db_res = await db_session.execute(stmt)

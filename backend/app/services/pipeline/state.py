@@ -84,6 +84,8 @@ class GraphState(TypedDict, total=False):
     retry_count: int
     quality_results: Optional[str]
     quality_feedback: Optional[str]  # Populated by quality_check; consumed by draft_generation on retry
+    is_hard_failure: Optional[bool]  # True if hard policy/plagiarism/tell failure; False if soft miss
+    failed_draft_indices: Optional[list[int]]  # Specific draft indices that failed
     substance_score: Optional[int]  # 1-10 score from substance gate
     error: Optional[str]
     skip_extraction: bool

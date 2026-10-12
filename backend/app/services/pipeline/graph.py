@@ -98,9 +98,12 @@ def build_graph(deps: PipelineDeps):
         qr = state.get("quality_results", "")
         if not qr or qr.startswith("PASS"):
             return "save_generation"
-        if state.get("retry_count", 0) < MAX_RETRIES:
-            logger.warning(f"Quality Check Failed. Retry count: {state.get('retry_count', 0)}. Reason: {qr}")
+        # Only retry for hard failures (originality, structural tells, unsourced numbers, banned phrases)
+        if state.get("is_hard_failure", True) and state.get("retry_count", 0) < MAX_RETRIES:
+            logger.warning(f"Quality Check Hard Failure. Retry count: {state.get('retry_count', 0)}. Reason: {qr}")
             return "increment_retry"
+        # Soft misses (substance, generic CTA, etc.) route directly to save_generation as needs_review
+        logger.info(f"Quality check soft miss ({qr}) — proceeding to save_generation as needs_review without retrying.")
         return "save_generation"
 
     builder.add_conditional_edges(

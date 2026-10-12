@@ -17,6 +17,12 @@ from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prom
 from app.services.pipeline.llm_utils import invoke_with_bounded_backoff
 from app.services.pipeline.structural_checks import check_structural_tells
 from app.services.pipeline.unsourced_numbers import check_unsourced_numbers
+from app.services.pipeline.originality import check_originality
+from app.services.pipeline.background_tasks import (
+    run_in_background,
+    bg_log_cost,
+    bg_save_and_cleanup_style_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,47 +48,19 @@ def _extract_tokens(raw_msg):
     return p_tok, c_tok, r_tok
 
 async def log_cost(deps: PipelineDeps, operation: str, raw_message, generation_id: str):
-    """Logs the cost of an LLM call to the DB."""
-    usage = getattr(raw_message, "usage_metadata", None)
-    if not usage:
-        return
+    """Logs the cost of an LLM call to the DB in a background task with an isolated session."""
+    p_tok, c_tok, _ = _extract_tokens(raw_message)
+    if p_tok or c_tok:
+        run_in_background(
+            bg_log_cost(
+                generation_id=str(generation_id) if generation_id else "",
+                operation=operation,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
+            ),
+            task_name=f"bg_log_cost_{operation}",
+        )
 
-    prompt_tokens = usage.get("input_tokens", 0)
-    completion_tokens = usage.get("output_tokens", 0)
-    cost = (
-        (prompt_tokens / 1_000_000 * PRICE_PER_1M_PROMPT_TOKENS)
-        + (completion_tokens / 1_000_000 * PRICE_PER_1M_COMPLETION_TOKENS)
-    )
-
-    gen_id = uuid.UUID(str(generation_id)) if generation_id else None
-    cost_log = CostLog(
-        generation_id=gen_id,
-        operation=operation,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        estimated_cost_usd=cost,
-    )
-    deps.session.add(cost_log)
-    # Commit is deferred until save_generation
-
-def check_originality(draft: str, snippets: list[str]) -> tuple[bool, str]:
-    """Checks for 6-word overlaps between the draft and any source snippets."""
-    def get_ngrams(text: str, n: int = 6):
-        words = text.lower().split()
-        return set(tuple(words[i:i+n]) for i in range(len(words)-n+1))
-
-    draft_ngrams = get_ngrams(draft)
-    if not draft_ngrams:
-        return True, ""
-
-    for snippet in snippets:
-        snippet_ngrams = get_ngrams(snippet)
-        overlap = draft_ngrams.intersection(snippet_ngrams)
-        if overlap:
-            matched_phrase = " ".join(list(overlap)[0])
-            return False, f"Plagiarism detected. 6+ word match: '{matched_phrase}'"
-
-    return True, ""
 
 async def node_research(state: GraphState, deps: PipelineDeps) -> dict:
     logger.info("Executing node_research")
@@ -217,61 +195,26 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
                 cta_style="Question",
             )
 
-        t0 = time.perf_counter()
-        profile = StyleProfile(
-            user_id=uuid.UUID(str(state["user_id"])),
-            platform=state["platform"],
-            structure=extracted.structure,
-            tone=extracted.tone,
-            pacing=extracted.pacing,
-            storytelling_technique=extracted.storytelling_technique,
-            formatting=extracted.formatting,
-            cta_style=extracted.cta_style,
-        )
-        deps.session.add(profile)
-        await deps.session.commit()
-        await deps.session.refresh(profile)
-        if telemetry:
-            telemetry.record_call(
-                node_name="pattern_extraction",
-                target="postgres",
-                operation="save_style_profile",
-                duration_s=time.perf_counter() - t0,
-            )
-
-        style_concat = (
-            f"Structure: {extracted.structure} | Tone: {extracted.tone} | "
-            f"Pacing: {extracted.pacing} | Storytelling: {extracted.storytelling_technique} | "
-            f"Format: {extracted.formatting} | CTA: {extracted.cta_style}"
-        )
-        t0 = time.perf_counter()
+        # Offload style profile Postgres save, Chroma vector store write, and cleanup to background worker
         try:
-            await asyncio.wait_for(
-                asyncio.to_thread(
-                    vector_service.save_style_profile,
-                    str(profile.id), state["user_id"], state["platform"], style_concat
+            run_in_background(
+                bg_save_and_cleanup_style_profile(
+                    generation_id=str(state.get("generation_id", "")),
+                    user_id=str(state["user_id"]),
+                    platform=state["platform"],
+                    extracted_dict={
+                        "structure": extracted.structure,
+                        "tone": extracted.tone,
+                        "pacing": extracted.pacing,
+                        "storytelling_technique": extracted.storytelling_technique,
+                        "formatting": extracted.formatting,
+                        "cta_style": extracted.cta_style,
+                    },
                 ),
-                timeout=5.0,
+                task_name="bg_save_and_cleanup_style_profile",
             )
         except Exception as e:
-            logger.warning(f"Could not save style profile to vector store (non-fatal): {e}")
-        if telemetry:
-            telemetry.record_call(
-                node_name="pattern_extraction",
-                target="chromadb",
-                operation="save_vector_profile",
-                duration_s=time.perf_counter() - t0,
-            )
-
-        t0 = time.perf_counter()
-        await _cleanup_old_style_profiles(deps, state["user_id"], state["platform"])
-        if telemetry:
-            telemetry.record_call(
-                node_name="pattern_extraction",
-                target="chromadb",
-                operation="cleanup_profiles",
-                duration_s=time.perf_counter() - t0,
-            )
+            logger.warning(f"Could not schedule background style profile write: {e}")
 
         return {"extracted_pattern": extracted}
 
@@ -485,10 +428,15 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
 
         feedback_injection = ""
         if retry_count > 0 and state.get("quality_feedback"):
+            failed_indices = state.get("failed_draft_indices", [])
+            target_clause = ""
+            if failed_indices and len(failed_indices) < 3:
+                target_names = [f"Draft {idx+1}" for idx in failed_indices]
+                target_clause = f"\nFocus rewrite specifically on: {', '.join(target_names)}. The other draft(s) passed all quality gates."
             feedback_injection = (
                 f"\n\nCRITICAL FEEDBACK FROM PREVIOUS ATTEMPT:\n"
-                f"{state['quality_feedback']}\n"
-                f"You MUST fix these issues in your new drafts."
+                f"{state['quality_feedback']}{target_clause}\n"
+                f"You MUST fix these issues in your regenerated drafts."
             )
             snippets_text += feedback_injection
 
@@ -524,6 +472,16 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
                 )
             if raw_msg:
                 await log_cost(deps, "draft_generation", raw_msg, state["generation_id"])
+
+            # If retrying specific drafts, preserve the previously passing drafts
+            failed_indices = state.get("failed_draft_indices", [])
+            if retry_count > 0 and failed_indices and state.get("drafts"):
+                prev = state["drafts"]
+                d1 = drafts.draft_1 if 0 in failed_indices else getattr(prev, "draft_1", drafts.draft_1)
+                d2 = drafts.draft_2 if 1 in failed_indices else getattr(prev, "draft_2", drafts.draft_2)
+                d3 = drafts.draft_3 if 2 in failed_indices else getattr(prev, "draft_3", drafts.draft_3)
+                drafts = GeneratedDrafts(draft_1=d1, draft_2=d2, draft_3=d3)
+
             return {"drafts": drafts}
         except Exception as e:
             t_llm = time.perf_counter() - t0
@@ -561,10 +519,12 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
             getattr(drafts_obj, "draft_3", "") or "",
         ]
 
-        # Gate 1: 6-word originality check against research snippets
+        research_source = getattr(research, "source", None) if research else None
+
+        # Gate 1: Enhanced originality check against creator posts
         t0 = time.perf_counter()
         for i, draft in enumerate(drafts_list):
-            is_original, reason = check_originality(draft, snippets)
+            is_original, reason = check_originality(draft, snippets, research_source=research_source)
             if not is_original:
                 if telemetry:
                     telemetry.record_call(
@@ -574,7 +534,13 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                         duration_s=time.perf_counter() - t0,
                         status="fail",
                     )
-                return {"quality_results": f"FAIL [originality]: Draft {i+1} failed — {reason}"}
+                fail_msg = f"FAIL [originality]: Draft {i+1} failed — {reason}"
+                return {
+                    "quality_results": fail_msg,
+                    "is_hard_failure": True,
+                    "failed_draft_indices": [i],
+                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Paraphrase completely in your own words, do not copy phrases.",
+                }
         if telemetry:
             telemetry.record_call(
                 node_name="quality_check",
@@ -599,6 +565,8 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                 fail_msg = f"FAIL [structural_tells]: Draft {i+1} failed — {reason}"
                 return {
                     "quality_results": fail_msg,
+                    "is_hard_failure": True,
+                    "failed_draft_indices": [i],
                     "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Rewrite this draft avoiding formulaic AI contrast tropes ('not X, it's Y'), triple parallel lists, or excessive em-dashes.",
                 }
         if telemetry:
@@ -640,6 +608,8 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                 fail_msg = f"FAIL [unsourced_numbers]: Draft {i+1} failed — {fail_reason}"
                 return {
                     "quality_results": fail_msg,
+                    "is_hard_failure": True,
+                    "failed_draft_indices": [i],
                     "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Either omit the metric or wrap it in a bracketed placeholder like [insert MRR] or [X%].",
                 }
         if all_warnings:
@@ -653,7 +623,7 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
             )
 
         if not deps.llm:
-            return {"quality_results": "PASS"}
+            return {"quality_results": "PASS", "is_hard_failure": False}
 
         prompt = build_quality_prompt(state, drafts_obj)
         structured_llm = deps.llm.with_structured_output(QualityVerdict, include_raw=True)
@@ -693,12 +663,22 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                 metric.metadata["substance_score"] = verdict.substance_score
 
             fail_reason = None
+            is_hard = False
+            failed_indices: list[int] = []
             if not verdict.passed:
                 fail_check = verdict.failed_check or "unknown"
                 fail_reason = (
                     f"FAIL [{fail_check}]: "
                     f"{verdict.failed_drafts or 'No details provided.'}"
                 )
+                # Banned phrases is a hard failure; substance, cta_rules, and structure completeness are soft misses
+                is_hard = (fail_check == "banned_phrases")
+                failed_text = (verdict.failed_drafts or "").lower()
+                for idx in range(3):
+                    if f"draft {idx+1}" in failed_text:
+                        failed_indices.append(idx)
+                if not failed_indices:
+                    failed_indices = [0, 1, 2]
 
             feedback_parts: list[str] = []
             if fail_reason:
@@ -708,15 +688,15 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
             if verdict.substance_score is not None and verdict.substance_score < 5:
                 feedback_parts.append(
                     "SUBSTANCE FEEDBACK: Your drafts scored below 5/10 for substance/originality-of-thought. "
-                    "They read too generically / like AI filler. The prompt lacked specific numbers, "
-                    "concrete claims, or a clear point of view. On retry, inject more specific details, "
-                    "concrete examples, and a clear position the reader can disagree with. "
-                    "Rewrite with substance first, structure second."
+                    "They read too generically / like AI filler. Inject more specific details, "
+                    "concrete examples, and a clear position."
                 )
             quality_feedback = "\n".join(feedback_parts) if feedback_parts else ""
 
             result: dict = {
                 "quality_results": fail_reason or "PASS",
+                "is_hard_failure": is_hard,
+                "failed_draft_indices": failed_indices,
                 "quality_feedback": quality_feedback,
             }
             if verdict.substance_score is not None:
@@ -761,11 +741,8 @@ async def node_save_generation(state: GraphState, deps: PipelineDeps) -> dict:
                 generation.draft_2 = state["drafts"].draft_2
                 generation.draft_3 = state["drafts"].draft_3
 
-                if (
-                    state.get("retry_count", 0) >= MAX_RETRIES
-                    and state.get("quality_results")
-                    and not state["quality_results"].startswith("PASS")
-                ):
+                qr = state.get("quality_results") or ""
+                if qr and not qr.startswith("PASS"):
                     generation.status = "needs_review"
                 else:
                     generation.status = "editing"

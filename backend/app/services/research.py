@@ -256,18 +256,22 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession, tel
             source = "synthetic_structure"
             confidence = "low"
 
-    # Save to Cache if we got something
+    # Save to Cache if we got something (in background, off hot path)
     if snippets and source:
-        t0 = time.perf_counter()
-        await _save_cache(topic, platform, snippets, session)
-        t_save = time.perf_counter() - t0
-        if telemetry:
-            telemetry.record_call(
-                node_name="research",
-                target="postgres",
-                operation="cache_save",
-                duration_s=t_save,
+        try:
+            from app.services.pipeline.background_tasks import run_in_background, bg_save_research_cache
+            run_in_background(
+                bg_save_research_cache(
+                    generation_id=telemetry.generation_id if telemetry else None,
+                    topic=topic,
+                    platform=platform,
+                    snippets=snippets,
+                ),
+                task_name="bg_save_research_cache",
             )
+        except Exception as e:
+            logger.warning(f"Could not schedule background research cache write: {e}")
+
         return ResearchResult(
             topic=topic,
             platform=platform,

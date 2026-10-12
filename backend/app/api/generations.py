@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,11 @@ from app.api.auth import get_current_user, auth_limiter
 
 router = APIRouter(prefix="/api/generations", tags=["generations"])
 
+# Concurrency guard: 4 concurrent pipeline generations sized to model quota
+GENERATION_CONCURRENCY_SEMAPHORE = asyncio.Semaphore(4)
+QUEUE_WAIT_TIMEOUT_SECONDS = 10.0
+DAILY_GENERATION_CAP = 50
+
 @router.post("", response_model=GenerateResponse)
 @auth_limiter.limit("10/hour")
 async def generate_post(
@@ -20,6 +27,20 @@ async def generate_post(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Enforce daily per-user generation cap
+    today_start = datetime.now(timezone.utc) - timedelta(days=1)
+    daily_count_stmt = (
+        select(func.count(Generation.id))
+        .join(Project, Generation.project_id == Project.id)
+        .where(Project.user_id == current_user.id, Generation.created_at >= today_start)
+    )
+    daily_count = (await session.execute(daily_count_stmt)).scalar() or 0
+    if daily_count >= DAILY_GENERATION_CAP:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily generation limit reached ({DAILY_GENERATION_CAP} posts per 24 hours). Please try again tomorrow.",
+        )
+
     # Fetch or create a project for this user/platform
     stmt = select(Project).where(
         Project.user_id == current_user.id,
@@ -64,9 +85,17 @@ async def generate_post(
         use_context=req.use_context,
     )
 
-    # Run Pipeline
-    pipeline = PostGenerationPipeline(session)
-    final_state = await pipeline.run(state)
+    # Run Pipeline with concurrency guard and queue timeout
+    try:
+        async with asyncio.timeout(QUEUE_WAIT_TIMEOUT_SECONDS):
+            async with GENERATION_CONCURRENCY_SEMAPHORE:
+                pipeline = PostGenerationPipeline(session)
+                final_state = await pipeline.run(state)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=429,
+            detail="The generation service is currently processing maximum concurrent requests. Please wait a few seconds and try again.",
+        )
 
     # Build sources list from research result
     sources = []

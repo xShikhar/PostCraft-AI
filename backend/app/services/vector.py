@@ -1,9 +1,11 @@
 import os
-import chromadb
 import logging
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Lazy reference to chromadb — populated on first client access or patched by tests
+chromadb = None
 
 
 class VectorService:
@@ -26,7 +28,10 @@ class VectorService:
 
     @property
     def client(self):
+        global chromadb
         if self._client is None:
+            if chromadb is None:
+                import chromadb
             chroma_host = os.getenv("CHROMA_HOST")
             chroma_port = os.getenv("CHROMA_PORT", "8000")
             # Only attempt remote HttpClient if an explicit non-local host is specified (e.g. dedicated container)
