@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { Loader2, Copy, ArrowLeft, Check, Lock, MessageSquare, Send, Sparkles } from "lucide-react";
+import { Loader2, Copy, ArrowLeft, Check, Lock, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { getUnfilledPlaceholders } from "@/lib/utils/markdown";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -53,9 +55,30 @@ export function DraftEditor({
   allDrafts,
   onSelectDraftIndex,
 }: DraftEditorProps) {
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(chatHistory.length);
+
+  const unfilledPlaceholders = getUnfilledPlaceholders(draftContent);
+
+  const handleCopyClick = () => {
+    if (unfilledPlaceholders.length > 0) {
+      toast.warning(
+        `Draft copied, but contains ${unfilledPlaceholders.length} unfilled placeholder(s): ${unfilledPlaceholders.join(", ")}. Fill them in before publishing!`,
+        { duration: 5000 }
+      );
+    }
+    onCopy(draftContent);
+  };
+
+  const handleFinalizeClick = () => {
+    if (unfilledPlaceholders.length > 0) {
+      setShowFinalizeConfirm(true);
+      return;
+    }
+    onFinalize();
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -124,7 +147,10 @@ export function DraftEditor({
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => onSelectDraftIndex?.(idx)}
+                    onClick={() => {
+                      setShowFinalizeConfirm(false);
+                      onSelectDraftIndex?.(idx);
+                    }}
                     className={`
                       px-space-sm py-1 rounded-lg font-label-xs text-label-xs font-semibold transition-all flex items-center gap-1.5
                       ${isActive
@@ -167,7 +193,7 @@ export function DraftEditor({
             )
           ) : (
             <Button
-              onClick={onFinalize}
+              onClick={handleFinalizeClick}
               disabled={loading}
               size="sm"
               className="rounded-full bg-primary hover:bg-primary-container text-on-primary font-label-sm font-semibold"
@@ -177,7 +203,7 @@ export function DraftEditor({
             </Button>
           )}
           <button
-            onClick={() => onCopy(draftContent)}
+            onClick={handleCopyClick}
             className="w-9 h-9 rounded-lg bg-surface-subtle hover:bg-surface-container-high flex items-center justify-center text-text-muted hover:text-text-display transition-colors"
             aria-label="Copy draft"
           >
@@ -185,6 +211,44 @@ export function DraftEditor({
           </button>
         </div>
       </div>
+
+      {/* Unfilled Placeholders Finalize Confirmation Card */}
+      {showFinalizeConfirm && (
+        <div className="mb-space-md p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-text-display animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-amber-200">
+                Notice: Unfilled Placeholders in Draft {activeDraftIndex}
+              </h4>
+              <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                This draft contains <span className="font-semibold text-amber-300">{unfilledPlaceholders.length} placeholder(s)</span> ({unfilledPlaceholders.join(", ")}).
+                These brackets protect against unverified claims. Are you sure you want to finalize without replacing them with real data?
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setShowFinalizeConfirm(false);
+                    onFinalize();
+                  }}
+                  className="rounded-full bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs h-8 px-4"
+                >
+                  Finalize Anyway
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowFinalizeConfirm(false)}
+                  className="rounded-full text-xs h-8 px-4 text-text-muted hover:text-text-display"
+                >
+                  Cancel & Edit First
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-space-lg items-start">
@@ -200,6 +264,26 @@ export function DraftEditor({
                 {draftContent.length} chars · {draftContent.split(/\s+/).filter(Boolean).length} words
               </span>
             </div>
+            {unfilledPlaceholders.length > 0 && (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium mb-space-md">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-semibold text-amber-200">
+                    {unfilledPlaceholders.length} Unfilled Placeholder{unfilledPlaceholders.length > 1 ? "s" : ""}
+                  </div>
+                  <div className="mt-1 font-mono text-amber-300 text-[11px] flex flex-wrap gap-1.5">
+                    {unfilledPlaceholders.map((p, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-1.5 text-text-muted text-[11px] leading-relaxed">
+                    Values inside brackets were held back by the anti-hallucination guard. Use the chat stream on the right or edit to supply your verified numbers.
+                  </div>
+                </div>
+              </div>
+            )}
             <div
               className="font-body-md text-body-md text-text-display leading-relaxed prose-editor [&_strong]:text-text-display [&_strong]:font-bold"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(draftContent) }}

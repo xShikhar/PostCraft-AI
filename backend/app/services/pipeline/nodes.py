@@ -16,6 +16,7 @@ from app.services.pipeline.state import GraphState, ExtractedPattern, GeneratedD
 from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prompt, build_quality_prompt
 from app.services.pipeline.llm_utils import invoke_with_bounded_backoff
 from app.services.pipeline.structural_checks import check_structural_tells
+from app.services.pipeline.unsourced_numbers import check_unsourced_numbers
 
 logger = logging.getLogger(__name__)
 
@@ -605,6 +606,49 @@ async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
                 node_name="quality_check",
                 target="python",
                 operation="check_structural_tells",
+                duration_s=time.perf_counter() - t0,
+            )
+
+        # Gate 1.6: Deterministic unsourced-number check
+        source_texts = [
+            state.get("topic", "") or "",
+            state.get("raw_thoughts", "") or "",
+            state.get("profile_context", "") or "",
+        ]
+        if snippets:
+            source_texts.extend(snippets)
+        if state.get("use_context", True) and state.get("user_id"):
+            bg_ctx = await _build_background_context(deps, state["user_id"])
+            if bg_ctx:
+                source_texts.append(bg_ctx)
+
+        t0 = time.perf_counter()
+        all_warnings: list[str] = []
+        for i, draft in enumerate(drafts_list):
+            is_valid, fail_reason, warnings = check_unsourced_numbers(draft, source_texts)
+            if warnings:
+                all_warnings.extend([f"Draft {i+1}: {w}" for w in warnings])
+            if not is_valid:
+                if telemetry:
+                    telemetry.record_call(
+                        node_name="quality_check",
+                        target="python",
+                        operation="check_unsourced_numbers",
+                        duration_s=time.perf_counter() - t0,
+                        status="fail",
+                    )
+                fail_msg = f"FAIL [unsourced_numbers]: Draft {i+1} failed — {fail_reason}"
+                return {
+                    "quality_results": fail_msg,
+                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Either omit the metric or wrap it in a bracketed placeholder like [insert MRR] or [X%].",
+                }
+        if all_warnings:
+            logger.warning(f"Quality check detected generic unsourced thresholds: {all_warnings}")
+        if telemetry:
+            telemetry.record_call(
+                node_name="quality_check",
+                target="python",
+                operation="check_unsourced_numbers",
                 duration_s=time.perf_counter() - t0,
             )
 

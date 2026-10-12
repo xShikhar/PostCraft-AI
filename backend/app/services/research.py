@@ -1,8 +1,9 @@
 import os
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,9 +11,7 @@ from sqlalchemy.future import select
 
 from app.models import ResearchCache
 from app.schemas.research import ResearchResult, SourceItem
-from app.core.config import get_settings
-
-from langchain_google_genai import ChatGoogleGenerativeAI
+from app.core.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +186,6 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
 
 
 async def cascading_search(topic: str, platform: str, session: AsyncSession, telemetry=None) -> ResearchResult:
-    import time
     settings = get_settings()
     
     # 1. Check Cache

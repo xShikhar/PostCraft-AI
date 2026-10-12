@@ -32,10 +32,33 @@ export function renderMarkdown(text: string): string {
   // Bullet list items: e.g. "- item" or "* item"
   html = html.replace(/^[*\-]\s+(.+)$/gm, '<li class="ml-5 list-disc my-1 text-text-body/90">$1</li>');
 
+  // Unfilled placeholders: e.g. [MRR threshold] or [X% client churn]
+  // Excludes markdown links [text](...) via (?!\s*\() and numeric citation brackets [1], [2] via (?!\d+\])
+  // Perfectly matches adjacent bracket pairs like [MRR threshold][X% churn]
+  // Uses theme tokens for high-contrast visibility in both light and dark modes
+  const PLACEHOLDER_REGEX = /\[(?!\d+\])([^\]\(\n\r]+)\](?!\s*\()/g;
+  html = html.replace(
+    PLACEHOLDER_REGEX,
+    '<mark class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/40 dark:bg-amber-500/25 dark:text-amber-200 dark:border-amber-500/50 not-italic select-all" title="Unfilled placeholder: fill before publishing">[$1]</mark>'
+  );
+
   // Convert remaining newlines to linebreaks
   html = html.replace(/\n/g, "<br/>");
 
-  return DOMPurify.sanitize(html);
+  // DOMPurify runs AFTER all transformations to ensure absolute XSS safety
+  return DOMPurify.sanitize(html, { ADD_TAGS: ["mark"], ADD_ATTR: ["class", "title"] });
+}
+
+/**
+ * Extracts all unique unfilled bracketed placeholders from text (e.g. ['[MRR threshold]']).
+ * Strictly excludes markdown links [text](...) and pure citation numbers like [1], [2],
+ * while correctly matching adjacent brackets like [Metric A][Metric B].
+ */
+export function getUnfilledPlaceholders(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/\[(?!\d+\])([^\]\(\n\r]+)\](?!\s*\()/g);
+  if (!matches) return [];
+  return Array.from(new Set(matches.map((m) => m.trim())));
 }
 
 /**

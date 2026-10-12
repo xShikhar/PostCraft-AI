@@ -58,10 +58,10 @@ See full Phase 2 Audit Report presented to the user.
 | :--- | :--- | :--- | :--- |
 | **Topic 1 Wall Time** ("Why 90% AI wrappers fail") | **97.72s** (repeat cold: 172.93s) | **10.14s** | **89.6% – 94.1% faster** |
 | **Topic 2 Wall Time** ("Solo founders scaling SaaS") | **78.29s** | **11.92s** | **84.8% faster** |
-| **Topic 3 Wall Time** ("Premature optimization") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **7.91s** | **Recovered / 100% operational** |
-| **Topic 4 Wall Time** ("Tech debt until Series A") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **8.38s** | **Recovered / 100% operational** |
-| **Topic 5 Wall Time** ("Radical technical transparency") | *Failed baseline: 429 Quota Exceeded (250k TPM breach)* | **9.85s** | **Recovered / 100% operational** |
-| **Average Completed Pipeline Latency** | **88.01s** (successful runs only) | **9.64s** | **89.0% reduction** |
+| **Topic 3 Wall Time** ("Premature optimization") | **242.0s** (hit multiple retries/backoff) | **7.91s** | **96.7% faster** |
+| **Topic 4 Wall Time** ("Tech debt until Series A") | *Not measured* | **8.38s** | **Operational (8.38s)** |
+| **Topic 5 Wall Time** ("Radical technical transparency") | *Not measured* | **9.85s** | **Operational (9.85s)** |
+| **Average Completed Pipeline Latency** | **139.34s** (measured baseline runs) | **~15.5s** (average with current gates & retries, local) | **88.9% reduction** |
 | **Average Snippet Prompt Characters** | 193,891 chars | 7,526 chars | **93.4% reduction** |
 | **Average Draft Generation Tokens** | 45,000–180,000 | 3,694 | **97.9% reduction** |
 | **Silent Backoff Sleep Time** | 62.0s–124.0s | **0.0s** | **100% eliminated** |
@@ -69,9 +69,10 @@ See full Phase 2 Audit Report presented to the user.
 | **Banned AI-Phrases Found** | 0 | **0** | **100% compliant** |
 | **Structural AI Tells Found** | 2 tropes caught | **0 (Deterministic Gate 1.5 enforced)** | **Zero AI Tells** |
 
-### 3. Deployed Render Benchmarks
-- **Render Cold-Start (Free Tier Wake):** 53.56s (spins container up from idle sleep)
-- **Render Warm Response (`/health`):** 0.739s
+### 3. Deployed Production Benchmarks
+- **Deployed Full Generation (Render + Vercel):** *Not yet measured* (local branch is ahead of `origin/main` by 3 commits; Render deployment pending git push).
+- **Render Endpoint Ping (`/health`):** 0.739s warm / 53.56s cold container wake.
+- **Vercel Frontend Ping (`https://postcraft.vercel.app`):** 0.55s warm / 1.29s cold.
 
 ### 4. Rollback Instructions
 To revert Group 1 changes:

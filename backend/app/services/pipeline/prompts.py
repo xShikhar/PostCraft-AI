@@ -41,12 +41,17 @@ Additionally, consider these research snippets about the current topic to ensure
 Return your analysis in the required structured format.
 """
 
-# New concrete lead-gen rules for draft generation
+# Concrete lead-gen rules for draft generation
 LEAD_GEN_RULES = """
-- If the user provides a profile context suggesting they offer a service or product: The CTA MUST drive DMs or profile visits. Frame it as an invitation (e.g. "Send me a DM if you're struggling with X"), not a hard pitch.
-- If the user is building authority/personal brand (or profile context is absent): The CTA MUST drive saves/shares or ask a specific, opinion-eliciting question (e.g. "What's the one metric you track for X?").
-- If the user is job-seeking/networking: The CTA MUST invite connection requests or specific expertise-relevant replies.
-- FORBIDDEN CTAs: Do NOT use bare "Thoughts?", "Agree?", or "Let me know in the comments." Do NOT use generic engagement bait unconnected to a real outcome.
+- TOPIC-ANCHORED CTA REQUIREMENT (non-negotiable):
+  - The CTA MUST specifically name a concrete concept, dilemma, metric, tool, or trade-off directly from the post's own topic. Never use canned templates or abstract placeholders.
+  - If the user provides profile context suggesting they offer a product, service, or advisory: The CTA must frame an invitation to direct message or connect, specifically naming the exact domain challenge analyzed in the post.
+  - If the user is building authority/thought leadership (or profile context is absent): The CTA must pose a sharp, topic-specific debate question or trade-off that directly names the technical or operational mechanism from the body of the post.
+  - If the user is networking/career-focused: The CTA must invite discussion centered on the specific domain topic covered.
+- FORBIDDEN CTAs (will trigger immediate gate rejection):
+  - Never use canned phrasing or generic templates (e.g. do not write "struggling with X", "dealing with X", or "hit save if you agree").
+  - Never use bare engagement bait ("Thoughts?", "Agree?", "What do you think?", "Let me know in the comments").
+  - The closing line MUST feel like a natural, substantive extension of the post's unique argument.
 """
 
 FABRICATION_GUARD = """
@@ -144,7 +149,7 @@ Does the post have a clear hook, body, and conclusion/CTA?
 === CHECK 2: Lead-Gen CTA Quality ===
 Does the CTA follow these rules?
 {LEAD_GEN_RULES}
-Bare "Thoughts?", "Agree?", or "Let me know in the comments" MUST FAIL.
+The CTA MUST specifically name a concept, tool, metric, or trade-off from the post's own topic. Bare "Thoughts?", "Agree?", generic "Let me know in the comments", or canned templates MUST FAIL.
 
 === CHECK 3: Substance / Grounding / Originality of Thought ===
 This is the most important check. Evaluate genuine domain insight, reasoning depth, and argumentative conviction.
