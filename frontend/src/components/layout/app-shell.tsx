@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useRef, useEffect } from "react";
+import { ReactNode, useState, useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { Sidebar } from "./sidebar";
@@ -9,13 +9,13 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Home, History, Mic, Plus, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
+import { useMounted } from "@/lib/use-mounted";
 
 gsap.registerPlugin(useGSAP);
 
 function CollapsedLogo() {
   const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
   const activeTheme = mounted ? resolvedTheme || theme : "light";
   return (
     <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden">

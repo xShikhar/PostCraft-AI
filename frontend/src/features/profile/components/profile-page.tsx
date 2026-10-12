@@ -182,6 +182,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [initialAbout, setInitialAbout] = useState("");
   const [initialResume, setInitialResume] = useState("");
   const [initialStyle, setInitialStyle] = useState("");
+  const [initialUsername, setInitialUsername] = useState("");
 
   // Account deletion state — the dialog is the only path to the API call,
   // and the call is gated by typed confirmation.
@@ -193,7 +194,6 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   // Load the user and saved resume on mount
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     Promise.all([
       getCurrentUser(),
       getResume().catch(() => null),
@@ -226,7 +226,6 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       cancelled = true;
     };
     // writingStyle intentionally not in deps — this is mount-once fetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFileUpload = async (file: File) => {
@@ -364,12 +363,6 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       setDeleteOpen(false);
     }
   };
-
-  // We need the current username for the typed-confirmation step.
-  // Pull it from the user fetch alongside the other fields. Track it
-  // separately so the destruct handler has it even if the user never
-  // edited any of the textareas.
-  const [initialUsername, setInitialUsername] = useState("");
 
   if (loading) {
     return (

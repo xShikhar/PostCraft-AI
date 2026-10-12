@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DOMPurify from "isomorphic-dompurify";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { AuthScreen } from "@/features/auth/components/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
@@ -79,27 +78,29 @@ export default function Home() {
 
   // Pick up any pending thought from the quick capture bar
   useEffect(() => {
-    const thought = sessionStorage.getItem("postcraft:pending_thought");
-    if (thought) {
-      setRawThoughts((prev) => (prev ? prev + "\n" + thought : thought));
-      sessionStorage.removeItem("postcraft:pending_thought");
-    }
+    const timer = setTimeout(() => {
+      const thought = sessionStorage.getItem("postcraft:pending_thought");
+      if (thought) {
+        setRawThoughts((prev) => (prev ? prev + "\n" + thought : thought));
+        sessionStorage.removeItem("postcraft:pending_thought");
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [isAuthenticated]);
 
   // Honest elapsed timer during pipeline generation
   useEffect(() => {
-    if (loading) {
-      setElapsedSeconds(0);
-      const interval = setInterval(() => {
-        setElapsedSeconds((s) => s + 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
+    if (!loading) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
   }, [loading]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setElapsedSeconds(0);
     setDrafts(null);
     setActiveDraftIndex(null);
     setChatHistories({ 1: [], 2: [], 3: [] });
@@ -364,6 +365,7 @@ export default function Home() {
               <DraftSelectionGrid
                 drafts={drafts}
                 platform={platform}
+                sources={sources}
                 onSelect={(num) => { setActiveDraftIndex(num); setView("editor"); }}
                 onCopy={copyToClipboard}
                 renderMarkdown={renderMarkdown}

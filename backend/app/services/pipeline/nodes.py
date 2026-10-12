@@ -254,7 +254,13 @@ async def _build_temporal_style_bias(deps: PipelineDeps, user_id: str, platform:
                     recent.append({"id": str(p.id), "text": style_concat, "created_at": str(getattr(p, 'created_at', ''))})
                     # Re-seed Chroma in background thread
                     try:
-                        vector_service.save_style_profile(str(p.id), str(user_id), platform, style_concat)
+                        vector_service.save_style_profile(
+                            str(p.id),
+                            str(user_id),
+                            platform,
+                            style_concat,
+                            str(getattr(p, "created_at", "") or ""),
+                        )
                     except Exception:
                         pass
         except Exception as e:
@@ -284,49 +290,6 @@ async def _build_temporal_style_bias(deps: PipelineDeps, user_id: str, platform:
         "Bias and blend your extraction towards the most recent style while honoring recurring patterns "
         "across the older profiles. Recent preferences should take precedence over older ones."
     )
-
-
-async def _cleanup_old_style_profiles(deps: PipelineDeps, user_id: str, platform: str, keep: int = 10) -> None:
-    """
-    Deletes all but the newest `keep` StyleProfile rows for a user+platform in PostgreSQL,
-    and mirrors the deletion in ChromaDB via vector_service.
-    """
-
-    user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-    stmt = (
-        select(StyleProfile)
-        .where(
-            StyleProfile.user_id == user_uuid,
-            StyleProfile.platform == platform,
-        )
-        .order_by(StyleProfile.id.desc())
-    )
-    res = await deps.session.execute(stmt)
-    all_profiles = res.scalars().all()
-
-    if len(all_profiles) <= keep:
-        return
-
-    to_delete = all_profiles[keep:]
-
-    for profile in to_delete:
-        await deps.session.delete(profile)
-    await deps.session.commit()
-
-    logger.info(f"Cleaned up {len(to_delete)} old StyleProfile rows from DB (kept {keep}).")
-
-    # Mirror deletion in ChromaDB
-    try:
-        deleted = await asyncio.wait_for(
-            asyncio.to_thread(
-                vector_service.delete_oldest_profiles,
-                str(user_id), platform, keep=keep
-            ),
-            timeout=5.0,
-        )
-        logger.info(f"Mirrored cleanup in ChromaDB: deleted {deleted} entries.")
-    except Exception as e:
-        logger.warning(f"ChromaDB cleanup mirror failed (non-fatal): {e}")
 
 
 async def _build_background_context(deps: PipelineDeps, user_id: str | uuid.UUID) -> str:

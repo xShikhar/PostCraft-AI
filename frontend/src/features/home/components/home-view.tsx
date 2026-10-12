@@ -10,7 +10,6 @@ import { stripMarkdown } from "@/lib/utils/markdown";
 gsap.registerPlugin(useGSAP);
 import {
   Plus,
-  ArrowUpRight,
   Edit3,
   FileText,
   RotateCcw,
@@ -78,7 +77,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
 
   const handleRecentCardMouseEnter = contextSafe((cardEl: HTMLElement) => {
     const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const cards = recentGridRef.current?.querySelectorAll<HTMLElement>(".recent-card");
+    const cards = cardEl.parentElement?.querySelectorAll<HTMLElement>(".recent-card");
     if (!cards) return;
 
     cards.forEach((c) => {
@@ -102,8 +101,8 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
     });
   });
 
-  const handleRecentGridMouseLeave = contextSafe(() => {
-    const cards = recentGridRef.current?.querySelectorAll<HTMLElement>(".recent-card");
+  const handleRecentGridMouseLeave = contextSafe((e: React.MouseEvent<HTMLDivElement>) => {
+    const cards = e.currentTarget.querySelectorAll<HTMLElement>(".recent-card");
     if (!cards) return;
 
     gsap.to(cards, {
@@ -132,7 +131,6 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingRecent(true);
     listGenerations({ limit: 3 })
       .then((res) => {
         if (!cancelled) setRecent(res.items);
@@ -146,7 +144,6 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingCadence(true);
     // Fetch a large enough window for the cadence chart. Backend limit is unbounded
     // for the authenticated user, so 200 covers most cases.
     listGenerations({ limit: 200 })
@@ -346,7 +343,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             onMouseLeave={handleRecentGridMouseLeave}
             className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg"
           >
-            {recent.map((item, idx) => (
+            {recent.map((item) => (
               <button
                 key={item.generation_id}
                 onClick={() => {

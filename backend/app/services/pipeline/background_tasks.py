@@ -72,6 +72,7 @@ async def bg_save_and_cleanup_style_profile(
                         str(user_id),
                         platform,
                         style_concat,
+                        str(profile.created_at.isoformat() if profile.created_at else ""),
                     ),
                     timeout=5.0,
                 )

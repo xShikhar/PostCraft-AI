@@ -103,7 +103,6 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     listGenerations({ limit: PAGE_SIZE, offset: 0 })
       .then((res) => {
         if (!cancelled) {
@@ -142,7 +141,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
       const res = await listGenerations({ limit: PAGE_SIZE, offset });
       setItems((prev) => [...prev, ...res.items]);
       setOffset((prev) => prev + PAGE_SIZE);
-    } catch (_e) {
+    } catch {
       // silently ignore
     } finally {
       setLoadingMore(false);

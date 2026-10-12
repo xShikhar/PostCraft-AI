@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useTransition } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -58,7 +58,6 @@ function formatDate(iso: string | null): string {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
 
   // Auth / Permission state
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
@@ -109,12 +108,48 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    let cancelled = false;
+    Promise.all([
+      getAdminStats(),
+      getAdminUsers({ q: "", limit: 50 }),
+    ])
+      .then(([statsData, usersData]) => {
+        if (!cancelled) {
+          setStats(statsData);
+          setUsers(usersData.items);
+          setTotalUsers(usersData.total);
+          setIsAuthorized(true);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+            setIsAuthorized(false);
+            setAuthError(
+              err.status === 401
+                ? "Authentication required. Please log in with an administrator account."
+                : "Access Denied: You do not have administrator privileges to view this console."
+            );
+          } else {
+            const message = err instanceof Error ? err.message : "Failed to load admin data.";
+            toast.error(message);
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Search debounce
+  // Search debounce - only runs when authorized and search query is updated
   useEffect(() => {
-    if (isAuthorized === false) return;
+    if (isAuthorized !== true) return;
     const timer = setTimeout(() => {
       loadDashboardData(searchQuery);
     }, 350);

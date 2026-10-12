@@ -52,11 +52,21 @@ class VectorService:
             self._collection = self.client.get_or_create_collection(name="style_profiles")
         return self._collection
 
-    def save_style_profile(self, profile_id: str, user_id: str, platform: str, style_text: str):
+    def save_style_profile(
+        self,
+        profile_id: str,
+        user_id: str,
+        platform: str,
+        style_text: str,
+        created_at: str | None = None,
+    ):
         try:
+            if not created_at:
+                from datetime import datetime, timezone
+                created_at = datetime.now(timezone.utc).isoformat()
             self.collection.add(
                 documents=[style_text],
-                metadatas=[{"user_id": str(user_id), "platform": platform}],
+                metadatas=[{"user_id": str(user_id), "platform": platform, "created_at": str(created_at)}],
                 ids=[str(profile_id)],
             )
             logger.info(f"Saved StyleProfile {profile_id} to ChromaDB.")

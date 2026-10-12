@@ -4,7 +4,7 @@ import { Edit3, Copy, Check } from "lucide-react";
 import { useState, useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { type Drafts } from "@/lib/api/generation";
+import { type Drafts, type SourceItem } from "@/lib/api/generation";
 
 gsap.registerPlugin(useGSAP);
 
@@ -14,6 +14,7 @@ interface DraftSelectionGridProps {
   onSelect: (num: number) => void;
   onCopy: (text: string) => void;
   renderMarkdown: (text: string) => string;
+  sources?: SourceItem[];
 }
 
 function countWords(text: string): number {
@@ -133,6 +134,7 @@ export function DraftSelectionGrid({
   onSelect,
   onCopy,
   renderMarkdown,
+  sources,
 }: DraftSelectionGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +142,7 @@ export function DraftSelectionGrid({
 
   const handleCardMouseEnter = contextSafe((cardEl: HTMLElement) => {
     const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const cards = gridRef.current?.querySelectorAll<HTMLElement>(".draft-card");
+    const cards = cardEl.parentElement?.querySelectorAll<HTMLElement>(".draft-card");
     if (!cards) return;
 
     cards.forEach((c) => {
@@ -154,8 +156,8 @@ export function DraftSelectionGrid({
         });
       } else {
         gsap.to(c, {
-          scale: isReduced ? 1 : 0.975,
-          opacity: 0.55,
+          scale: isReduced ? 1 : 0.985,
+          opacity: 0.82,
           duration: 0.22,
           ease: "power2.out",
           overwrite: "auto",
@@ -164,8 +166,8 @@ export function DraftSelectionGrid({
     });
   });
 
-  const handleGridMouseLeave = contextSafe(() => {
-    const cards = gridRef.current?.querySelectorAll<HTMLElement>(".draft-card");
+  const handleGridMouseLeave = contextSafe((e: React.MouseEvent<HTMLDivElement>) => {
+    const cards = e.currentTarget.querySelectorAll<HTMLElement>(".draft-card");
     if (!cards) return;
 
     gsap.to(cards, {
@@ -232,6 +234,28 @@ export function DraftSelectionGrid({
           </div>
         ))}
       </div>
+
+      {sources && sources.length > 0 && (
+        <div className="mt-space-sm p-space-md rounded-xl bg-surface-subtle border border-border-subtle">
+          <h4 className="text-label-xs font-semibold uppercase tracking-wider text-text-muted mb-space-xs">
+            Grounding Research Sources ({sources.length})
+          </h4>
+          <div className="flex flex-wrap gap-space-xs">
+            {sources.map((s, idx) => (
+              <a
+                key={idx}
+                href={s.url || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-body-xs text-primary hover:underline bg-surface-base px-space-sm py-space-2xs rounded-lg border border-border-subtle transition-colors"
+                title={s.snippet}
+              >
+                {s.title || `Source ${idx + 1}`} ↗
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

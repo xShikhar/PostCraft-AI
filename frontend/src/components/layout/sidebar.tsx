@@ -7,6 +7,7 @@ import { useGSAP } from "@gsap/react";
 
 gsap.registerPlugin(useGSAP);
 import Image from "next/image";
+import { useMounted } from "@/lib/use-mounted";
 import {
   Plus,
   Home,
@@ -17,7 +18,6 @@ import {
   LogOut,
   Loader2,
   Menu,
-  X,
 } from "lucide-react";
 import { getCurrentUser, type UserResponse } from "@/lib/api/user";
 
@@ -38,8 +38,7 @@ const navItems: { view: "home" | "history" | "profile"; label: string; icon: Rea
 
 function ThemeLogo({ size = 32 }: { size?: number }) {
   const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
 
   // Avoid hydration mismatch — show light by default before mount
   const activeTheme = mounted ? resolvedTheme || theme : "light";

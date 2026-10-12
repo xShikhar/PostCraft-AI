@@ -6,11 +6,11 @@ import { toast } from "sonner";
 import { AtSign, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
+import { useMounted } from "@/lib/use-mounted";
 
 function ThemeLogo({ size = 56 }: { size?: number }) {
   const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
   const activeTheme = mounted ? resolvedTheme || theme : "light";
   return (
     <div

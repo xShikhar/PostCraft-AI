@@ -63,11 +63,14 @@ export function TopHeader({ title, username, initials, collapsed = false, onNavi
   // Live search against history
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
+      const timer = setTimeout(() => {
+        setSearchResults([]);
+        setSearching(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
-    setSearching(true);
     const timer = setTimeout(async () => {
+      setSearching(true);
       try {
         const token = typeof window !== "undefined" ? localStorage.getItem("postcraft_token") : null;
         const res = await fetch("/api/generations?limit=50", {

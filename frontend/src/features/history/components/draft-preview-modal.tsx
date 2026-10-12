@@ -6,6 +6,7 @@ import { X, Copy, Check, Lock, ArrowRight, FileText, Sparkles } from "lucide-rea
 import type { HistoryItem } from "@/lib/api/history";
 import { toast } from "sonner";
 import { renderMarkdown } from "@/lib/utils/markdown";
+import { useMounted } from "@/lib/use-mounted";
 
 interface DraftPreviewModalProps {
   isOpen: boolean;
@@ -22,21 +23,21 @@ export function DraftPreviewModal({
   initialDraftIndex = 1,
   onOpenInEditor,
 }: DraftPreviewModalProps) {
-  const [mounted, setMounted] = useState(false);
-  const [activeDraft, setActiveDraft] = useState<1 | 2 | 3>(
-    (initialDraftIndex as 1 | 2 | 3) || 1
-  );
+  const mounted = useMounted();
+  const [userDraft, setUserDraft] = useState<1 | 2 | 3 | null>(null);
+  const [prevItemId, setPrevItemId] = useState<string | null>(null);
+
+  if (item?.generation_id !== prevItemId) {
+    setPrevItemId(item?.generation_id ?? null);
+    setUserDraft(null);
+  }
+
+  const validInitial: 1 | 2 | 3 =
+    initialDraftIndex === 1 || initialDraftIndex === 2 || initialDraftIndex === 3
+      ? initialDraftIndex
+      : 1;
+  const activeDraft: 1 | 2 | 3 = userDraft ?? validInitial;
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (initialDraftIndex && (initialDraftIndex === 1 || initialDraftIndex === 2 || initialDraftIndex === 3)) {
-      setActiveDraft(initialDraftIndex);
-    }
-  }, [initialDraftIndex, item]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -158,7 +159,7 @@ export function DraftPreviewModal({
                     key={idx}
                     type="button"
                     disabled={!hasDraft}
-                    onClick={() => setActiveDraft(idx)}
+                    onClick={() => setUserDraft(idx)}
                     className={`
                       px-space-md py-1.5 rounded-lg font-label-sm text-label-sm font-semibold transition-all flex items-center gap-1.5
                       ${

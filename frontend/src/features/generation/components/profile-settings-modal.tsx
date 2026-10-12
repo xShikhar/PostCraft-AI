@@ -22,22 +22,27 @@ export function ProfileSettingsModal({ open, onOpenChange }: ProfileSettingsModa
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      loadProfile();
-    }
+    if (!open) return;
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (!cancelled) {
+          setProfileContext(user.profile_context || "");
+        }
+      } catch (error) {
+        console.error("Failed to load profile", error);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchProfile();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
-
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUser();
-      setProfileContext(user.profile_context || "");
-    } catch (error) {
-      console.error("Failed to load profile", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSave = async () => {
     try {
