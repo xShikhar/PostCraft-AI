@@ -182,11 +182,15 @@ backend/app/services/pipeline/
 ├── prompts.py           # Lead-Gen & Engagement prompt templates and builder functions
 ├── nodes.py             # 6 async worker functions (node_research, node_pattern_extraction, etc.)
 ├── graph.py             # StateGraph definition, async bind closures, and conditional router logic
+├── originality.py       # 8-word n-gram / 10-word match engine with idiom whitelist & chrome filter
+├── structural_checks.py # Deterministic detection of structural AI tells ("not X, it's Y", triple lists)
+├── unsourced_numbers.py # Deterministic audit for unsourced figures & metrics (Gate 1.6)
+├── background_tasks.py  # Asynchronous offloaded DB writes for costs, style profiles, and research cache
 ├── pipeline.py          # PostGenerationPipeline runtime entrypoint & state mapper
 └── README.md            # Architecture & LangGraph learning guide
 ```
 
-### Graph Topology
+### Graph Topology & Targeted Retries
 
 ```mermaid
 graph TD
@@ -202,14 +206,22 @@ graph TD
     DraftGen --> QC[node_quality_check]
     DraftGen -->|error| SaveGen
 
-    QC -->|PASS| SaveGen
-    QC -->|FAIL & retries < MAX_RETRIES| IncrementRetry[node_increment_retry]
-    QC -->|FAIL & retries >= MAX_RETRIES| SaveGen
+    QC -->|PASS or Soft Miss| SaveGen
+    QC -->|Hard FAIL & retries < MAX_RETRIES| IncrementRetry[node_increment_retry]
+    QC -->|Hard FAIL & retries >= MAX_RETRIES| SaveGen
 
-    IncrementRetry --> DraftGen
+    IncrementRetry --> DraftGen (Targeted draft retry)
 
     SaveGen --> End[END]
 ```
+
+#### Layered Quality Gate Battery:
+1. **Gate 1 (Originality)**: 8-word n-gram / 10-word match against creator posts. (Hard failure)
+2. **Gate 1.5 (Structural AI Tells)**: Deterministic detection of cliché contrast syntax and list tropes. (Hard failure)
+3. **Gate 1.6 (Unsourced Metrics)**: Deterministic audit ensuring numbers originate from source material. (Hard failure)
+4. **Gate 2 (Banned AI Vocabulary)**: Detects banned words ("testament", "delve", "tapestry"). (Hard failure)
+5. **Gate 3 (Substance & CTA Evaluation)**: Calibrated 1–10 substance scoring with soft-miss routing to `needs_review` on scores 4–6.
+
 
 ### Detailed Node Specifications
 

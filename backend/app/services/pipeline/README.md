@@ -12,24 +12,28 @@ Start by reading `graph.py` — it contains a module-level docstring that points
 This module is split into focused files to make dependencies explicit and testing easier:
 
 - `pipeline.py`: The public entry point. Exposes `PostGenerationPipeline`, which initializes dependencies and triggers the graph.
-- `graph.py`: Defines the **topology** of the pipeline. What node runs after what, under what conditions. Edit this if you want to add a new step (e.g. a "translate" node).
-- `nodes.py`: The actual **work** of the pipeline. Each function takes the graph state, performs an action (like calling an LLM), and returns state updates. Edit this if you want to change *how* a step works (e.g. adding a new tool call to research).
-- `prompts.py`: All LLM prompt templates and rules (e.g. lead-gen rules, engagement rules). Edit this if you want to change *what* the LLM outputs or how it is judged.
+- `graph.py`: Defines the **topology** of the pipeline. What node runs after what, under what conditions. Includes targeted retry routing.
+- `nodes.py`: The actual **work** of the pipeline. Each function takes the graph state, performs an action (like calling an LLM), and returns state updates.
+- `prompts.py`: All LLM prompt templates and rules (e.g. lead-gen rules, engagement rules).
+- `originality.py`: Originality engine comparing drafts against creator snippets using 8-word n-grams (2-hit threshold), 10-word consecutive matches, business idiom whitelisting, and site chrome filtering.
+- `structural_checks.py`: Deterministic checks for structural AI tells ("not X, it's Y", triple parallel "Zero X means zero Y" lists, em-dash density).
+- `unsourced_numbers.py`: Deterministic check ensuring figures and metrics in drafts originate from user raw thoughts, resume, or cited research (Gate 1.6).
+- `background_tasks.py`: Asynchronous task execution for style profile indexing, cost logging, and research cache writes using isolated database sessions off the generation hot path.
 - `state.py`: Defines `GraphState` (the internal dict that flows through the graph) and Pydantic schemas for structured LLM outputs.
 - `deps.py`: Dependency injection container (`PipelineDeps`). Passed to every node to avoid global variables and closures.
 
-## Modifying the Pipeline
+## Quality Gates & Targeted Retry Workflow
 
-**To change how lead-gen CTAs are judged or generated:**
-Edit `prompts.py` (specifically `LEAD_GEN_RULES` or `QUALITY_CHECK_PROMPT`), not `nodes.py`.
+The quality check stage executes a layered battery of deterministic and LLM evaluations:
+1. **Gate 1 (Originality)**: 8-word n-gram / 10-word match against creator posts. (Hard failure)
+2. **Gate 1.5 (Structural AI Tells)**: Deterministic detection of cliché contrast syntax and list tropes. (Hard failure)
+3. **Gate 1.6 (Unsourced Metrics)**: Deterministic audit ensuring numbers originate from source material. (Hard failure)
+4. **Gate 2 (Banned AI Vocabulary)**: Detects banned words ("testament", "delve", "tapestry"). (Hard failure)
+5. **Gate 3 (Substance & CTA Evaluation)**: LLM substance score (1–10) and lead-gen CTA alignment. (Scores 4–6 or weak CTAs route as soft misses to `needs_review`)
 
-**To change how many times the pipeline retries:**
-Edit `MAX_RETRIES` in `graph.py` or `nodes.py`.
-
-**To add a new data field to the pipeline:**
-1. Add it to `GraphState` and `PipelineState` in `state.py`.
-2. Update the initial state mapping in `pipeline.py`.
-3. Read/write it in `nodes.py`.
+### Targeted Retry Policy:
+- When hard failures occur, `failed_draft_indices` isolates only the failing draft(s) (e.g., draft 2). Draft 1 and Draft 3 are preserved, and only Draft 2 is regenerated on retry.
+- Soft misses (substance score 4–6, generic question CTA) bypass retry loops and proceed directly to save with status `needs_review`, preventing latency stalls.
 
 ## Graph Topology
 
@@ -47,9 +51,9 @@ graph TD
     DraftGen --> QC[quality_check]
     DraftGen -->|error| SaveGen
     
-    QC -->|PASS| SaveGen
-    QC -->|FAIL + under retry limit| IncrementRetry[increment_retry]
-    QC -->|FAIL + over limit| SaveGen
+    QC -->|PASS or Soft Miss| SaveGen
+    QC -->|Hard FAIL + under retry limit| IncrementRetry[increment_retry]
+    QC -->|Hard FAIL + over limit| SaveGen
     
     IncrementRetry --> DraftGen
     

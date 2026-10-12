@@ -33,10 +33,10 @@ PostCraft AI is designed around a **split-host platform-managed architecture** i
 
 | Component | Hosting Platform | Runtime / Execution Model | Public URL / Exposure |
 | :--- | :--- | :--- | :--- |
-| **Frontend** | **Vercel** | Next.js 16 (Turbopack, Serverless/Edge) | `https://<project-name>.vercel.app` (Custom domain supported) |
-| **Backend** | **Render** | Docker Container (`python:3.12-slim`) running `uvicorn` | `https://<service-name>.onrender.com` (TLS terminated by Render) |
+| **Frontend** | **Vercel** | Next.js 16 (Turbopack, Serverless/Edge) | `https://post-craft-ai-lemon.vercel.app` |
+| **Backend** | **Render** | Docker Container (`python:3.12-slim`) running `uvicorn` | `https://postcraft-ai-3p2x.onrender.com` |
 | **Database** | **Supabase** | PostgreSQL 16 (Permanent Free Tier, Supavisor Session Pooler) | `aws-0-<region>.pooler.supabase.com:5432` / `postgresql+asyncpg://...` |
-| **Vector DB** | **Render Disk** | ChromaDB (local persistence on `/var/data`) | Local filesystem volume attached to the Render web service |
+| **Vector DB** | **Render Ephemeral / Supabase Fallback** | ChromaDB (`CHROMA_PERSIST_DIR`, default `./chroma_data`) | Ephemeral container directory on Render free tier. Style profiles are durably stored in Supabase PostgreSQL (`StyleProfile`), enabling transparent fallback on container restarts. Persistent disk mount supported on paid plans. |
 
 ### How Frontend & Backend Communicate
 1. The browser loads the Next.js static pages and scripts from **Vercel**.
@@ -85,12 +85,16 @@ The table below lists every environment variable required across production serv
 | `ALLOWED_HOSTS` | Backend | Render Dashboard | Trusted host whitelist for `TrustedHostMiddleware` | **HTTP 400 BAD REQUEST**: Returns 400 to any request with an unrecognized Host header. Defaults to `localhost,127.0.0.1,testserver,*.onrender.com`. |
 | `CORS_ORIGINS` | Backend | Render Dashboard | Allowed origins for browser CORS preflights | **BROWSER CORS BLOCK**: Requests from Vercel fail in the browser console. |
 | `GEMINI_API_KEY` | Backend | Render Dashboard | Google Gemini AI API key | **HTTP 500 / GENERATION FAILURE**: Pipeline nodes crash when calling the Gemini model. |
+| `GEMINI_MODEL` | Backend | Render Dashboard | Model version for pipeline nodes | Defaults to `gemini-2.5-flash` or pinned version (e.g. `gemini-3.5-flash-lite`). |
+| `GEMINI_DRAFT_MODEL` | Backend | Render Dashboard | Dedicated model for draft generation | Defaults to `GEMINI_MODEL` if unset. |
+| `ADMIN_USERNAMES` | Backend | Render Dashboard | Whitelisted usernames promoted to admin on login | Non-admin users attempting to access `/api/admin/*` receive HTTP 403 Forbidden. |
+| `RUN_RESUME_MIGRATION`| Backend | Render Dashboard | Run legacy resume encryption migration on container start | Defaults to `false`. Set to `true` to run one-off resume encryption. |
 | `SERP_API_KEY` | Backend | Render Dashboard | SerpApi search key (fallback search) | Non-fatal: Research node falls back to Tavily or synthetic context. |
 | `TAVILY_API_KEY` | Backend | Render Dashboard | Tavily search API key (primary search) | Non-fatal: Research node falls back to SerpApi or synthetic context. |
 | `SENTRY_DSN` | Backend | Render Dashboard (Optional) | Sentry error tracking DSN | Non-fatal: Error reporting is disabled silently. |
 | `ENVIRONMENT` | Backend | Render Dashboard | `production` vs `development` | Defaults to `development`. Controls CSP strictness and debug logging. |
 | `DEBUG` | Backend | Render Dashboard | `False` in production | Defaults to `True`. Enables verbose query logging. |
-| `NEXT_PUBLIC_API_URL` | Frontend | Vercel Dashboard | Public HTTPS URL of Render backend | **CLIENT FAILS**: Frontend fetches fallback to relative `/api` (hitting Vercel instead of Render) or `localhost:8000`. |
+| `NEXT_PUBLIC_API_URL` | Frontend | Vercel Dashboard | Public HTTPS URL of Render backend (`https://postcraft-ai-3p2x.onrender.com`) | **CLIENT FAILS**: Frontend fetches fallback to relative `/api` (hitting Vercel instead of Render) or `localhost:8000`. |
 
 ---
 
@@ -101,35 +105,44 @@ When Render launches the backend container, it runs [`backend/start.sh`](file://
 ```mermaid
 flowchart TD
     A["Container Start (Render Web Service)"] --> B["1. Alembic Database Migrations"]
-    B -->|Attempt 1..5 with 3s backoff| C{"Migrations OK?"}
+    B -->|Attempt 1..5 with 2s backoff| C{"Migrations OK?"}
     C -->|No| D["FATAL: Exit status 1 (Container Restarts)"]
-    C -->|Yes| E["2. One-Time Resume Encryption"]
-    E -->|Skip already encrypted rows| F["Encrypt plaintext resumes (Non-fatal)"]
-    F --> G["3. Read PORT from Render ($PORT)"]
-    G --> H["4. Exec Uvicorn (app.main:app --port $PORT)"]
-    H --> I["5. Render Health Check (/api/health -> 200 OK)"]
+    C -->|Yes| E{"RUN_RESUME_MIGRATION == true?"}
+    E -->|Yes| F["Run one-off resume encryption"]
+    E -->|No / default| G["2. Read PORT from Render ($PORT)"]
+    F --> G
+    G --> H["3. Exec Uvicorn (app.main:app --port $PORT)"]
+    H --> I["4. Render Health Check (/api/health -> 200 OK)"]
 ```
 
 ### Startup Steps in Detail
 
 1. **Alembic Database Migrations (`alembic upgrade head`)**:
    - Automatically applies pending schema revisions up to `head`.
-   - Incorporates a 5-attempt retry loop (3 seconds between attempts) to wait for database connection readiness on cold start.
+   - Incorporates a 5-attempt retry loop (2 seconds between attempts) to wait for database connection readiness on cold start.
    - **Fatal**: If all 5 attempts fail, the container exits with code 1.
 2. **Resume Encryption Migration (`python -m app.core.migrate_resume_encryption`)**:
-   - Scans `user_resumes` table for plaintext `raw_text` or `structured_summary`.
-   - Encrypts plaintext rows using Fernet key `RESUME_ENCRYPTION_KEY`.
-   - Safe to re-run: skips rows already starting with token prefix `gAAAAA`.
-   - **Non-fatal**: Caught with `|| echo "WARNING..."` so a failure does not prevent FastAPI from booting.
-3. **Port Binding & Uvicorn Launch**:
+   - Only executed if `RUN_RESUME_MIGRATION=true` is set.
+   - Scans `user_resumes` table for plaintext `raw_text` or `structured_summary` and encrypts with Fernet.
+   - Defaults to skipped (`false`), saving ~1.8s of container startup time on normal cold boots.
+3. **Lazy ChromaDB Initialization**:
+   - ChromaDB and vector dependencies are loaded on first vector retrieval, not at container import time.
+   - Speeds up `app.main` import from ~5.5s down to ~3.1s.
+4. **Port Binding & Uvicorn Launch**:
    - Render automatically injects the `$PORT` environment variable (e.g., `10000`).
    - `start.sh` extracts `PORT_TO_USE="${PORT:-8000}"` and executes:
      ```bash
      exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT_TO_USE"
      ```
-4. **Health Check Endpoint (`/api/health`)**:
+5. **Health Check Endpoint (`/api/health`)**:
    - Render pings `/api/health` every few seconds to verify the service is alive.
-   - The endpoint returns `{"status": "healthy"}` instantly without touching the database, guaranteeing quick zero-downtime health approval.
+   - Returns `{"status": "healthy"}` instantly without touching the database or loading ChromaDB.
+
+### Render Free Tier Keep-Alive & Quota Limits
+- **750 Instance Hours Limit**: Render provides 750 free hours per month per account.
+- A single service running 24/7 uses 720 hours (in a 30-day month) or 744 hours (in a 31-day month), leaving <1% headroom.
+- **Inactivity Timeout**: Render spins down inactive containers after 15 minutes of zero traffic. Cold wake from sleep takes 45–90s (dominated by Render provisioning overhead).
+- **Recommendation**: For production launch with real customers, upgrade to the **Render Starter tier ($7/month)** for always-on uptime without cold starts.
 
 ---
 

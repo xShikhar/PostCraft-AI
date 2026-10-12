@@ -1,23 +1,30 @@
 # PostCraft AI
 
-An AI-powered content ghostwriting platform for LinkedIn and X (Twitter) built on **LangGraph** and **Google Gemini 2.5 Flash**.
+An AI-powered content ghostwriting platform for LinkedIn and X (Twitter) built on **LangGraph** and **Google Gemini** (configurable via `GEMINI_MODEL`, e.g. `gemini-2.5-flash` or `gemini-3.5-flash-lite`).
 
-PostCraft researches live public discussions on a topic, extracts high-leverage **writing patterns** (structure, tone, pacing, storytelling technique, formatting, CTA style), combines those patterns with the user's raw thoughts and **profile context**, and generates conversion-focused, high-engagement draft posts. Through a conversational editor and vector memory (ChromaDB), the system continuously adapts to the user's voice and business goals.
+PostCraft researches live public discussions on a topic, extracts high-leverage **writing patterns** (structure, tone, pacing, storytelling technique, formatting, CTA style), combines those patterns with the user's raw thoughts and **profile context**, and generates conversion-focused, high-engagement draft posts in ~10–15s locally (~21–23s on deployed cloud). Through a conversational editor and vector memory (ChromaDB), the system continuously adapts to the user's voice and business goals while enforcing strict quality gates (plagiarism detection, structural AI tell prevention, and unsourced number guards).
 
 ---
 
 ## Key Features
 
-- **LangGraph State Machine**: Robust, typed workflow orchestration with conditional routing, automated quality gates, and structured retry loops.
+- **LangGraph State Machine & Sub-15s Generation**: Robust, typed workflow orchestration with targeted retry loops, asynchronous background database writes off the hot path, and model concurrency guards.
+- **Strict Multi-Layer Quality Gates**:
+  - **Gate 1 (Originality)**: 8-word n-gram / 10-word match against creator posts with common business idiom whitelist.
+  - **Gate 1.5 (Structural AI Tells)**: Deterministic detection of cliché contrast syntax ("not X, it's Y") and triple parallel lists.
+  - **Gate 1.6 (Unsourced Number Guard)**: Enforces that numbers and metrics come strictly from raw thoughts, resume context, or cited research.
+  - **Gate 2 (Banned AI Vocabulary)**: Detects overused AI tropes.
+  - **Gate 3 (Substance & CTA Evaluation)**: Calibrated 1–10 substance scoring with soft-miss routing to `needs_review`.
+- **Targeted Retries**: Hard failures regenerate only the failing draft(s), preserving passing drafts and saving 15–30s of unnecessary LLM cycles.
 - **Lead-Gen & Conversion-First CTAs**: Replaces generic engagement bait ("Thoughts?", "Agree?") with high-converting Call-to-Actions customized to the user's specific bio, role, or product.
-- **Cascading Research Engine**: Multi-tiered search (DB Cache → Curated Top Creators → General Search → Synthetic Structure) ensuring real-world context on any topic.
-- **Vector Memory (ChromaDB)**: Learns and indexes your historical writing style to bias future generations toward your unique voice.
+- **Cascading Research Engine**: Multi-tiered search (DB Cache → Curated Top Creators → General Search → Synthetic Structure) with capped snippet sizes (1,500 chars) ensuring fast, context-rich grounding.
+- **Vector Memory (ChromaDB)**: Learns and indexes your historical writing style to bias future generations toward your unique voice (with transparent fallback to PostgreSQL on ephemeral container filesystems).
 - **Per-Draft Conversational Iteration**: Chat-based inline editor with isolated revisions per draft (`draft_index=1, 2, 3`). Chat contexts never bleed between drafts.
 - **Finalized vs. Locked Enforcement**: When a post is finalized, only the selected draft displays **Finalized**; all other drafts are strictly marked as **Locked** across the editor, modal, history, and home views. The chosen draft is persisted in `Generation.active_draft_index`.
-- **Interactive UI Polish & GSAP Motion**: Smooth cursor radial spotlight glow tracking, centered modal portal rendering, clean markdown parsing (no raw `**` asterisks), and theme-specific cadence glow (reduced 20%, purple for light mode, warm coral for dark mode).
+- **Interactive UI Polish & GSAP Motion**: Smooth cursor radial spotlight glow tracking, centered modal portal rendering, clean markdown parsing (no raw `**` asterisks), and theme-specific cadence glow.
 - **Persona Engine & Resume Decoding**: Drag-and-drop resume upload (PDF/DOCX/text) with automated Gemini one-shot skill/role extraction, encrypted at rest via Fernet (AES-128-CBC + HMAC-SHA256), and persistent context injection into generation prompts.
 - **Admin Control Center**: Dedicated `/admin` dashboard with cost analytics, live token metrics, user management, audit logging, and zero-shell `ADMIN_USERNAMES` promotion.
-- **Rate-Limited Protection**: Per-user rate limits on all write endpoints prevent abuse and runaway costs.
+- **Concurrency & Rate-Limited Protection**: Global 4-slot concurrency semaphore with 10s queue wait timeout, daily 50-post per-user cap, and hourly endpoint rate limits.
 - **Privacy & ToS**: Privacy Policy and Terms of Service rendered in-app; required agreement checkbox on sign-up; full GDPR disclosure.
 - **Account Deletion**: Self-serve account deletion that cascades across PostgreSQL and ChromaDB — verified by typed username confirmation.
 
