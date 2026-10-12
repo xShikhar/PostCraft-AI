@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
@@ -11,7 +12,7 @@ from app.core.database import get_db
 from app.api.auth import get_current_user
 from app.core.config import get_settings
 from app.core.crypto import encrypt, decrypt
-from app.models import User, StyleProfile, UserResume
+from app.models import User, StyleProfile, UserResume, Project, Generation, CostLog
 from app.schemas.api import UserResponse, UserUpdate
 from app.services.resume import extract_text, summarize_to_structured
 from app.services.vector import vector_service
@@ -302,6 +303,16 @@ async def delete_my_account(
         # Log but don't fail the user-visible deletion — DB cleanup is the
         # primary contract. ChromaDB is best-effort cleanup.
         logger.error(f"ChromaDB cleanup failed for user {user_id_str}: {e}")
+
+    # Delete CostLog rows associated with the user's generations before deleting the user row
+    try:
+        gen_ids_stmt = select(Generation.id).join(Project, Generation.project_id == Project.id).where(Project.user_id == current_user.id)
+        gen_ids_res = await session.execute(gen_ids_stmt)
+        gen_ids = gen_ids_res.scalars().all()
+        if gen_ids:
+            await session.execute(delete(CostLog).where(CostLog.generation_id.in_(gen_ids)))
+    except Exception as e:
+        logger.error(f"CostLog cleanup failed for user {user_id_str}: {e}")
 
     # Delete the user row — cascades handle the rest of the relational data
     await session.delete(current_user)
