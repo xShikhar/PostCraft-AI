@@ -85,17 +85,21 @@ async def generate_post(
         use_context=req.use_context,
     )
 
-    # Run Pipeline with concurrency guard and queue timeout
+    # Run Pipeline with concurrency guard and queue timeout for slot acquisition
     try:
         async with asyncio.timeout(QUEUE_WAIT_TIMEOUT_SECONDS):
-            async with GENERATION_CONCURRENCY_SEMAPHORE:
-                pipeline = PostGenerationPipeline(session)
-                final_state = await pipeline.run(state)
+            await GENERATION_CONCURRENCY_SEMAPHORE.acquire()
     except TimeoutError:
         raise HTTPException(
             status_code=429,
             detail="The generation service is currently processing maximum concurrent requests. Please wait a few seconds and try again.",
         )
+
+    try:
+        pipeline = PostGenerationPipeline(session)
+        final_state = await pipeline.run(state)
+    finally:
+        GENERATION_CONCURRENCY_SEMAPHORE.release()
 
     # Build sources list from research result
     sources = []
