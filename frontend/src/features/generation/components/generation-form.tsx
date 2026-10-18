@@ -1,13 +1,15 @@
 "use client";
-
-import { useRef } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { Loader2, Fingerprint } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Feather,
+  Globe,
+  Layers,
+  ShieldCheck,
+  Loader2,
+  Check,
+} from "lucide-react";
+import { PageHeading } from "@/components/layout/page-heading";
 interface GenerationFormProps {
   topic: string;
   setTopic: (v: string) => void;
@@ -22,8 +24,8 @@ interface GenerationFormProps {
   loading: boolean;
   loadingStepText: string;
   onSubmit: (e: React.FormEvent) => void;
+  onGoProfile?: () => void;
 }
-
 export function GenerationForm({
   topic,
   setTopic,
@@ -38,211 +40,239 @@ export function GenerationForm({
   loading,
   loadingStepText,
   onSubmit,
+  onGoProfile,
 }: GenerationFormProps) {
-  const formContainerRef = useRef<HTMLDivElement>(null);
-
-  const { contextSafe } = useGSAP({ scope: formContainerRef });
-
-  // Subtle focus elevation for input and textarea fields
-  useGSAP(() => {
-    const container = formContainerRef.current;
-    if (!container) return;
-
-    const mm = gsap.matchMedia();
-    mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const handleFocusIn = contextSafe((e: FocusEvent) => {
-        const target = e.target as HTMLElement;
-        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-          gsap.to(target, {
-            scale: 1.006,
-            duration: 0.18,
-            ease: "power2.out",
-          });
-        }
-      });
-
-      const handleFocusOut = contextSafe((e: FocusEvent) => {
-        const target = e.target as HTMLElement;
-        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-          gsap.to(target, {
-            scale: 1.0,
-            duration: 0.18,
-            ease: "power2.out",
-            clearProps: "transform",
-          });
-        }
-      });
-
-      container.addEventListener("focusin", handleFocusIn);
-      container.addEventListener("focusout", handleFocusOut);
-
-      return () => {
-        container.removeEventListener("focusin", handleFocusIn);
-        container.removeEventListener("focusout", handleFocusOut);
-      };
-    });
-
-    return () => mm.revert();
-  }, { scope: formContainerRef });
-
   return (
-    <div ref={formContainerRef} className="w-full max-w-5xl mx-auto">
-      {/* Section header */}
-      <div className="mb-space-lg">
-        <p className="font-label-xs text-label-xs text-text-muted uppercase tracking-widest mb-space-2xs">
-          New post
-        </p>
-        <h2 className="font-serif text-headline-lg text-text-display">
-          Draft composer
-        </h2>
-        <p className="font-body-sm text-body-sm text-text-muted mt-space-2xs">
-          Describe your idea and let PostCraft do the rest
-        </p>
-      </div>
-
-      <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-5 gap-space-lg">
-
-        {/* Left column — Platform + Topic */}
-        <div className="lg:col-span-2 flex flex-col gap-space-md">
-          {/* Platform selector */}
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-md">
-            <label className="font-label-sm text-label-sm font-semibold text-text-display mb-space-sm block">
-              Target Platform
-            </label>
-            <div className="grid grid-cols-2 gap-space-xs">
-              <button
-                type="button"
-                onClick={() => setPlatform("linkedin")}
-                className={`
-                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold btn-press
-                  ${platform === "linkedin"
-                    ? "bg-primary text-on-primary border-primary shadow-md"
-                    : "bg-surface-subtle text-text-muted border-transparent hover:bg-surface-container-high hover:text-text-display"
-                  }
-                `}
+    <div className="workspace-enter">
+      <PageHeading
+        eyebrow="From thought to first draft"
+        title="Give your idea a voice."
+        description="Bring the insight. We’ll help you find the words. Start with what you know, what you noticed, or what you can’t stop thinking about."
+      />
+      <div className="grid xl:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
+        <form onSubmit={onSubmit} className="paper overflow-hidden">
+          <div className="p-6 sm:p-8 space-y-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="eyebrow">01 / The brief</span>
+              <div
+                className="flex bg-surface-subtle rounded-full p-1 border border-border-subtle"
+                aria-label="Target platform"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                </svg>
-                LinkedIn
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlatform("x")}
-                className={`
-                  flex items-center justify-center gap-space-xs py-space-sm rounded-xl border transition-all text-body-sm font-label-sm font-semibold btn-press
-                  ${platform === "x"
-                    ? "bg-primary text-on-primary border-primary shadow-md"
-                    : "bg-surface-subtle text-text-muted border-transparent hover:bg-surface-container-high hover:text-text-display"
-                  }
-                `}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-                X / Twitter
-              </button>
-            </div>
-          </div>
-
-          {/* Topic input */}
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-md">
-            <label className="font-label-sm text-label-sm font-semibold text-text-display mb-space-sm block" htmlFor="topic">
-              Main Topic / Theme
-            </label>
-            <Input
-              id="topic"
-              placeholder="e.g. Why async communication is the future of remote work"
-              maxLength={255}
-                value={topic}
-              onChange={e => setTopic(e.target.value)}
-              required
-              className="bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-
-          {/* Profile context override */}
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-md">
-            <label className="font-label-sm text-label-sm font-semibold text-text-display mb-space-xs block" htmlFor="profileContext">
-              Profile Context <span className="font-normal text-text-muted">(optional — overrides saved settings)</span>
-            </label>
-            <Textarea
-              id="profileContext"
-              placeholder="Your bio, expertise, or what you're selling..."
-              maxLength={3000}
-                value={profileContext}
-              onChange={e => setProfileContext(e.target.value)}
-              rows={3}
-              className="bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm resize-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-
-          {/* Include saved context toggle */}
-          <div className="bg-surface-subtle rounded-xl p-space-md flex items-center justify-between">
-            <div className="flex items-start gap-space-sm">
-              <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary mt-0.5 flex-shrink-0">
-                <Fingerprint className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-title-sm font-semibold text-text-display">Include saved profile</span>
-                <span className="text-body-sm text-text-muted">Applies your About Me and resume background</span>
+                {[
+                  ["linkedin", "LinkedIn"],
+                  ["x", "X / Twitter"],
+                ].map(([value, label]) => (
+                  <button
+                    disabled={loading}
+                    key={value}
+                    type="button"
+                    aria-pressed={platform === value}
+                    onClick={() => setPlatform(value)}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-colors ${platform === value ? "bg-text-display text-surface-card" : "text-text-muted"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-space-sm">
+            <div>
+              <label
+                htmlFor="topic"
+                className="text-sm font-bold text-text-display"
+              >
+                What’s the central idea?
+              </label>
+              <p className="text-xs text-text-muted mt-1 mb-3">
+                One specific topic. One clear point of view.
+              </p>
               <input
+                id="topic"
+                className="field !bg-transparent !text-base"
+                placeholder="e.g. The hidden cost of a decision without an owner"
+                required
+                maxLength={255}
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+            <div>
+              <div className="flex justify-between gap-3 items-center mb-3">
+                <label
+                  htmlFor="rawThoughts"
+                  className="text-sm font-bold text-text-display"
+                >
+                  Your raw thoughts
+                </label>
+                <span className="text-[10px] text-text-muted">
+                  {rawThoughts.length.toLocaleString()} / 5,000
+                </span>
+              </div>
+              <textarea
+                id="rawThoughts"
+                className="field !bg-transparent !leading-[1.9] !min-h-[250px]"
+                placeholder="The story behind the idea. A surprising lesson. The detail only you would know.
+
+Bullet points, messy notes, and unfinished thoughts are welcome."
+                required
+                maxLength={5000}
+                value={rawThoughts}
+                onChange={(e) => setRawThoughts(e.target.value)}
+                disabled={loading}
+              />
+              <p className="text-[11px] text-text-muted mt-2">
+                Specific details make stronger writing. We won’t invent your
+                experience.
+              </p>
+            </div>
+            <details className="border-t border-border-subtle pt-5">
+              <summary className="text-xs font-bold cursor-pointer text-text-muted">
+                Additional background{" "}
+                <span className="font-normal">(optional)</span>
+              </summary>
+              <label
+                htmlFor="profileContext"
+                className="text-xs block text-text-muted mt-4 mb-2"
+              >
+                Context for this generation — overrides your saved profile
+                background
+              </label>
+              <textarea
+                id="profileContext"
+                className="field"
+                rows={3}
+                maxLength={3000}
+                value={profileContext}
+                onChange={(e) => setProfileContext(e.target.value)}
+                disabled={loading}
+                placeholder="A particular audience, role, or perspective for this post…"
+              />
+            </details>
+            <label className="flex items-center gap-4 rounded-xl bg-surface-subtle p-4 cursor-pointer">
+              <span className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Feather size={17} />
+              </span>
+              <span className="flex-1">
+                <span className="block text-xs font-bold text-text-display">
+                  Write with my background
+                </span>
+                <span className="block text-[11px] text-text-muted mt-1">
+                  Include your saved profile, resume and writing style.
+                </span>
+              </span>
+              <input
+                aria-label="Include saved profile"
                 type="checkbox"
                 checked={useContext}
                 onChange={(e) => setUseContext(e.target.checked)}
-                className="sr-only peer"
+                disabled={loading}
+                className="h-5 w-5 accent-primary shrink-0"
               />
-              <div className="w-11 h-6 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-card after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-focus:outline-none" />
             </label>
           </div>
-        </div>
-
-        {/* Right column — Raw Thoughts + Submit */}
-        <div className="lg:col-span-3 flex flex-col gap-space-md">
-          {/* Raw thoughts */}
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-md flex flex-col flex-1">
-            <label className="font-label-sm text-label-sm font-semibold text-text-display mb-space-sm block" htmlFor="rawThoughts">
-              Your Raw Thoughts <span className="text-text-muted font-normal">(the substance)</span>
-            </label>
-            <Textarea
-              id="rawThoughts"
-              placeholder="Brain dump your core ideas here — don't worry about polish, just get the substance down..."
-              maxLength={5000}
-                value={rawThoughts}
-              onChange={e => setRawThoughts(e.target.value)}
-              required
-              className="flex-1 min-h-[200px] bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm resize-none focus:ring-2 focus:ring-primary/50"
-            />
-            <div className="flex items-center justify-between mt-space-sm">
-              <span className="text-label-xs text-text-muted">
-                {rawThoughts.length} characters
-              </span>
+          <div className="border-t border-border-subtle px-6 py-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center">
+            <span className="text-[11px] text-text-muted flex items-center gap-2">
+              <Layers size={13} />
+              Three variations. Your final say.
+            </span>
+            <button
+              type="submit"
+              disabled={loading || !topic.trim() || !rawThoughts.trim()}
+              className="btn-primary w-full sm:w-auto"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Writing your drafts…
+                </>
+              ) : (
+                <>
+                  Generate Drafts
+                  <ArrowRight size={15} />
+                </>
+              )}
+            </button>
+          </div>
+          {loading && (
+            <p
+              role="status"
+              className="px-6 py-4 bg-primary/5 border-t border-border-subtle text-xs text-primary"
+            >
+              {loadingStepText}
+            </p>
+          )}
+        </form>
+        <aside className="space-y-5">
+          <section className="paper p-6">
+            <p className="eyebrow mb-5">A little craft. A lot of you.</p>
+            <div className="space-y-6">
+              {[
+                {
+                  icon: Globe,
+                  title: "Grounded in context",
+                  body: "Research helps inform the writing. Retrieved sources are shown with your drafts.",
+                },
+                {
+                  icon: Feather,
+                  title: "Shaped by your voice",
+                  body: "Your saved background and learned style guide the way your ideas are expressed.",
+                },
+                {
+                  icon: Layers,
+                  title: "Three ways to tell it",
+                  body: "Compare the actual drafts. Choose a direction and make it your own.",
+                },
+                {
+                  icon: ShieldCheck,
+                  title: "A thoughtful review",
+                  body: "Quality checks flag weak claims and generic writing. Your judgment comes first.",
+                },
+              ].map(({ icon: Icon, title, body }, i) => (
+                <div key={title} className="flex items-start gap-3">
+                  <span className="w-7 h-7 rounded-full border border-border-subtle text-primary flex items-center justify-center shrink-0">
+                    <Icon size={13} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-text-display">
+                      {title}
+                    </p>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-text-muted">
+                      {body}
+                    </p>
+                    {i === 0 && (
+                      <span className="sr-only">
+                        These describe the workflow, not live stage updates.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-
-          {/* Pipeline tracker */}
-          {loading && <div role="status" className="rounded-xl bg-surface-container p-4 text-text-body">{loadingStepText} Results appear when research, drafting and quality checks complete.</div>}
-
-          {/* Generate button */}
-          <Button
-            type="submit"
-            className="w-full h-14 text-base font-semibold rounded-xl bg-text-display hover:bg-black text-surface-card dark:bg-primary dark:hover:bg-primary-container dark:text-on-primary shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none btn-press"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {loadingStepText}
-              </>
-            ) : (
-              <span className="font-label-md text-label-md">Generate Drafts</span>
+          </section>
+          <section className="p-5">
+            <span className="text-primary">
+              <Check size={17} />
+            </span>
+            <p className="font-serif text-lg text-text-display mt-3">
+              The best input is honest.
+            </p>
+            <p className="text-xs text-text-muted mt-2 leading-relaxed">
+              A small, true observation is more useful than a perfect-sounding
+              premise.
+            </p>
+            {onGoProfile && (
+              <button
+                type="button"
+                onClick={onGoProfile}
+                className="text-xs text-primary font-bold mt-5 flex items-center gap-2"
+              >
+                Edit your voice profile
+                <ArrowUpRight size={13} />
+              </button>
             )}
-          </Button>
-        </div>
-      </form>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

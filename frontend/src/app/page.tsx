@@ -1,6 +1,6 @@
 "use client";
-
 import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { AuthScreen } from "@/features/auth/components/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
@@ -11,333 +11,115 @@ import { DraftSelectionGrid } from "@/features/editor/components/draft-selection
 import { ProfilePage } from "@/features/profile/components/profile-page";
 import { HistoryList } from "@/features/history/components/history-list";
 import { LegalView } from "@/features/legal/legal-view";
-import { getCurrentUser } from "@/lib/api/user";
-
-import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { Drafts, ChatMessage, SourceItem, generateDrafts, editDraft, finalizeDraft } from "@/lib/api/generation";
-import { getGenerationFull } from "@/lib/api/history";
-import { ApiError } from "@/lib/api/client";
 import { renderMarkdown } from "@/lib/utils/markdown";
-
-function getHeaderTitle(view: string): string {
-  switch (view) {
-    case "history": return "Archive & Logs";
-    case "profile": return "Persona Engine";
-    case "compose": return "New Generation";
-    case "selection": return "Draft Selection";
-    case "editor": return "Draft Edition";
-    case "privacy": return "Privacy Policy";
-    case "terms": return "Terms of Service";
-    default: return "Intelligent Publishing Workspace";
-  }
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  useWorkspace,
+  TITLES,
+  draftKey,
+} from "@/features/workspace/hooks/use-workspace";
+function Loading() {
+  return (
+    <div
+      role="status"
+      className="min-h-[55vh] flex flex-col items-center justify-center gap-4 text-text-muted"
+    >
+      <Loader2 size={23} className="animate-spin text-primary" />
+      <span className="text-xs">Opening your workspace…</span>
+    </div>
+  );
 }
-
 function Workspace() {
-  const { isAuthenticated, isInitializing } = useAuth();
-
-  // View state
-  const [view, setView] = useState<"home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms">("home");
-
-  // Lets the unauthenticated footer links (Privacy / Terms) display the legal
-  // doc without forcing the user through sign-up. Resets on auth.
-  const [legalView, setLegalView] = useState<"privacy" | "terms" | null>(null);
-
-  // Generation State
-  const [topic, setTopic] = useState("");
-  const [platform, setPlatform] = useState("linkedin");
-  const [rawThoughts, setRawThoughts] = useState("");
-  const [profileContext, setProfileContext] = useState("");
-  const [useContext, setUseContext] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  const [generationId, setGenerationId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Drafts | null>(null);
-
-  // Editor State
-  const [activeDraftIndex, setActiveDraftIndex] = useState<number | null>(null);
-  const [chatHistories, setChatHistories] = useState<Record<number, ChatMessage[]>>({ 1: [], 2: [], 3: [] });
-  const [editInstruction, setEditInstruction] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [isFinalized, setIsFinalized] = useState(false);
-  const [finalizedDraftIndex, setFinalizedDraftIndex] = useState<number | null>(null);
-
-  // Sources
-  const [sources, setSources] = useState<SourceItem[]>([]);
-
-  // User info
-  const [username, setUsername] = useState("");
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      getCurrentUser()
-        .then((u) => setUsername(u.username))
-        .catch(() => setUsername("there"));
-    }
-  }, [isAuthenticated]);
-
-  // Honest elapsed timer during pipeline generation
-  useEffect(() => {
-    if (!loading) return;
-    const interval = setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [loading]);
-
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setElapsedSeconds(0);
-    setDrafts(null);
-    setActiveDraftIndex(null);
-    setChatHistories({ 1: [], 2: [], 3: [] });
-    setIsFinalized(false);
-    setFinalizedDraftIndex(null);
-    setSources([]);
-
-    try {
-      const data = await generateDrafts({
-        topic,
-        platform,
-        raw_thoughts: rawThoughts,
-        profile_context: profileContext || undefined,
-        use_context: useContext,
-      });
-
-      if (data.status === "needs_review") {
-        toast.warning("The quality checker flagged these drafts. They may need manual editing.");
-      } else {
-        toast.success("Drafts generated successfully!");
-      }
-
-      setGenerationId(data.generation_id);
-      setDrafts({
-        draft_1: data.draft_1,
-        draft_2: data.draft_2,
-        draft_3: data.draft_3,
-      });
-      setSources(data.sources || []);
-      setView("selection");
-
-    } catch (err: unknown) {
-      // 429s already carry a rate-limit-specific message; surface as-is.
-      // Other errors fall back to the server's message or a generic one.
-      const message = err instanceof ApiError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "Failed to generate drafts";
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editInstruction.trim() || !generationId || activeDraftIndex === null || isFinalized) return;
-
-    setIsEditing(true);
-    const newInstruction = editInstruction;
-    const currentIdx = activeDraftIndex;
-    setEditInstruction("");
-    setChatHistories(prev => ({
-      ...prev,
-      [currentIdx]: [...(prev[currentIdx] || []), { role: "user", content: newInstruction, draft_index: currentIdx }]
-    }));
-
-    try {
-      const data = await editDraft(generationId, currentIdx, newInstruction);
-      const botReply = data.reply || "Draft revised successfully.";
-      setChatHistories(prev => ({
-        ...prev,
-        [currentIdx]: [...(prev[currentIdx] || []), { role: "assistant", content: botReply, draft_index: currentIdx }]
-      }));
-      setDrafts(prev => prev ? { ...prev, [`draft_${currentIdx}`]: data.revised_draft } : prev);
-      if (data.status === "needs_review") toast.warning("Draft updated; quality review is still needed.");
-      else toast.success("Draft updated!");
-    } catch (err: unknown) {
-      const message = err instanceof ApiError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "Edit failed";
-      toast.error(message);
-      setChatHistories(prev => ({
-        ...prev,
-        [currentIdx]: [...(prev[currentIdx] || []), { role: "assistant", content: `Error: ${message}`, draft_index: currentIdx }]
-      }));
-    } finally {
-      setIsEditing(false);
-    }
-  };
-
-  const handleFinalize = async () => {
-    if (!generationId || activeDraftIndex === null || isEditing) return;
-    setLoading(true);
-    try {
-      await finalizeDraft(generationId, activeDraftIndex);
-      setIsFinalized(true);
-      setFinalizedDraftIndex(activeDraftIndex);
-      toast.success("Draft finalized and preferences saved!");
-    } catch (err: unknown) {
-      const message = err instanceof ApiError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "Finalization failed";
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); toast.success("Copied to clipboard!"); }
-    catch { toast.error("Clipboard access was blocked. Select and copy the text manually."); }
-  };
-
-  const handleOpenHistoryItem = async (genId: string, preferredDraftIndex?: number) => {
-    setLoading(true);
-    try {
-      const full = await getGenerationFull(genId);
-      setGenerationId(full.generation_id);
-      setSources(full.sources || []);
-      setDrafts({
-        draft_1: full.draft_1 || "",
-        draft_2: full.draft_2 || "",
-        draft_3: full.draft_3 || "",
-      });
-      const initialIdx = preferredDraftIndex || full.active_draft_index || 1;
-      setActiveDraftIndex(initialIdx);
-
-      // Partition chat history per draft
-      const partitioned: Record<number, ChatMessage[]> = { 1: [], 2: [], 3: [] };
-      if (full.chat_history) {
-        full.chat_history.forEach((msg) => {
-          const idx = msg.draft_index || 1;
-          if (!partitioned[idx]) partitioned[idx] = [];
-          partitioned[idx].push(msg);
-        });
-      }
-      setChatHistories(partitioned);
-      const isFin = full.status === "finalized";
-      setIsFinalized(isFin);
-      setFinalizedDraftIndex(isFin ? (full.active_draft_index || 1) : null);
-      setTopic(full.topic);
-      setRawThoughts(full.raw_thoughts);
-      setPlatform(full.platform);
-      setView("editor");
-      toast.success("Opened from history.");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to open generation";
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNewPost = (thought = "") => {
-    setView("compose");
-    setGenerationId(null);
-    setSources([]);
-    setProfileContext("");
-    setUseContext(true);
-    setActiveDraftIndex(null);
-    setDrafts(null);
-    setChatHistories({ 1: [], 2: [], 3: [] });
-    setIsFinalized(false);
-    setFinalizedDraftIndex(null);
-    setTopic("");
-    setRawThoughts(thought);
-  };
-
-  const handleNavigate = (v: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms") => {
-    setView(v);
-  };
-
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-canvas-base">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    // Legal docs are readable without an account — the auth-screen footer
-    // links route here.
-    if (legalView) {
-      return (
-        <LegalView
-          kind={legalView}
-          onBack={() => setLegalView(null)}
-        />
-      );
-    }
-    return (
-      <AuthScreen onOpenLegal={(k) => setLegalView(k)} />
-    );
-  }
-
+  const {
+    setView,
+    user,
+    view,
+    topic,
+    setTopic,
+    platform,
+    setPlatform,
+    rawThoughts,
+    setRawThoughts,
+    profileContext,
+    setProfileContext,
+    useContext,
+    setUseContext,
+    record,
+    active,
+    buffer,
+    setBuffer,
+    instruction,
+    setInstruction,
+    busy,
+    error,
+    elapsed,
+    profileDirty,
+    pending,
+    setPending,
+    editorDirty,
+    navigate,
+    newPost,
+    request,
+    openRecord,
+    writeUrl,
+    logout,
+    copy,
+    generate,
+    refine,
+    save,
+    finalize,
+    switchDraft,
+    discard,
+    evidence,
+    drafts,
+    lastParams,
+  } = useWorkspace();
   return (
     <AppShell
       currentView={view}
-      onNavigate={handleNavigate}
-      onNewPost={handleNewPost}
-      onOpenGeneration={handleOpenHistoryItem}
-      headerTitle={getHeaderTitle(view)}
-      username={username}
-      initials={username.slice(0, 2).toUpperCase()}
+      onNavigate={navigate}
+      onNewPost={() => newPost()}
+      onOpenGeneration={(id) => request(() => void openRecord(id))}
+      headerTitle={TITLES[view]}
+      username={user?.username || ""}
+      isAdmin={user?.is_admin}
+      onLogout={() =>
+        request(() => {
+          writeUrl("home", null, 1, true);
+          logout();
+        })
+      }
     >
-
-      <main key={view} className="w-full space-y-8 animate-fade-slide-up">
-
-        {view === "profile" ? (
-          <ProfilePage onBack={() => setView("home")} />
-        ) : view === "history" ? (
-          <HistoryList
-            onBack={() => setView("home")}
-            onOpen={handleOpenHistoryItem}
-          />
-        ) : view === "privacy" || view === "terms" ? (
-          <LegalView kind={view} onBack={() => setView("home")} />
-        ) : view === "editor" && activeDraftIndex && drafts ? (
-          <DraftEditor
-            activeDraftIndex={activeDraftIndex}
-            draftContent={drafts[`draft_${activeDraftIndex}` as keyof Drafts]}
-            isFinalized={isFinalized}
-            finalizedDraftIndex={finalizedDraftIndex}
-            chatHistory={chatHistories[activeDraftIndex] || []}
-            editInstruction={editInstruction}
-            setEditInstruction={setEditInstruction}
-            isEditing={isEditing}
-            loading={loading}
-            onEditSubmit={handleEditSubmit}
-            onFinalize={handleFinalize}
-            onBack={() => { setActiveDraftIndex(null); setView("selection"); }}
-            onCopy={copyToClipboard}
-            renderMarkdown={renderMarkdown}
-            allDrafts={drafts}
-            onSelectDraftIndex={(idx) => {
-              setActiveDraftIndex(idx);
-              setEditInstruction("");
-            }}
-          />
-        ) : (
-          <>
-            {/* Home view (greeting + quick capture + recent drafts + cadence) */}
-            {view === "home" && <HomeView
-              username={username}
-              onNewPost={handleNewPost}
-              onOpenHistory={handleOpenHistoryItem}
-              onGoHistory={() => setView("history")}
-            />}
-
-            {/* Generation form (shown when view === "home" and no drafts yet) */}
-            {view === "compose" && (
+      {busy === "load" ? (
+        <Loading />
+      ) : (
+        <main key={view} className="min-w-0">
+          {view === "home" ? (
+            <HomeView
+              username={user?.username || "writer"}
+              onNewPost={newPost}
+              onOpenHistory={(id, index) =>
+                request(() => void openRecord(id, index))
+              }
+              onGoHistory={() => navigate("history")}
+              onGoProfile={() => navigate("profile")}
+            />
+          ) : view === "profile" ? (
+            <ProfilePage onBack={() => navigate("home")} />
+          ) : view === "history" ? (
+            <HistoryList
+              onBack={() => navigate("home")}
+              onOpen={(id, index) => request(() => void openRecord(id, index))}
+            />
+          ) : view === "privacy" || view === "terms" ? (
+            <LegalView kind={view} onBack={() => navigate("home")} />
+          ) : view === "compose" ? (
+            <>
               <GenerationForm
                 topic={topic}
                 setTopic={setTopic}
@@ -349,36 +131,159 @@ function Workspace() {
                 setProfileContext={setProfileContext}
                 useContext={useContext}
                 setUseContext={setUseContext}
-                loading={loading}
-                loadingStepText={elapsedSeconds === 0 ? "Initiating pipeline..." : `Synthesizing research & generating drafts... (${elapsedSeconds}s)`}
-                onSubmit={handleGenerate}
+                loading={busy === "generate"}
+                loadingStepText={`Researching and writing your three drafts. Elapsed: ${elapsed}s. This can take a few minutes.`}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void generate();
+                }}
+                onGoProfile={() => navigate("profile")}
               />
+              {error && (
+                <p role="alert" className="mt-5 paper p-5 text-sm text-error">
+                  {error}
+                </p>
+              )}
+            </>
+          ) : view === "selection" && drafts && record ? (
+            <DraftSelectionGrid
+              drafts={drafts}
+              platform={record.platform}
+              {...evidence}
+              quality={record.quality}
+              onSelect={switchDraft}
+              onCopy={(text) => void copy(text)}
+              renderMarkdown={renderMarkdown}
+              onRefine={() => navigate("compose")}
+              onRegenerate={() =>
+                request(() => {
+                  if (lastParams.current) {
+                    setView("compose");
+                    writeUrl("compose");
+                    void generate(lastParams.current);
+                  } else {
+                    setView("compose");
+                    writeUrl("compose");
+                  }
+                })
+              }
+            />
+          ) : view === "editor" && drafts && record ? (
+            <DraftEditor
+              key={`${record.generation_id}-${active}`}
+              topic={record.topic}
+              platform={record.platform}
+              activeDraftIndex={active}
+              draftContent={buffer}
+              onChange={setBuffer}
+              dirty={editorDirty}
+              isFinalized={record.status === "finalized"}
+              finalizedDraftIndex={record.active_draft_index}
+              chatHistory={record.chat_history.filter(
+                (m) => (m.draft_index || 1) === active,
+              )}
+              editInstruction={instruction}
+              setEditInstruction={setInstruction}
+              busy={busy}
+              onEditSubmit={refine}
+              onSave={save}
+              onFinalize={finalize}
+              onBack={() => navigate("selection")}
+              onCopy={(text) => void copy(text)}
+              renderMarkdown={renderMarkdown}
+              allDrafts={drafts}
+              onSelectDraftIndex={switchDraft}
+              error={error}
+              onReload={() =>
+                request(() => {
+                  if (user)
+                    sessionStorage.removeItem(
+                      `postcraft:editor:${user.id}:${record.generation_id}:${active}`,
+                    );
+                  void openRecord(record.generation_id, active);
+                })
+              }
+              quality={record.quality}
+              original={record.original_drafts?.[draftKey(active)]}
+              {...evidence}
+            />
+          ) : (
+            <Loading />
+          )}
+        </main>
+      )}
+      <Dialog
+        open={!!pending}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle className="font-serif text-2xl">
+            Unsaved changes
+          </DialogTitle>
+          <DialogDescription>
+            {profileDirty
+              ? "Your profile has unsaved changes. Keep editing to save them, or discard them before leaving."
+              : "Keep this thought safe. Save your edits before you leave, or discard them and continue."}
+          </DialogDescription>
+          <div className="flex flex-wrap justify-end gap-2 mt-5">
+            <button className="btn-secondary" onClick={() => setPending(null)}>
+              Keep editing
+            </button>
+            <button className="btn-secondary text-error" onClick={discard}>
+              Discard changes
+            </button>
+            {editorDirty && !profileDirty && (
+              <button
+                className="btn-primary"
+                disabled={!!busy || !buffer.trim()}
+                onClick={async () => {
+                  if (await save()) {
+                    const action = pending;
+                    setPending(null);
+                    action?.();
+                  }
+                }}
+              >
+                {busy === "save" ? "Saving…" : "Save and continue"}
+              </button>
             )}
-
-            {/* Draft selection grid (shown after generation) */}
-            {view === "selection" && drafts && !activeDraftIndex && (
-              <DraftSelectionGrid
-                drafts={drafts}
-                platform={platform}
-                sources={sources}
-                onSelect={(num) => { setActiveDraftIndex(num); setView("editor"); }}
-                onCopy={copyToClipboard}
-                renderMarkdown={renderMarkdown}
-              />
-            )}
-          </>
-        )}
-      </main>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
-
-
 export default function Home() {
   const { token, isInitializing } = useAuth();
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
-  if (isInitializing) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
-  if (!token) return legal ? <LegalView kind={legal} onBack={() => setLegal(null)} /> : <AuthScreen onOpenLegal={setLegal} />;
-  // A changed identity remounts every account-scoped component and pending state.
+  useEffect(() => {
+    const syncLegal = () => {
+      const view = new URLSearchParams(window.location.search).get("view");
+      setLegal(view === "privacy" || view === "terms" ? view : null);
+    };
+    queueMicrotask(syncLegal);
+    window.addEventListener("popstate", syncLegal);
+    return () => window.removeEventListener("popstate", syncLegal);
+  }, []);
+  if (isInitializing) return <Loading />;
+  if (!token)
+    return legal ? (
+      <LegalView
+        kind={legal}
+        onBack={() => {
+          setLegal(null);
+          window.history.replaceState({}, "", "/");
+        }}
+      />
+    ) : (
+      <AuthScreen
+        onOpenLegal={(kind) => {
+          setLegal(kind);
+          window.history.pushState({}, "", `/?view=${kind}`);
+        }}
+      />
+    );
   return <Workspace key={token} />;
 }

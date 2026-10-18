@@ -16,6 +16,8 @@ env/
 # ─── Node / Next.js / TypeScript ─────────────────────
 node_modules/
 .next/
+.next-dev/
+.next-build/
 out/
 .turbo/
 *.tsbuildinfo

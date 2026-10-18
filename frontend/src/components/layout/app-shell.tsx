@@ -1,203 +1,86 @@
 "use client";
-
-import { ReactNode, useState, useRef } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { Sidebar } from "./sidebar";
+import { useState, type ReactNode } from "react";
+import { Sidebar, type WorkspaceView } from "./sidebar";
 import { TopHeader } from "./top-header";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/features/auth/hooks/use-auth";
-import { Home, History, Mic, Plus, Menu } from "lucide-react";
-import { useTheme } from "next-themes";
-import Image from "next/image";
-import { useMounted } from "@/lib/use-mounted";
-
-gsap.registerPlugin(useGSAP);
-
-function CollapsedLogo() {
-  const { theme, resolvedTheme } = useTheme();
-  const mounted = useMounted();
-  const activeTheme = mounted ? resolvedTheme || theme : "light";
-  return (
-    <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden">
-      <Image
-        src={activeTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
-        alt="PostCraft AI"
-        width={28}
-        height={28}
-        className="object-contain"
-        priority
-      />
-    </div>
-  );
-}
-
-type View = "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms";
-
-interface AppShellProps {
-  children: ReactNode;
-  currentView: View;
-  onNavigate: (view: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms") => void;
-  onNewPost: () => void;
-  onOpenGeneration: (id: string) => void;
-  headerTitle: string;
-  username?: string;
-  initials?: string;
-}
-
 export function AppShell({
   children,
   currentView,
   onNavigate,
   onNewPost,
-  headerTitle,
   onOpenGeneration,
-  username,
-  initials,
-}: AppShellProps) {
+  headerTitle,
+  username = "",
+  isAdmin = false,
+  onLogout,
+}: {
+  children: ReactNode;
+  currentView: WorkspaceView;
+  onNavigate: (v: WorkspaceView) => void;
+  onNewPost: () => void;
+  onOpenGeneration: (id: string) => void;
+  headerTitle: string;
+  username?: string;
+  initials?: string;
+  isAdmin?: boolean;
+  onLogout?: () => void;
+}) {
+  const [mobile, setMobile] = useState(false);
   const { logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(true);
-  const railRef = useRef<HTMLElement>(null);
-  const isFirstRender = useRef(true);
-
-  useGSAP(() => {
-    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      if (collapsed) {
-        gsap.set(railRef.current, { x: 0, autoAlpha: 1 });
-      } else {
-        gsap.set(railRef.current, { x: -64, autoAlpha: 0 });
-      }
-      return;
-    }
-
-    if (collapsed) {
-      gsap.to(railRef.current, {
-        x: 0,
-        autoAlpha: 1,
-        duration: isReduced ? 0 : 0.24,
-        ease: "power2.out",
-        overwrite: "auto",
-      });
-    } else {
-      gsap.to(railRef.current, {
-        x: -64,
-        autoAlpha: 0,
-        duration: isReduced ? 0 : 0.2,
-        ease: "power2.in",
-        overwrite: "auto",
-      });
-    }
-  }, { scope: railRef, dependencies: [collapsed] });
-
-  const railIcons: { view: "home" | "history" | "profile"; icon: React.ReactNode; label: string }[] = [
-    { view: "home", icon: <Home className="w-5 h-5" />, label: "Home" },
-    { view: "history", icon: <History className="w-5 h-5" />, label: "History" },
-    { view: "profile", icon: <Mic className="w-5 h-5" />, label: "Profile & Voice" },
-  ];
-
+  const nav = (v: WorkspaceView) => {
+    setMobile(false);
+    onNavigate(v);
+  };
+  const sidebar = (
+    <Sidebar
+      currentView={currentView}
+      onNavigate={nav}
+      onNewPost={() => {
+        setMobile(false);
+        onNewPost();
+      }}
+      onLogout={onLogout || logout}
+      username={username}
+      isAdmin={isAdmin}
+    />
+  );
   return (
-    <div className="min-h-screen bg-canvas-base relative">
-      {/* Expanded sidebar */}
-      <Sidebar
-        currentView={currentView}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed(true)}
-        onNavigate={onNavigate}
-        onNewPost={onNewPost}
-        onLogout={logout}
-      />
-
-      {/* Collapsed rail (always in DOM, animated via GSAP) */}
-      <aside
-        ref={railRef}
-        className="fixed top-0 left-0 bottom-0 w-16 bg-surface-card border-r border-border-subtle z-50 flex flex-col items-center justify-between py-space-lg shadow-sidebar"
-        style={{ visibility: collapsed ? "visible" : "hidden" }}
-      >
-        <div className="flex flex-col items-center gap-space-md">
-          {/* Logo */}
-          <CollapsedLogo />
-
-          {/* Expand button */}
-          <button
-            onClick={() => setCollapsed(false)}
-            className="p-space-2xs text-text-muted hover:text-text-display rounded-lg transition-colors flex items-center justify-center"
-            aria-label="Expand sidebar"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          {/* New post */}
-          <button
-            onClick={onNewPost}
-            className="w-9 h-9 rounded-full bg-text-display dark:bg-primary text-surface-card dark:text-on-primary flex items-center justify-center transition-transform hover:scale-[1.05] active:scale-[0.95] shadow-md"
-            aria-label="New post"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-
-          {/* Nav icons */}
-          <nav className="flex flex-col items-center gap-space-2xs mt-space-xs">
-            {railIcons.map((item) => {
-              const active = currentView === item.view;
-              return (
-                <button
-                  key={item.view}
-                  onClick={() => onNavigate(item.view)}
-                  className={`
-                    w-9 h-9 rounded-lg flex items-center justify-center transition-colors
-                    ${active
-                      ? "bg-surface-container-high text-primary"
-                      : "text-text-muted hover:bg-surface-subtle hover:text-text-display"
-                    }
-                  `}
-                  aria-label={item.label}
-                  title={item.label}
-                >
-                  {item.icon}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Sign out at the bottom */}
-        <button
-          onClick={logout}
-          className="p-space-2xs text-text-muted hover:text-secondary rounded-lg transition-colors flex items-center justify-center"
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
+    <div className="min-h-screen">
+      <a href="#workspace-content" className="skip-link">
+        Skip to content
+      </a>
+      <aside className="hidden lg:block fixed inset-y-0 left-0 w-[236px] bg-surface-subtle border-r border-border-subtle z-40">
+        {sidebar}
       </aside>
-
-      {/* Main content area — adjusts left padding based on collapsed state */}
-      <div
-        className={`
-          flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out
-          ${collapsed ? "pl-16" : "pl-16 md:pl-sidebar-width"}
-        `}
-      >
+      <Dialog open={mobile} onOpenChange={setMobile}>
+        <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 !h-dvh !max-w-[290px] !rounded-none !p-0 !gap-0 overflow-auto">
+          <DialogTitle className="sr-only">Workspace navigation</DialogTitle>
+          <DialogDescription className="sr-only">
+            Navigate PostCraft and manage your session.
+          </DialogDescription>
+          {sidebar}
+        </DialogContent>
+      </Dialog>
+      <div className="lg:pl-[236px]">
         <TopHeader
           title={headerTitle}
           username={username}
-          initials={initials}
-          collapsed={collapsed}
-          onNavigate={onNavigate}
+          onMenu={() => setMobile(true)}
+          onProfile={() => nav("profile")}
           onOpenGeneration={onOpenGeneration}
         />
-
-        <main className="flex-1 w-full pt-16 bg-canvas-base">
-          <div className="max-w-7xl mx-auto px-4 md:px-layout-margin-desktop py-space-xl relative z-10">
-            {children}
-          </div>
-        </main>
+        <div
+          id="workspace-content"
+          className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 py-8 sm:py-10"
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -1,58 +1,97 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "../hooks/use-auth";
+import { useState, useEffect, useRef } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import { toast } from "sonner";
-import { AtSign, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Moon, Sun, ShieldCheck, Asterisk } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 import { useMounted } from "@/lib/use-mounted";
+import { useAuth } from "../hooks/use-auth";
+import "./auth.css";
 
-function ThemeLogo({ size = 56 }: { size?: number }) {
-  const { theme, resolvedTheme } = useTheme();
-  const mounted = useMounted();
-  const activeTheme = mounted ? resolvedTheme || theme : "light";
-  return (
-    <div
-      className="rounded-full bg-surface-subtle p-space-2xs flex items-center justify-center shadow-sm mb-space-md overflow-hidden"
-      style={{ width: size, height: size }}
-    >
-      <Image
-        src={activeTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
-        alt="PostCraft AI"
-        width={size - 8}
-        height={size - 8}
-        className="object-contain"
-        priority
-      />
-    </div>
-  );
-}
+gsap.registerPlugin(useGSAP);
 
 interface AuthScreenProps {
-  // Lets the auth-screen footer Privacy / Terms links open the legal view
-  // without an account. The legal view is rendered separately by the
-  // page-level dispatcher — this is just the trigger.
   onOpenLegal?: (kind: "privacy" | "terms") => void;
+}
+
+/** Brand illustration only: these papers never represent sample user data. */
+function EditorialStage({ dark }: { dark: boolean }) {
+  const stage = useRef<HTMLElement>(null);
+  useGSAP(() => {
+    const media = gsap.matchMedia();
+    media.add("(prefers-reduced-motion: no-preference)", () => {
+      gsap.from(".auth-stage-enter", { y: 18, opacity: 0, duration: 0.6, stagger: 0.06, ease: "power2.out" });
+    });
+    media.add("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)", () => {
+      const element = stage.current;
+      if (!element) return;
+      const movers = Array.from(element.querySelectorAll<HTMLElement>("[data-auth-paper]")).map((paper, index) => ({
+        x: gsap.quickTo(paper, "x", { duration: 0.65, ease: "power3.out" }),
+        y: gsap.quickTo(paper, "y", { duration: 0.65, ease: "power3.out" }),
+        depth: (index + 1) * 4,
+      }));
+      let bounds = element.getBoundingClientRect();
+      const measure = () => { bounds = element.getBoundingClientRect(); };
+      const move = (event: PointerEvent) => {
+        const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+        const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+        movers.forEach(mover => { mover.x(x * mover.depth * 2); mover.y(y * mover.depth * 2); });
+      };
+      const reset = () => movers.forEach(mover => { mover.x(0); mover.y(0); });
+      element.addEventListener("pointerenter", measure);
+      element.addEventListener("pointermove", move);
+      element.addEventListener("pointerleave", reset);
+      window.addEventListener("resize", measure);
+      return () => {
+        element.removeEventListener("pointerenter", measure);
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerleave", reset);
+        window.removeEventListener("resize", measure);
+      };
+    });
+    return () => media.revert();
+  }, { scope: stage });
+
+  return (
+    <section className="auth-stage" ref={stage} aria-label="Your writing, with intention">
+      <div className="auth-brand auth-stage-enter">
+        <span className="auth-brand-mark"><Image src={dark ? "/logo-dark.png" : "/logo-light.png"} alt="" width={38} height={38} priority /></span>
+        <h1>POSTCRAFT AI</h1><span className="auth-brand-edition">THE WRITING STUDIO</span>
+      </div>
+      <div className="auth-stage-copy auth-stage-enter">
+        <p className="auth-overline"><span /> A SPACE FOR YOUR PERSPECTIVE</p>
+        <h2>Good ideas.<br />Your <em>voice.</em><br />Lasting impact.</h2>
+        <p className="auth-stage-description">Turn what you know into something<br className="auth-desktop-break" /> worth putting into words.</p>
+      </div>
+      <div className="auth-art auth-stage-enter" aria-hidden="true">
+        <svg className="auth-orbit" viewBox="0 0 640 330" fill="none"><ellipse cx="320" cy="165" rx="300" ry="114" transform="rotate(-19 320 165)" /><path d="M32 230h72M540 69h72M322 16v30M322 288v27" /><circle cx="590" cy="80" r="5" /><circle cx="48" cy="236" r="3" /></svg>
+        <div className="auth-paper auth-paper-back" data-auth-paper><span className="auth-paper-label">01 / THE SPARK</span><span className="auth-paper-word">Think.</span><span className="auth-paper-rule" /><span className="auth-paper-note">It starts with a point of view.</span></div>
+        <div className="auth-paper auth-paper-middle" data-auth-paper><span className="auth-paper-label">02 / THE CRAFT</span><span className="auth-paper-word">Shape.</span><span className="auth-paper-rule" /><span className="auth-paper-note">Find the words that feel like you.</span></div>
+        <div className="auth-paper auth-paper-front" data-auth-paper><div className="auth-paper-top"><span className="auth-paper-label">03 / YOUR VOICE</span><Asterisk size={24} strokeWidth={1} /></div><span className="auth-paper-word">Share.</span><span className="auth-paper-rule" /><span className="auth-paper-note">Something only you could say.</span><span className="auth-paper-corner">↗</span></div>
+        <span className="auth-art-caption">A THOUGHT, GIVEN FORM.</span>
+      </div>
+      <div className="auth-stage-footer auth-stage-enter"><span>Made for the way you think.</span><span>Written with intention. <Asterisk size={16} /></span></div>
+    </section>
+  );
 }
 
 export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
   const { login, signup, isLoading } = useAuth();
+  const { resolvedTheme, setTheme } = useTheme();
+  const mounted = useMounted();
+  const dark = mounted && resolvedTheme === "dark";
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-
-  // Required only in signup mode. The submit button is disabled until
-  // the user has actively checked the box — see the `canSubmit` calc
-  // below. Login mode bypasses this so existing users aren't asked to
-  // re-agree every time.
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const heading = useRef<HTMLDivElement>(null);
+  const pending = useRef(false);
 
-  // If we just landed here from the account-deletion flow, the ProfilePage
-  // stashed a flag in sessionStorage. Surface a single, clear confirmation
-  // and clear the flag so it doesn't repeat on a re-login.
   useEffect(() => {
     const notice = sessionStorage.getItem("postcraft:post_delete_notice");
     if (notice) {
@@ -60,230 +99,51 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
       toast.info(notice === "1" ? "Your account has been deleted." : notice);
     }
   }, []);
+  useGSAP(() => {
+    const media = gsap.matchMedia();
+    media.add("(prefers-reduced-motion: no-preference)", () => {
+      gsap.from(heading.current, { opacity: 0, y: 5, duration: 0.2, ease: "power2.out" });
+    });
+    return () => media.revert();
+  }, { scope: heading, dependencies: [isLoginMode], revertOnUpdate: true });
 
-  // Reset the agreement when toggling between login and signup so a user
-  // who switches out of signup doesn't carry an implicit agreement with
-  // them when they come back.
   const handleModeToggle = () => {
-    setIsLoginMode((m) => !m);
-    setUsername("");
-    setPassword("");
-    setAgreedToTerms(false);
+    setIsLoginMode(mode => !mode);
+    setUsername(""); setPassword(""); setShowPassword(false); setAgreedToTerms(false);
   };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Defense in depth: even though the button is disabled, the form
-    // could still be submitted by an Enter keypress from the password
-    // field while the checkbox sits unchecked. Block that here.
-    if (!isLoginMode && !agreedToTerms) {
-      return;
-    }
-    if (isLoginMode) {
-      await login(username, password, rememberMe);
-    } else {
-      await signup(username, password, rememberMe);
-    }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pending.current || isLoading || (!isLoginMode && !agreedToTerms)) return;
+    pending.current = true;
+    try {
+      if (isLoginMode) await login(username, password, rememberMe);
+      else await signup(username, password, rememberMe);
+    } finally { pending.current = false; }
   };
-
-  const canSubmit = isLoginMode || agreedToTerms;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-canvas-base p-space-lg relative overflow-hidden">
-      {/* Ambient background glows */}
-      <div className="absolute -top-16 -right-16 w-44 h-44 bg-primary-container rounded-full blur-3xl pointer-events-none opacity-40" />
-      <div className="absolute -bottom-16 -left-16 w-40 h-40 bg-secondary-fixed rounded-full blur-3xl pointer-events-none opacity-30" />
-
-      <main className="w-full max-w-md mx-auto relative z-10">
-        <div className="flex flex-col w-full">
-          <div className="relative w-full overflow-hidden bg-surface-card rounded-xl p-space-lg sm:p-space-xl shadow-card-light">
-            {/* Decorative inner glows */}
-            <div className="absolute -top-16 -right-16 w-44 h-44 bg-surface-container rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-16 -left-16 w-40 h-40 bg-secondary-fixed/40 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Brand block */}
-            <div className="relative z-10 flex flex-col items-center text-center">
-              <ThemeLogo size={56} />
-              <h1 className="wordmark font-serif text-headline-md text-text-display mb-space-2xs">
-                POSTCRAFT AI
-              </h1>
-              <p className="font-body-sm text-body-sm text-text-muted max-w-xs leading-relaxed">
-                Welcome back — Log in to your social writing partner workspace.
-              </p>
-            </div>
-
-            {/* Form */}
-            <form className="relative z-10 mt-space-lg flex flex-col gap-space-md" onSubmit={handleSubmit}>
-              {/* Username / email */}
-              <div className="flex flex-col gap-space-2xs text-left">
-                <label className="font-label-md text-label-md text-text-display" htmlFor="username">
-                  Email or username
-                </label>
-                <div className="relative flex items-center">
-                  <AtSign className="absolute left-space-sm text-outline w-4 h-4 pointer-events-none" />
-                  <input
-                    id="username"
-                    autoComplete="username"
-                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-space-md py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
-                    placeholder="name@domain.com"
-                    required
-                    minLength={3}
-                    maxLength={255}
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="flex flex-col gap-space-2xs text-left">
-                <div className="flex items-center justify-between">
-                  <label className="font-label-md text-label-md text-text-display" htmlFor="password">
-                    Password
-                  </label>
-
-                </div>
-                <div className="relative flex items-center">
-                  <Lock className="absolute left-space-sm text-outline w-4 h-4 pointer-events-none" />
-                  <input
-                    id="password"
-                    autoComplete={isLoginMode ? "current-password" : "new-password"}
-                    className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-10 py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
-                    placeholder="Enter password"
-                    required
-                    minLength={isLoginMode ? 1 : 8}
-                    maxLength={128}
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                  />
-                  <button
-                    aria-label="Toggle password visibility"
-                    className="absolute right-space-sm flex items-center justify-center text-outline hover:text-text-display transition-colors"
-                    type="button"
-                    onClick={() => setShowPassword((s) => !s)}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Remember me */}
-              <div className="flex items-center justify-between pt-space-2xs">
-                <label className="relative flex items-center gap-space-xs cursor-pointer select-none">
-                  <input
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="peer sr-only"
-                    type="checkbox"
-                  />
-                  <div className="w-4 h-4 rounded bg-surface-container-high peer-checked:bg-primary flex items-center justify-center transition-colors">
-                    <svg className="w-3.5 h-3.5 text-surface-card opacity-0 peer-checked:opacity-100 transition-opacity" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 8 7 12 13 4" />
-                    </svg>
-                  </div>
-                  <span className="font-body-sm text-body-sm text-text-body">Remember this session (30 days)</span>
-                </label>
-              </div>
-
-              {/* Terms agreement — only shown in signup mode. Required: the
-                  submit button stays disabled until this is checked. */}
-              {!isLoginMode && (
-                <label className="relative flex items-start gap-space-xs cursor-pointer select-none pt-space-2xs">
-                  <input
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="peer sr-only"
-                    type="checkbox"
-                    aria-required="true"
-                    required
-                  />
-                  <div className="mt-0.5 w-4 h-4 rounded bg-surface-container-high peer-checked:bg-primary flex items-center justify-center transition-colors shrink-0">
-                    <svg className="w-3.5 h-3.5 text-surface-card opacity-0 peer-checked:opacity-100 transition-opacity" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 8 7 12 13 4" />
-                    </svg>
-                  </div>
-                  <span className="font-body-sm text-body-sm text-text-body leading-snug">
-                    I agree to the{" "}
-                    <button
-                      type="button"
-                      onClick={() => onOpenLegal?.("terms")}
-                      className="text-primary hover:text-primary-container underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
-                    >
-                      Terms of Service
-                    </button>{" "}
-                    and{" "}
-                    <button
-                      type="button"
-                      onClick={() => onOpenLegal?.("privacy")}
-                      className="text-primary hover:text-primary-container underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
-                    >
-                      Privacy Policy
-                    </button>
-                    .
-                  </span>
-                </label>
-              )}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={isLoading || !canSubmit}
-                className="mt-space-2xs w-full py-space-sm px-space-lg rounded-full bg-text-display hover:bg-black dark:bg-primary dark:hover:bg-primary-container text-surface-card dark:text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs shadow-md hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none btn-press"
-              >
-                <span>{isLoading ? "Please wait..." : isLoginMode ? "Sign in to PostCraft" : "Create account"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
-
-            {/* Sign up / log in toggle */}
-            <div className="relative z-10 mt-space-md text-center">
-              <p className="font-body-sm text-body-sm text-text-muted">
-                {isLoginMode ? "Don't have an account?" : "Already have an account?"}
-                <button
-                  type="button"
-                  onClick={handleModeToggle}
-                  className="font-label-md text-label-md text-primary font-semibold hover:text-primary-container transition-colors ml-1"
-                  disabled={isLoading}
-                >
-                  {isLoginMode ? "Sign up" : "Log in"}
-                </button>
-              </p>
-            </div>
-
-            {/* Footer */}
-            <div className="relative z-10 mt-space-lg pt-space-md flex flex-col items-center gap-space-2xs">
-              <div className="inline-flex items-center gap-space-2xs text-text-muted font-body-sm text-body-sm bg-surface-subtle px-space-sm py-space-2xs rounded-full">
-                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                <span>Encrypted private background</span>
-              </div>
-              <div className="flex items-center gap-space-xs font-body-sm text-body-sm text-text-muted">
-                <button
-                  type="button"
-                  onClick={() => onOpenLegal?.("privacy")}
-                  className="hover:text-text-display transition-colors"
-                >
-                  Privacy
-                </button>
-                <span className="w-1 h-1 rounded-full bg-outline-variant" />
-                <button
-                  type="button"
-                  onClick={() => onOpenLegal?.("terms")}
-                  className="hover:text-text-display transition-colors"
-                >
-                  Terms
-                </button>
-                <span className="w-1 h-1 rounded-full bg-outline-variant" />
-
-              </div>
-            </div>
+    <main className="auth-page">
+      <EditorialStage dark={dark} />
+      <section className="auth-entry" aria-labelledby="auth-form-heading">
+        <div className="auth-entry-top"><span>YOUR NEXT CHAPTER STARTS HERE</span><button type="button" className="auth-theme icon-button" aria-label={`Switch to ${dark ? "light" : "dark"} theme`} onClick={() => setTheme(dark ? "light" : "dark")} disabled={!mounted}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button></div>
+        <div className="auth-form-wrap">
+          <div className="auth-form-heading" ref={heading}>
+            <p className="auth-overline">{isLoginMode ? "BACK TO YOUR STUDIO" : "MAKE ROOM FOR YOUR IDEAS"}</p>
+            <h2 id="auth-form-heading">{isLoginMode ? "Welcome back." : "Begin with you."}</h2>
+            <p>{isLoginMode ? "A fresh page. A familiar voice. Let’s get writing." : "Your perspective is the starting point. Let’s build on it."}</p>
           </div>
+          <form className="auth-form" onSubmit={handleSubmit} aria-busy={isLoading}>
+            <div className="auth-field-group"><label htmlFor="username">Email or username</label><input id="username" className="field auth-input" autoComplete="username" placeholder="Your email or username" required minLength={3} maxLength={255} type="text" value={username} onChange={event => setUsername(event.target.value)} disabled={isLoading} autoCapitalize="none" spellCheck={false} /></div>
+            <div className="auth-field-group"><label htmlFor="password">Password</label><div className="auth-password"><input id="password" className="field auth-input" autoComplete={isLoginMode ? "current-password" : "new-password"} placeholder={isLoginMode ? "Enter your password" : "At least 8 characters"} required minLength={isLoginMode ? 1 : 8} maxLength={128} type={showPassword ? "text" : "password"} value={password} onChange={event => setPassword(event.target.value)} disabled={isLoading} aria-describedby={!isLoginMode ? "auth-password-hint" : undefined} /><button type="button" className="auth-password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)} disabled={isLoading}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{!isLoginMode && <p id="auth-password-hint" className="auth-field-hint">Use 8–128 characters.</p>}</div>
+            <label className="auth-check"><input type="checkbox" checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} disabled={isLoading} /><span>Remember this session (30 days)</span></label>
+            {!isLoginMode && <div className="auth-consent"><label className="auth-check"><input type="checkbox" checked={agreedToTerms} onChange={event => setAgreedToTerms(event.target.checked)} required aria-required="true" disabled={isLoading} /><span>I agree to the Terms of Service and Privacy Policy.</span></label><div className="auth-consent-links"><button type="button" onClick={() => onOpenLegal?.("terms")}>Read Terms of Service</button><span>·</span><button type="button" onClick={() => onOpenLegal?.("privacy")}>Read Privacy Policy</button></div></div>}
+            <button type="submit" disabled={isLoading || (!isLoginMode && !agreedToTerms)} className="btn-primary auth-submit"><span>{isLoading ? "Please wait…" : isLoginMode ? "Sign in to PostCraft" : "Create account"}</span>{isLoading ? <span className="auth-loading" aria-hidden="true" /> : <ArrowRight size={18} />}</button>
+          </form>
+          <p className="auth-switch">{isLoginMode ? "New to PostCraft?" : "Already have an account?"} <button type="button" onClick={handleModeToggle} disabled={isLoading}>{isLoginMode ? "Sign up" : "Log in"}<ArrowRight size={14} /></button></p>
+          <div className="auth-private"><ShieldCheck size={17} strokeWidth={1.5} /><span>Your private background stays encrypted.</span></div>
         </div>
-      </main>
-    </div>
+        <footer className="auth-entry-footer"><span>A little space. A lot of possibility.</span><nav aria-label="Legal"><button type="button" onClick={() => onOpenLegal?.("privacy")}>Privacy</button><button type="button" onClick={() => onOpenLegal?.("terms")}>Terms</button></nav></footer>
+      </section>
+    </main>
   );
 }

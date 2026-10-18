@@ -8,6 +8,10 @@ export function clearAuth() {
   sessionStorage.removeItem("postcraft_token");
   localStorage.removeItem("postcraft_token");
   sessionStorage.removeItem("postcraft:pending_thought");
+  for (let index = sessionStorage.length - 1; index >= 0; index--) {
+    const key = sessionStorage.key(index);
+    if (key?.startsWith("postcraft:editor:") || key?.startsWith("postcraft:compose:")) sessionStorage.removeItem(key);
+  }
   window.dispatchEvent(new Event("auth-changed"));
 }
 

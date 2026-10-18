@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const isDockerBuild = process.env.DOCKER_BUILD === "true";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Use standalone output only for Docker builds. Vercel uses its own
   // build system and rejects `output: "standalone"`.
   ...(isDockerBuild ? { output: "standalone" as const } : {}),

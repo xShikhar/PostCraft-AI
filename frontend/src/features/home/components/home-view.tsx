@@ -1,576 +1,414 @@
 "use client";
-
-import { useState, useEffect, useRef } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { listGenerations, getGenerationMetrics, type GenerationMetrics, type HistoryItem } from "@/lib/api/history";
-import { DraftPreviewModal } from "@/features/history/components/draft-preview-modal";
+import { useEffect, useState } from "react";
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Plus,
+  Feather,
+  Check,
+  RefreshCw,
+} from "lucide-react";
+import {
+  listGenerations,
+  getGenerationMetrics,
+  type HistoryItem,
+  type GenerationMetrics,
+} from "@/lib/api/history";
+import { getCurrentUser, type UserResponse } from "@/lib/api/user";
+import { getResume } from "@/lib/api/resume";
 import { stripMarkdown } from "@/lib/utils/markdown";
 
-gsap.registerPlugin(useGSAP);
-import {
-  Plus,
-  Edit3,
-  FileText,
-  RotateCcw,
-  AudioLines,
-  ArrowRight,
-  Maximize2,
-  History as HistoryIcon,
-  Check,
-  Lock,
-} from "lucide-react";
-import { toast } from "sonner";
-
-interface HomeViewProps {
+export function HomeView({
+  username,
+  onNewPost,
+  onOpenHistory,
+  onGoHistory,
+  onGoProfile,
+}: {
   username: string;
   onNewPost: (thought?: string) => void;
-  onOpenHistory: (id: string, draftIndex?: number) => void;
+  onOpenHistory: (id: string, index?: number) => void;
   onGoHistory: () => void;
-}
-
-const INSPIRATION_PROMPTS = [
-  "What did you ship this week?",
-  "Which contrarian truth do you stand by?",
-  "The hardest lesson from your Q1 roadmap?",
-  "A client interaction that changed your framework?",
-  "What obsolete belief did you discard today?",
-];
-
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-function relativeTime(iso?: string | null): string {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "Just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d === 1) return "Yesterday";
-  if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: HomeViewProps) {
-  const [promptIdx, setPromptIdx] = useState(0);
-  const [quickThought, setQuickThought] = useState("");
-  const [recent, setRecent] = useState<HistoryItem[]>([]);
-  const [loadingRecent, setLoadingRecent] = useState(true);
-
-  // Enlarged draft modal state
-  const [enlargedItem, setEnlargedItem] = useState<HistoryItem | null>(null);
-  const [enlargedDraftIndex, setEnlargedDraftIndex] = useState<number>(1);
-
-  // Cadence data (real, from history)
-  const [metrics, setMetrics] = useState<GenerationMetrics | null>(null);
-  const [metricsError, setMetricsError] = useState(false);
-  const [loadingCadence, setLoadingCadence] = useState(true);
-
-  const recentGridRef = useRef<HTMLDivElement>(null);
-  const { contextSafe } = useGSAP({ scope: recentGridRef });
-
-  const handleRecentCardMouseEnter = contextSafe((cardEl: HTMLElement) => {
-    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const cards = cardEl.parentElement?.querySelectorAll<HTMLElement>(".recent-card");
-    if (!cards) return;
-
-    cards.forEach((c) => {
-      if (c === cardEl) {
-        gsap.to(c, {
-          scale: isReduced ? 1 : 1.02,
-          opacity: 1,
-          duration: isReduced ? 0 : 0.22,
-          ease: "power2.out",
-          overwrite: "auto",
-        });
-      } else {
-        gsap.to(c, {
-          scale: isReduced ? 1 : 0.98,
-          opacity: 0.6,
-          duration: isReduced ? 0 : 0.22,
-          ease: "power2.out",
-          overwrite: "auto",
-        });
-      }
-    });
-  });
-
-  const handleRecentGridMouseLeave = contextSafe((e: React.MouseEvent<HTMLDivElement>) => {
-    const cards = e.currentTarget.querySelectorAll<HTMLElement>(".recent-card");
-    if (!cards) return;
-
-    gsap.to(cards, {
-      scale: 1,
-      opacity: 1,
-      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.25,
-      ease: "power2.out",
-      overwrite: "auto",
-    });
-  });
-
-  useGSAP(() => {
-    if (loadingRecent || recent.length === 0) return;
-    const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (isReduced) return;
-
-    gsap.from(".recent-card", {
-      opacity: 0,
-      y: 12,
-      duration: isReduced ? 0 : 0.22,
-      stagger: 0.05,
-      ease: "power2.out",
-      clearProps: "all",
-    });
-  }, { scope: recentGridRef, dependencies: [recent, loadingRecent] });
-
+  onGoProfile?: () => void;
+}) {
+  const [thought, setThought] = useState(""),
+    [recent, setRecent] = useState<HistoryItem[]>([]),
+    [metrics, setMetrics] = useState<GenerationMetrics | null>(null),
+    [profile, setProfile] = useState<UserResponse | null>(null),
+    [resume, setResume] = useState<boolean | null>(null),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [refresh, setRefresh] = useState(0),
+    [metricsError, setMetricsError] = useState(false);
   useEffect(() => {
-    let cancelled = false;
+    let active = true;
     listGenerations({ limit: 3 })
-      .then((res) => {
-        if (!cancelled) setRecent(res.items);
+      .then((data) => {
+        if (active) setRecent(data.items);
       })
-      .catch((e) => toast.error(e.message || "Failed to load recent drafts"))
+      .catch(() => {
+        if (active) setError("Your recent work could not be loaded.");
+      })
       .finally(() => {
-        if (!cancelled) setLoadingRecent(false);
+        if (active) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Fetch a large enough window for the cadence chart. Backend limit is unbounded
-    // for the authenticated user, so 200 covers most cases.
     getGenerationMetrics()
-      .then((res) => {
-        if (!cancelled) setMetrics(res);
+      .then((data) => {
+        if (active) {
+          setMetrics(data);
+          setMetricsError(false);
+        }
       })
-      .catch(() => { if (!cancelled) setMetricsError(true); })
-      .finally(() => {
-        if (!cancelled) setLoadingCadence(false);
+      .catch(() => {
+        if (active) setMetricsError(true);
       });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Build last-7-days buckets (Mon..Sun starting today-6)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const days: { label: string; count: number; date: Date }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    days.push({
-      label: d.toLocaleDateString(undefined, { weekday: "short" }),
+    getCurrentUser()
+      .then((data) => {
+        if (active) setProfile(data);
+      })
+      .catch(() => {});
+    getResume()
+      .then((data) => {
+        if (active) setResume(!!data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [refresh]);
+  const hour = new Date().getHours();
+  const greet =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - 6 + i);
+    return {
+      date,
+      label: date.toLocaleDateString(undefined, { weekday: "short" }),
       count: 0,
-      date: d,
-    });
+    };
+  });
+  for (const iso of metrics?.recent_dates || []) {
+    const date = new Date(iso);
+    date.setHours(0, 0, 0, 0);
+    const day = days.find((d) => d.date.getTime() === date.getTime());
+    if (day) day.count++;
   }
-  for (const createdAt of metrics?.recent_dates || []) {
-    const d = new Date(createdAt);
-    d.setHours(0, 0, 0, 0);
-    const idx = days.findIndex((day) => day.date.getTime() === d.getTime());
-    if (idx >= 0) days[idx].count += 1;
-  }
-  const maxCount = Math.max(1, ...days.map((d) => d.count));
-
-  // Workspace Health: real counts
-  const totalCount = metrics?.total || 0;
-  const finalizedCount = metrics?.finalized || 0;
-  const inProgressCount = metrics?.in_progress || 0;
-
-  const handleSubmitThought = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickThought.trim()) {
-      toast.warning("Type a thought first");
-      return;
-    }
-    // Hand the thought off to the new-generation view via parent.
-    onNewPost(quickThought.trim());
-    toast.success("Loaded into the composer — paste where useful.");
-  };
-
+  const max = Math.max(1, ...days.map((d) => d.count));
+  const steps = [
+    { label: "Introduce yourself", done: !!profile?.about_me },
+    { label: "Set your writing voice", done: !!profile?.writing_style },
+    {
+      label: "Add your background",
+      done: !!profile?.profile_context || resume === true,
+    },
+  ];
+  const complete = steps.filter((s) => s.done).length;
   return (
-    <div className="flex flex-col w-full gap-space-2xl">
-      {metricsError && <p role="alert" className="text-secondary">Activity metrics unavailable. Refresh to retry.</p>}
-      {/* Top Section: Greeting + Inspiration prompt + new-post CTA */}
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg relative">
-        {/* Ambient orbs */}
-        <div className="absolute -top-20 -left-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl ambient-orb" />
-        <div className="absolute -top-10 right-1/3 w-48 h-48 bg-secondary/10 rounded-full blur-3xl ambient-orb" style={{ animationDelay: "-7s" }} />
-
-        <div className="flex flex-col gap-space-xs max-w-2xl relative z-10">
-          <div className="flex items-center gap-space-xs flex-wrap">
-            <span className="relative w-2 h-2 rounded-full bg-primary ring-pulse" />
-            <span className="font-label-xs text-label-xs uppercase tracking-widest text-primary font-bold">
-              STUDIO WORKSPACE
-            </span>
-            <span className="text-outline-variant text-label-xs">•</span>
-            <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted">
-              SESSION ACTIVE
-            </span>
-          </div>
-          <h1 className="font-serif text-display-hero text-text-display tracking-tight leading-none">
-            {greeting()}, <span className="text-primary break-words [overflow-wrap:anywhere]">{username}</span>
+    <div className="space-y-10 workspace-enter">
+      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <p className="eyebrow mb-4 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+            Your writing studio
+          </p>
+          <h1 className="page-title !text-[clamp(32px,4vw,52px)]">
+            {greet},<br />
+            <span className="italic text-primary">{username || "writer"}.</span>
           </h1>
-          <div className="flex items-center gap-space-sm pt-space-xs flex-wrap">
-            <span className="font-body-md text-body-md text-text-muted">Inspiration prompt:</span>
-            <div className="inline-flex items-center gap-space-xs px-space-sm py-space-2xs bg-surface-container rounded-full transition-all duration-300">
-              <Plus className="w-3.5 h-3.5 text-primary" />
-              <span
-                key={promptIdx}
-                className="font-title-sm text-body-sm text-text-display italic inline-block animate-crossfade"
-              >
-                {INSPIRATION_PROMPTS[promptIdx]}
-              </span>
-              <button
-                onClick={() => setPromptIdx((i) => (i + 1) % INSPIRATION_PROMPTS.length)}
-                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-surface-variant text-text-muted hover:text-primary transition-colors ml-space-2xs btn-press"
-                title="Cycle suggestion"
-                type="button"
-              >
-                <RotateCcw className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
+          <p className="text-text-muted mt-4 text-sm">
+            Good writing starts with a thought worth sharing.
+          </p>
         </div>
-
-        <div className="flex items-center gap-space-sm self-start md:self-end">
-          <button
-            onClick={() => onNewPost()}
-            className="flex items-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide shadow-lg hover:scale-[1.01] active:scale-[0.98] transition-all btn-press"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New post</span>
-          </button>
-        </div>
-      </section>
-
-      {/* Quick capture bar */}
-      <section className="relative">
-        <form
-          onSubmit={handleSubmitThought}
-          className="w-full bg-surface-card rounded-xl p-space-md shadow-card-light flex flex-col md:flex-row items-center gap-space-md"
+        <button
+          onClick={() => onNewPost()}
+          className="btn-primary self-start md:self-auto"
         >
-          <div className="flex items-center gap-space-sm text-primary flex-shrink-0">
-            <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
-              <Edit3 className="w-5 h-5 text-primary" />
-            </div>
-          </div>
-          <div className="flex-1 w-full min-w-0">
-            <input
-              value={quickThought}
-              onChange={(e) => setQuickThought(e.target.value)}
-              className="w-full bg-transparent font-body-lg text-body-lg text-text-display placeholder:text-text-muted focus:outline-none"
-              placeholder="Capture an unvarnished observation, milestone, or contrarian angle..."
-              type="text"
-            />
-          </div>
-          <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-space-sm flex-shrink-0 pt-space-2xs md:pt-0">
-            <div className="flex items-center gap-space-2xs px-space-sm py-space-2xs bg-surface-subtle rounded-full text-text-muted">
-              <AudioLines className="w-3.5 h-3.5 text-secondary" />
-              <span className="font-label-xs text-label-xs uppercase font-bold text-text-body">
-                Writing workspace
-              </span>
-            </div>
+          <Plus size={15} />
+          New post
+        </button>
+      </section>
+      <section className="paper !border-primary/15 relative overflow-hidden p-5 sm:p-7">
+        <div className="flex justify-between items-center mb-4">
+          <span className="eyebrow !text-primary">The scratchpad</span>
+          <Feather size={17} className="text-primary/50" />
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (thought.trim()) onNewPost(thought.trim());
+          }}
+        >
+          <label
+            htmlFor="quick-thought"
+            className="font-serif text-xl sm:text-2xl text-text-display"
+          >
+            What’s on your mind?
+          </label>
+          <textarea
+            id="quick-thought"
+            value={thought}
+            onChange={(e) => setThought(e.target.value)}
+            maxLength={5000}
+            rows={2}
+            className="w-full mt-4 text-sm bg-transparent resize-none outline-none placeholder:text-text-muted/70 min-h-20"
+            placeholder="Capture an unvarnished observation, milestone, or contrarian angle..."
+          />
+          <div className="flex justify-between gap-3 items-center pt-4 border-t border-border-subtle">
+            <span className="text-[11px] text-text-muted">
+              An imperfect idea is a perfect start.
+            </span>
             <button
               type="submit"
-              className="flex items-center gap-space-2xs px-space-md py-space-xs bg-primary text-on-primary rounded-full font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm btn-press"
+              disabled={!thought.trim()}
+              className="btn-primary !min-h-10 !py-2.5 !px-4"
             >
-              <span>Synthesize</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              Synthesize
+              <ArrowRight size={14} />
             </button>
           </div>
         </form>
       </section>
-
-      {/* Recent drafts mosaic */}
-      <section className="flex flex-col gap-space-md">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-space-sm">
-            <h2 className="font-serif text-headline-md text-text-display">Recent drafts</h2>
-            {recent.length > 0 && (
-              <span className="px-space-xs py-space-2xs bg-surface-container text-primary font-label-xs text-label-xs rounded-full uppercase tracking-wider font-semibold">
-                {recent.filter(item => item.status !== "finalized").length} in progress
-              </span>
-            )}
+      <section>
+        <div className="flex justify-between items-end mb-5 gap-3">
+          <div>
+            <p className="eyebrow mb-2">Pick up the thread</p>
+            <h2 className="font-serif text-2xl tracking-tight text-text-display">
+              Recent drafts
+            </h2>
           </div>
           <button
             onClick={onGoHistory}
-            className="group flex items-center gap-space-2xs font-label-md text-label-md text-primary hover:text-primary-container transition-colors"
+            className="flex items-center gap-2 text-xs text-text-muted hover:text-primary"
           >
-            <span>View archive</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            View archive
+            <ArrowUpRight size={14} />
           </button>
         </div>
-
-        {loadingRecent ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-surface-card rounded-xl p-space-lg shadow-card-light h-[300px] animate-pulse" />
+        {loading ? (
+          <div
+            className="grid sm:grid-cols-3 gap-4"
+            aria-label="Loading recent drafts"
+          >
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="paper h-56 p-6">
+                <div className="shimmer h-3 w-16 rounded" />
+                <div className="shimmer h-6 w-3/4 rounded mt-7" />
+                <div className="shimmer h-16 rounded mt-3" />
+              </div>
             ))}
           </div>
-        ) : recent.length === 0 ? (
-          <div className="bg-surface-card rounded-xl p-space-xl shadow-card-light flex flex-col items-center justify-center text-center gap-space-sm min-h-[300px]">
-            <FileText className="w-10 h-10 text-text-muted" />
-            <div>
-              <p className="font-title-sm text-title-sm text-text-display font-semibold">
-                No drafts yet
-              </p>
-              <p className="text-body-sm text-text-muted mt-1">
-                Generate your first post and it will appear here.
-              </p>
-            </div>
+        ) : error ? (
+          <div
+            role="alert"
+            className="paper p-8 text-sm text-text-muted flex justify-between gap-4"
+          >
+            {error}
             <button
-              onClick={() => onNewPost()}
-              className="mt-space-xs flex items-center gap-space-xs py-space-xs px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md"
+              className="text-primary flex items-center gap-2"
+              onClick={() => {
+                setLoading(true);
+                setError("");
+                setRefresh((v) => v + 1);
+              }}
             >
-              <Plus className="w-4 h-4" />
-              <span>New post</span>
+              <RefreshCw size={14} />
+              Retry
+            </button>
+          </div>
+        ) : !recent.length ? (
+          <div className="paper empty-state">
+            <Feather size={25} className="mx-auto mb-4 text-primary" />
+            <h3 className="font-serif text-xl text-text-display">
+              Your first page is waiting.
+            </h3>
+            <p className="mt-2 text-sm mb-5">
+              Turn one real observation into three ways to tell it.
+            </p>
+            <button onClick={() => onNewPost()} className="btn-secondary">
+              Write your first post
+              <ArrowRight size={14} />
             </button>
           </div>
         ) : (
-          <div
-            ref={recentGridRef}
-            onMouseLeave={handleRecentGridMouseLeave}
-            className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg"
-          >
-            {recent.map((item) => (
+          <div className="grid md:grid-cols-3 gap-4">
+            {recent.map((item, i) => (
               <button
                 key={item.generation_id}
-                onClick={() => {
-                  setEnlargedItem(item);
-                  setEnlargedDraftIndex(1);
-                }}
-                onMouseEnter={(e) => handleRecentCardMouseEnter(e.currentTarget)}
-                className="history-card recent-card spotlight-card group relative bg-surface-card rounded-xl p-space-lg shadow-card-light transition-colors flex flex-col justify-between min-h-[300px] text-left cursor-pointer"
-                title="Click to enlarge and read all drafts"
+                onClick={() =>
+                  onOpenHistory(
+                    item.generation_id,
+                    item.active_draft_index || 1,
+                  )
+                }
+                className="paper group text-left p-6 min-h-60 flex flex-col hover:border-border-hover hover:-translate-y-1 transition-[transform,border-color] duration-200"
               >
-                <div className="flex flex-col gap-space-sm relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-space-2xs">
-                      <span className="w-6 h-6 rounded-full bg-surface-container flex items-center justify-center">
-                        <span className="font-title-sm text-body-sm font-bold text-primary leading-none">
-                          {item.platform === "x" ? "𝕏" : "in"}
-                        </span>
-                      </span>
-                      <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted">
-                        {item.platform === "x" ? "X / Twitter" : "LinkedIn"}
-                      </span>
-                    </div>
-                    <span className="px-space-xs py-space-2xs bg-surface-subtle text-text-body rounded-full font-label-xs text-label-xs tracking-wider">
-                      {item.status === "finalized" ? "Finalized" : item.status === "needs_review" ? "Needs review" : "Editing"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-space-2xs pt-space-xs">
-                    <h3 className="font-serif text-title-lg text-text-display line-clamp-2">
-                      {item.topic}
-                    </h3>
-                    {item.preview && (
-                      <p className="font-body-md text-body-md text-text-muted line-clamp-3">
-                        {stripMarkdown(item.preview)}...
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Multi-draft indicators */}
-                  <div className="flex items-center gap-1.5 pt-space-xs flex-wrap">
-                    {([1, 2, 3] as const).map((dIdx) => {
-                      const hasDraft = Boolean(item[`draft_${dIdx}` as keyof HistoryItem]);
-                      if (!hasDraft && dIdx > 1) return null;
-                      const isPostFinalized = item.status === "finalized";
-                      const isThisDraftFinalized = isPostFinalized && (item.active_draft_index || 1) === dIdx;
-                      const isThisDraftLocked = isPostFinalized && !isThisDraftFinalized;
-
-                      return (
-                        <span
-                          key={dIdx}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEnlargedItem(item);
-                            setEnlargedDraftIndex(dIdx);
-                          }}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-label-xs text-label-xs font-semibold transition-colors ${
-                            isThisDraftFinalized
-                              ? "bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/25"
-                              : isThisDraftLocked
-                              ? "bg-surface-container text-text-muted hover:bg-surface-subtle"
-                              : "bg-surface-container hover:bg-primary/10 hover:text-primary text-text-muted"
-                          }`}
-                          title={
-                            isThisDraftFinalized
-                              ? `Draft ${dIdx} (Finalized)`
-                              : isThisDraftLocked
-                              ? `Draft ${dIdx} (Locked)`
-                              : `View Draft ${dIdx}`
-                          }
-                        >
-                          {isThisDraftFinalized ? (
-                            <Check className="w-2.5 h-2.5" />
-                          ) : isThisDraftLocked ? (
-                            <Lock className="w-2.5 h-2.5 text-text-muted/60" />
-                          ) : null}
-                          <span>Draft {dIdx}</span>
-                          {isThisDraftFinalized && (
-                            <span className="text-[10px] uppercase font-bold tracking-wide opacity-90">
-                              Finalized
-                            </span>
-                          )}
-                          {isThisDraftLocked && (
-                            <span className="text-[10px] uppercase font-medium tracking-wide opacity-75">
-                              Locked
-                            </span>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="eyebrow !text-[9px] !tracking-[.08em]">
+                    {item.platform === "x" ? "X / Twitter" : "LinkedIn"}
+                  </span>
+                  <span className="text-[10px] text-text-muted">0{i + 1}</span>
                 </div>
-
-                <div className="pt-space-md flex items-center justify-between mt-space-md relative z-10 border-t border-border-subtle/50">
-                  <div className="flex items-center gap-space-xs">
-                    <span className="font-label-xs text-label-xs text-text-muted">
-                      Created {relativeTime(item.created_at)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-label-xs text-label-xs text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">
-                      Enlarge
-                    </span>
-                    <div className="w-8 h-8 rounded-full bg-surface-subtle group-hover:bg-primary/10 flex items-center justify-center shadow-sm history-arrow transition-colors">
-                      <Maximize2 className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />
-                    </div>
-                  </div>
+                <h3 className="font-serif text-lg leading-relaxed tracking-tight mt-5 mb-3 text-text-display line-clamp-2">
+                  {item.topic}
+                </h3>
+                <p className="text-xs leading-relaxed text-text-muted line-clamp-3 flex-1">
+                  {stripMarkdown(
+                    item.preview || "No draft text available yet.",
+                  )}
+                </p>
+                <div className="mt-6 pt-4 border-t border-border-subtle flex justify-between items-center">
+                  <span className="status-pill !text-[9px]">
+                    {item.status === "finalized"
+                      ? "Finalized"
+                      : item.status === "needs_review"
+                        ? "Needs review"
+                        : item.status === "failed"
+                          ? "Failed"
+                          : item.status === "generating"
+                            ? "Generating"
+                            : "In progress"}
+                  </span>
+                  <ArrowUpRight
+                    size={17}
+                    className="text-text-muted group-hover:text-primary"
+                  />
                 </div>
               </button>
             ))}
           </div>
         )}
       </section>
-
-      {/* Bottom: Cadence + Workspace Health — REAL data, no fabricated charts */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-stretch">
-        {/* Left: Cadence — last 7 days, real counts */}
-        <div className="lg:col-span-8 bg-surface-card rounded-xl p-space-lg shadow-card-light flex flex-col justify-between gap-space-lg">
-          <div className="flex items-center justify-between flex-wrap gap-space-sm">
-            <div className="flex flex-col">
-              <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted font-semibold">
-                Cadence
-              </span>
-              <h3 className="font-serif text-title-lg text-text-display">Last 7 days</h3>
+      <div className="grid xl:grid-cols-5 gap-5">
+        <section className="paper p-6 sm:p-7 xl:col-span-3">
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <p className="eyebrow mb-2">Make room for the practice</p>
+              <h2 className="font-serif text-xl text-text-display">
+                Your writing rhythm
+              </h2>
             </div>
-            <div className="flex items-center gap-space-md text-text-muted font-label-xs text-label-xs">
-              <span>Generations per day</span>
-            </div>
+            <span className="text-[10px] text-text-muted">Last 7 days</span>
           </div>
-          <div className="w-full pt-space-sm">
-            {loadingCadence ? (
-              <div className="h-36 flex items-end gap-space-xs">
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="flex-1 bg-surface-subtle rounded h-full animate-pulse" />
+          {metricsError ? (
+            <p role="alert" className="text-sm text-text-muted mt-8">
+              Activity is unavailable.{" "}
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setError("");
+                  setRefresh((v) => v + 1);
+                }}
+                className="underline"
+              >
+                Retry
+              </button>
+            </p>
+          ) : !metrics ? (
+            <div className="shimmer h-32 mt-6 rounded" />
+          ) : (
+            <>
+              <div
+                className="flex items-end justify-between gap-3 h-32 mt-7"
+                role="img"
+                aria-label={days
+                  .map((d) => `${d.label}: ${d.count} generations`)
+                  .join(", ")}
+              >
+                {days.map((d) => (
+                  <div
+                    key={d.label}
+                    className="flex-1 flex flex-col items-center gap-3 h-full justify-end"
+                  >
+                    <span className="text-[10px] text-text-muted">
+                      {d.count}
+                    </span>
+                    <div
+                      className={`w-full max-w-8 rounded-t-md ${d.count ? "bg-primary/75" : "bg-surface-container"}`}
+                      style={{
+                        height: d.count
+                          ? `${Math.max(8, (d.count / max) * 65)}px`
+                          : "4px",
+                      }}
+                    />
+                    <span className="text-[10px] text-text-muted">
+                      {d.label}
+                    </span>
+                  </div>
                 ))}
               </div>
-            ) : totalCount === 0 ? (
-              <div className="h-36 flex items-center justify-center text-text-muted text-body-sm">
-                No activity yet — your daily cadence will appear here.
+              <div className="border-t border-border-subtle mt-5 pt-4 flex gap-7 text-xs">
+                <p>
+                  <strong className="text-text-display text-base mr-1.5">
+                    {metrics.total}
+                  </strong>
+                  generations
+                </p>
+                <p>
+                  <strong className="text-text-display text-base mr-1.5">
+                    {metrics.finalized}
+                  </strong>
+                  finalized
+                </p>
+                <p>
+                  <strong className="text-text-display text-base mr-1.5">
+                    {metrics.in_progress}
+                  </strong>
+                  in progress
+                </p>
               </div>
-            ) : (
-              <div className="w-full flex items-end gap-space-xs h-36">
-                {days.map((d, i) => {
-                  const heightPct = (d.count / maxCount) * 100;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-space-xs">
-                      <div className="w-full flex items-end h-32">
-                        <div
-                          className="w-full bg-primary rounded cadence-bar"
-                          style={{
-                            height: `${Math.max(4, heightPct)}%`,
-                            animationDelay: `${i * 60}ms`,
-                          }}
-                          data-tooltip={`${d.count} generation${d.count === 1 ? "" : "s"} on ${d.label}`}
-                        />
-                      </div>
-                      <span className="font-label-xs text-label-xs text-text-muted">{d.label}</span>
-                    </div>
-                  );
-                })}
+            </>
+          )}
+        </section>
+        <section className="paper p-6 sm:p-7 xl:col-span-2">
+          <p className="eyebrow mb-2">Make it sound like you</p>
+          <h2 className="font-serif text-xl text-text-display">
+            Your voice, in focus.
+          </h2>
+          <p className="text-xs text-text-muted mt-3 leading-relaxed">
+            A little context helps your writing feel more personal. Set up once,
+            refine whenever you like.
+          </p>
+          <div className="space-y-3 mt-6">
+            {steps.map((step) => (
+              <div key={step.label} className="flex gap-3 items-center text-xs">
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center border ${step.done ? "bg-primary/10 border-primary/20 text-primary" : "border-border-hover text-text-muted"}`}
+                >
+                  {step.done ? (
+                    <Check size={11} />
+                  ) : (
+                    <span className="w-1 h-1 rounded-full bg-current" />
+                  )}
+                </span>
+                <span
+                  className={step.done ? "text-text-body" : "text-text-muted"}
+                >
+                  {step.label}
+                </span>
               </div>
-            )}
+            ))}
           </div>
-          <div className="flex items-center justify-between pt-space-xs text-text-muted font-body-sm text-body-sm">
-            <span>
-              {totalCount > 0
-                ? `${totalCount} generation${totalCount === 1 ? "" : "s"} total`
-                : "Generate your first post to start tracking cadence"}
-            </span>
-          </div>
-        </div>
-
-        {/* Right: Workspace Health — real counts */}
-        <div className="lg:col-span-4 bg-surface-card rounded-xl p-space-lg shadow-card-light flex flex-col justify-between gap-space-lg">
-          <div className="flex flex-col gap-space-xs">
-            <span className="font-label-xs text-label-xs uppercase tracking-wider text-text-muted font-semibold">
-              Workspace Health
-            </span>
-            <h3 className="font-serif text-title-lg text-text-display">Status</h3>
-          </div>
-          <div className="flex flex-col gap-space-md">
-            <div className="flex items-center justify-between p-space-sm bg-surface-subtle rounded-lg">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    {totalCount} generation attempts
-                  </span>
-                  <span className="font-label-xs text-label-xs text-text-muted">All time</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-space-sm bg-surface-subtle rounded-lg">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-secondary-fixed flex items-center justify-center text-secondary">
-                  <Edit3 className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    {inProgressCount} in progress
-                  </span>
-                  <span className="font-label-xs text-label-xs text-text-muted">Editing or in review</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-space-sm bg-surface-subtle rounded-lg">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
-                  <HistoryIcon className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    {finalizedCount} finalized
-                  </span>
-                  <span className="font-label-xs text-label-xs text-text-muted">Saved preferences</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Enlarged Draft Modal */}
-      <DraftPreviewModal
-        isOpen={Boolean(enlargedItem)}
-        onClose={() => setEnlargedItem(null)}
-        item={enlargedItem}
-        initialDraftIndex={enlargedDraftIndex}
-        onOpenInEditor={(genId, dIdx) => onOpenHistory(genId, dIdx)}
-      />
+          {onGoProfile && (
+            <button
+              onClick={onGoProfile}
+              className="mt-6 flex items-center gap-2 text-xs font-bold text-primary"
+            >
+              {profile
+                ? complete === 3
+                  ? "Refine your profile"
+                  : "Set up your voice"
+                : "Open profile"}
+              <ArrowUpRight size={14} />
+            </button>
+          )}
+        </section>
+      </div>
+      <footer className="flex justify-between gap-4 border-t border-border-subtle pt-5 text-[10px] text-text-muted">
+        <span>Thoughtfully written. Unmistakably yours.</span>
+        <span>PostCraft AI</span>
+      </footer>
     </div>
   );
 }

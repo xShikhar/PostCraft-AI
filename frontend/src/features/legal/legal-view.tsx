@@ -24,7 +24,7 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
 
   return (
     <div className="min-h-screen bg-canvas-base">
-      <div className="max-w-3xl mx-auto px-space-lg py-space-2xl">
+      <div className="max-w-3xl mx-auto px-2 sm:px-6 py-8">
         {/* Back nav */}
         <button
           type="button"
@@ -40,7 +40,7 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
           <span className="font-label-xs text-label-xs uppercase tracking-widest text-primary font-bold">
             LEGAL
           </span>
-          <h1 className="font-serif text-display-lg text-text-display tracking-tight leading-none">
+          <h1 className="page-title">
             {isPrivacy ? "Privacy Policy" : "Terms of Service"}
           </h1>
           <p className="font-body-sm text-body-sm text-text-muted">
@@ -53,8 +53,12 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
             output via the components prop. This page is not user-input
             so the XSS surface is just the markdown itself, which is
             authored by us. */}
-        <article className="mt-space-lg bg-surface-card rounded-xl p-space-lg shadow-card-light border border-border-subtle">
-          <LegalMarkdown source={isPrivacy ? PRIVACY_POLICY_MARKDOWN : TERMS_OF_SERVICE_MARKDOWN} />
+        <article className="mt-8 paper p-6 sm:p-10">
+          <LegalMarkdown
+            source={
+              isPrivacy ? PRIVACY_POLICY_MARKDOWN : TERMS_OF_SERVICE_MARKDOWN
+            }
+          />
 
           {!isPrivacy && (
             <section className="mt-space-2xl pt-space-lg border-t border-border-subtle">
@@ -95,10 +99,14 @@ function LegalMarkdown({ source }: { source: string }) {
             <p className="my-space-sm first:mt-0 last:mb-0">{children}</p>
           ),
           ul: ({ children }) => (
-            <ul className="my-space-sm pl-space-lg list-disc space-y-1">{children}</ul>
+            <ul className="my-space-sm pl-space-lg list-disc space-y-1">
+              {children}
+            </ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-space-sm pl-space-lg list-decimal space-y-1">{children}</ol>
+            <ol className="my-space-sm pl-space-lg list-decimal space-y-1">
+              {children}
+            </ol>
           ),
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           table: ({ children }) => (

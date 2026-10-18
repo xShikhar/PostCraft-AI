@@ -1,469 +1,465 @@
 "use client";
-
-import { useRef, useEffect, useState } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { Loader2, Copy, ArrowLeft, Check, Lock, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { useRef, useState, useEffect } from "react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Copy,
+  Eye,
+  Feather,
+  Loader2,
+  Send,
+  Undo2,
+  Redo2,
+  PenLine,
+  Lock,
+} from "lucide-react";
+import type { Drafts, ChatMessage } from "@/lib/api/generation";
+import {
+  ResearchPanel,
+  type ResearchEvidence,
+} from "@/features/research/components/research-panel";
 import { getUnfilledPlaceholders } from "@/lib/utils/markdown";
-
-export type ChatMessage = { role: "user" | "assistant"; content: string };
-
-interface DraftEditorProps {
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+export interface DraftEditorProps extends ResearchEvidence {
+  topic: string;
+  platform: string;
   activeDraftIndex: number;
   draftContent: string;
+  onChange: (text: string) => void;
+  dirty: boolean;
   isFinalized: boolean;
   finalizedDraftIndex?: number | null;
   chatHistory: ChatMessage[];
   editInstruction: string;
-  setEditInstruction: (v: string) => void;
-  isEditing: boolean;
-  loading: boolean;
+  setEditInstruction: (text: string) => void;
+  busy: string | null;
   onEditSubmit: (e: React.FormEvent) => void;
+  onSave: () => Promise<boolean>;
   onFinalize: () => void;
   onBack: () => void;
   onCopy: (text: string) => void;
   renderMarkdown: (text: string) => string;
-  allDrafts?: { draft_1?: string; draft_2?: string; draft_3?: string } | null;
-  onSelectDraftIndex?: (index: number) => void;
+  allDrafts: Drafts;
+  onSelectDraftIndex: (index: number) => void;
+  error?: string;
+  onReload: () => void;
+  quality?: {
+    result?: string;
+    substance_score?: number | null;
+    scope?: string;
+    draft_index?: number;
+  } | null;
+  original?: string;
 }
-
-const QUICK_CHIPS = [
-  "Make it shorter",
-  "More casual tone",
-  "Add a call to action",
-  "Focus on the insight",
-  "Make it more punchy",
-];
-
 export function DraftEditor({
+  topic,
+  platform,
   activeDraftIndex,
   draftContent,
+  onChange,
+  dirty,
   isFinalized,
   finalizedDraftIndex,
   chatHistory,
   editInstruction,
   setEditInstruction,
-  isEditing,
-  loading,
+  busy,
   onEditSubmit,
+  onSave,
   onFinalize,
   onBack,
   onCopy,
   renderMarkdown,
-  allDrafts,
   onSelectDraftIndex,
+  error,
+  onReload,
+  quality,
+  original,
+  ...research
 }: DraftEditorProps) {
-  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatListRef = useRef<HTMLDivElement>(null);
-  const prevCountRef = useRef(chatHistory.length);
-
-  const unfilledPlaceholders = getUnfilledPlaceholders(draftContent);
-
-  const handleCopyClick = () => {
-    if (unfilledPlaceholders.length > 0) {
-      toast.warning(
-        `Draft copied, but contains ${unfilledPlaceholders.length} unfilled placeholder(s): ${unfilledPlaceholders.join(", ")}. Fill them in before publishing!`,
-        { duration: 5000 }
-      );
-    }
-    onCopy(draftContent);
-  };
-
-  const handleFinalizeClick = () => {
-    if (unfilledPlaceholders.length > 0) {
-      setShowFinalizeConfirm(true);
-      return;
-    }
-    onFinalize();
-  };
-
+  const [preview, setPreview] = useState(false),
+    [confirm, setConfirm] = useState(false),
+    [compare, setCompare] = useState(false);
+  const [undo, setUndo] = useState<string[]>([]);
+  const [redo, setRedo] = useState<string[]>([]);
+  const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-  }, [chatHistory.length, isEditing]);
-
-  // Stagger in new chat bubbles when a response or message is added
-  useGSAP(() => {
-    if (chatHistory.length > prevCountRef.current) {
-      const bubbles = chatListRef.current?.querySelectorAll(".chat-bubble");
-      if (bubbles && bubbles.length > 0) {
-        const last = bubbles[bubbles.length - 1];
-        const isReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (!isReduced) {
-          gsap.fromTo(
-            last,
-            { opacity: 0, y: 8, scale: 0.98 },
-            {
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              duration: 0.2,
-              ease: "power2.out",
-              clearProps: "transform",
-            }
-          );
-        }
-      }
-    }
-    prevCountRef.current = chatHistory.length;
-  }, { dependencies: [chatHistory.length], scope: chatListRef });
-
-  const isCurrentDraftFinalized = isFinalized && (finalizedDraftIndex ? activeDraftIndex === finalizedDraftIndex : true);
-
+    end.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "nearest",
+    });
+  }, [chatHistory.length]);
+  const locked = isFinalized;
+  const placeholders = getUnfilledPlaceholders(draftContent);
+  const applicableQuality =
+    quality?.scope === "generation" ||
+    (quality?.scope === "draft" && quality.draft_index === activeDraftIndex)
+      ? quality
+      : null;
   return (
-    <div className="w-full max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md mb-space-lg">
-        <div className="flex items-center gap-space-md flex-wrap">
+    <div className="workspace-enter">
+      <div className="flex flex-wrap gap-4 justify-between items-start mb-7">
+        <div>
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-lg bg-surface-subtle hover:bg-surface-container-high flex items-center justify-center text-text-muted hover:text-text-display transition-colors"
-            aria-label="Back to drafts"
+            className="text-xs text-text-muted hover:text-primary flex items-center gap-2 mb-5"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft size={13} />
+            All variations
           </button>
-          <div>
-            <h2 className="font-serif text-headline-md text-text-display">
-              Draft Edition
-            </h2>
-            <p className="font-body-sm text-body-sm text-text-muted">
-              Refine your post with natural language instructions
-            </p>
-          </div>
-
-          {/* Draft switcher tabs */}
-          {allDrafts && (
-            <div className="flex items-center gap-1 bg-surface-subtle p-1 rounded-xl border border-border-subtle ml-0 sm:ml-space-md flex-wrap">
-              {([1, 2, 3] as const).map((idx) => {
-                const text = allDrafts[`draft_${idx}` as keyof typeof allDrafts];
-                if (!text) return null;
-                const isActive = activeDraftIndex === idx;
-                const isThisDraftFinalized = isFinalized && (finalizedDraftIndex ? finalizedDraftIndex === idx : activeDraftIndex === idx);
-                const isThisDraftLocked = isFinalized && !isThisDraftFinalized;
-
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setShowFinalizeConfirm(false);
-                      onSelectDraftIndex?.(idx);
-                    }}
-                    className={`
-                      px-space-sm py-1 rounded-lg font-label-xs text-label-xs font-semibold transition-all flex items-center gap-1.5
-                      ${isActive
-                        ? "bg-surface-card text-text-display shadow-sm font-bold border border-border-subtle"
-                        : "text-text-muted hover:text-text-display hover:bg-surface-container"
-                      }
-                    `}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${isThisDraftFinalized ? "bg-green-500" : isThisDraftLocked ? "bg-text-muted/40" : isActive ? "bg-primary" : "bg-text-muted/40"}`} />
-                    <span>Draft {idx}</span>
-                    {isThisDraftFinalized && (
-                      <span className="text-[10px] font-bold text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
-                        <Check className="w-2.5 h-2.5" /> Finalized
-                      </span>
-                    )}
-                    {isThisDraftLocked && (
-                      <span className="text-[10px] font-medium text-text-muted bg-surface-container px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
-                        <Lock className="w-2.5 h-2.5" /> Locked
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <p className="eyebrow mb-2">
+            The writing room / {platform === "x" ? "X / Twitter" : "LinkedIn"}
+          </p>
+          <h1 className="font-serif text-[clamp(23px,2.4vw,34px)] tracking-tight text-text-display max-w-2xl">
+            {topic}
+          </h1>
         </div>
-
-        <div className="flex items-center gap-space-xs">
-          {isFinalized ? (
-            isCurrentDraftFinalized ? (
-              <span className="inline-flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-green-500/10 text-green-600 font-label-xs text-label-xs font-semibold">
-                <Check className="w-3.5 h-3.5" />
-                Finalized
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-space-2xs px-space-sm py-space-2xs rounded-full bg-surface-container text-text-muted font-label-xs text-label-xs font-semibold">
-                <Lock className="w-3.5 h-3.5" />
-                Locked
-              </span>
-            )
-          ) : (
-            <Button
-              onClick={handleFinalizeClick}
-              disabled={loading || isEditing}
-              size="sm"
-              className="rounded-full bg-primary hover:bg-primary-container text-on-primary font-label-sm font-semibold"
+        <div
+          className="flex bg-surface-card p-1 rounded-full border border-border-subtle self-end"
+          aria-label="Draft variation"
+        >
+          {([1, 2, 3] as const).map((n) => (
+            <button
+              key={n}
+              disabled={!!busy}
+              onClick={() => onSelectDraftIndex(n)}
+              aria-pressed={n === activeDraftIndex}
+              className={`px-4 py-2 text-xs rounded-full ${n === activeDraftIndex ? "bg-text-display text-surface-card" : "text-text-muted"}`}
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              <span>Finalize</span>
-            </Button>
-          )}
-          <button
-            onClick={handleCopyClick}
-            className="w-9 h-9 rounded-lg bg-surface-subtle hover:bg-surface-container-high flex items-center justify-center text-text-muted hover:text-text-display transition-colors"
-            aria-label="Copy draft"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
+              Draft {n}
+              {isFinalized && finalizedDraftIndex === n ? " Finalized" : ""}
+            </button>
+          ))}
         </div>
       </div>
-
-      {/* Unfilled Placeholders Finalize Confirmation Card */}
-      {showFinalizeConfirm && (
-        <div className="mb-space-md p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-text-display animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-sm font-bold text-amber-200">
-                Notice: Unfilled Placeholders in Draft {activeDraftIndex}
-              </h4>
-              <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                This draft contains <span className="font-semibold text-amber-300">{unfilledPlaceholders.length} placeholder(s)</span> ({unfilledPlaceholders.join(", ")}).
-                These brackets protect against unverified claims. Are you sure you want to finalize without replacing them with real data?
-              </p>
-              <div className="flex items-center gap-2 mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setShowFinalizeConfirm(false);
-                    onFinalize();
-                  }}
-                  className="rounded-full bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs h-8 px-4"
-                >
-                  Finalize Anyway
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowFinalizeConfirm(false)}
-                  className="rounded-full text-xs h-8 px-4 text-text-muted hover:text-text-display"
-                >
-                  Cancel & Edit First
-                </Button>
-              </div>
+      <div className="grid xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+        <section className="paper overflow-hidden">
+          <div className="flex justify-between items-center px-5 sm:px-7 py-4 border-b border-border-subtle">
+            <span className="eyebrow !text-[9px]">
+              {locked ? "Finalized generation" : "Your draft, your words"}
+            </span>
+            <div className="flex gap-1">
+              <button
+                className="icon-button !w-8 !min-h-8"
+                onClick={() => {
+                  setPreview(false);
+                }}
+                aria-label="Write draft"
+                aria-pressed={!preview}
+              >
+                <PenLine size={14} />
+              </button>
+              <button
+                className="icon-button !w-8 !min-h-8"
+                onClick={() => setPreview(true)}
+                aria-label="Preview draft"
+                aria-pressed={preview}
+              >
+                <Eye size={14} />
+              </button>
+              <button
+                disabled={locked || !!busy || undo.length === 0}
+                className="icon-button !w-8 !min-h-8"
+                aria-label="Undo last change"
+                onClick={() => {
+                  const last = undo[undo.length - 1];
+                  if (last !== undefined) {
+                    setUndo((items) => items.slice(0, -1));
+                    setRedo((items) => [...items, draftContent]);
+                    onChange(last);
+                  }
+                }}
+              >
+                <Undo2 size={14} />
+              </button>
+              <button
+                className="icon-button !w-8 !min-h-8"
+                aria-label="Redo last change"
+                disabled={locked || !!busy || !redo.length}
+                onClick={() => {
+                  const next = redo[redo.length - 1];
+                  if (next !== undefined) {
+                    setRedo((items) => items.slice(0, -1));
+                    setUndo((items) => [...items, draftContent]);
+                    onChange(next);
+                  }
+                }}
+              >
+                <Redo2 size={14} />
+              </button>
+              <button
+                className="icon-button !w-8 !min-h-8"
+                onClick={() => onCopy(draftContent)}
+                aria-label="Copy draft"
+              >
+                <Copy size={14} />
+              </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-space-lg items-start">
-
-        {/* Draft preview (left, 3/5) */}
-        <div className="lg:col-span-3 flex flex-col gap-space-md">
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-space-lg flex-1 min-h-[400px] max-h-[75vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between mb-space-md">
-              <span className="font-label-xs text-label-xs text-text-muted uppercase tracking-wider">
-                Draft Preview
-              </span>
-              <span className="font-body-sm text-body-sm text-text-muted">
-                {draftContent.length} chars · {draftContent.split(/\s+/).filter(Boolean).length} words
-              </span>
-            </div>
-            {unfilledPlaceholders.length > 0 && (
-              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium mb-space-md">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="font-semibold text-amber-200">
-                    {unfilledPlaceholders.length} Unfilled Placeholder{unfilledPlaceholders.length > 1 ? "s" : ""}
-                  </div>
-                  <div className="mt-1 font-mono text-amber-300 text-[11px] flex flex-wrap gap-1.5">
-                    {unfilledPlaceholders.map((p, i) => (
-                      <span key={i} className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-1.5 text-text-muted text-[11px] leading-relaxed">
-                    Values inside brackets were held back by the anti-hallucination guard. Use the chat stream on the right or edit to supply your verified numbers.
-                  </div>
-                </div>
-              </div>
-            )}
+          {preview ? (
             <div
-              className="font-body-md text-body-md text-text-display leading-relaxed prose-editor [&_strong]:text-text-display [&_strong]:font-bold"
+              className="prose-draft p-6 sm:p-9 min-h-[420px]"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(draftContent) }}
             />
-          </div>
-        </div>
-
-        {/* Chat stream (right, 2/5) */}
-        <div className="lg:col-span-2 flex flex-col bg-surface-card rounded-xl border border-border-subtle overflow-hidden max-h-[75vh] sticky top-6">
-          {/* Chat header */}
-          <div className="flex items-center justify-between px-space-md py-space-sm border-b border-border-subtle bg-surface-subtle">
-            <div className="flex items-center gap-space-sm">
-              <MessageSquare className="w-4 h-4 text-primary" />
-              <span className="font-label-sm text-label-sm font-semibold text-text-display">
-                Edit Stream
-              </span>
+          ) : (
+            <textarea
+              aria-label="Draft text"
+              value={draftContent}
+              readOnly={locked || !!busy}
+              maxLength={20000}
+              onChange={(e) => {
+                setUndo((items) => [...items.slice(-99), draftContent]);
+                setRedo([]);
+                onChange(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+                  e.preventDefault();
+                  if (dirty && !busy) void onSave();
+                }
+              }}
+              className="block w-full min-h-[440px] sm:min-h-[500px] p-6 sm:p-9 bg-transparent text-text-body text-[15px] leading-[1.95] outline-none !resize-y rounded-none border-0"
+            />
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="mx-6 mb-5 p-4 bg-error-container/20 border border-error/20 rounded-xl text-xs text-error"
+            >
+              {error}
+              <button onClick={onReload} className="mt-2 block underline">
+                Reload saved version
+              </button>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-label-xs text-label-xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-text-muted">
-                Draft {activeDraftIndex}
-              </span>
-              {isFinalized && (
-                isCurrentDraftFinalized ? (
-                  <span className="text-[10px] uppercase font-bold text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                    <Check className="w-2.5 h-2.5" /> Finalized
-                  </span>
+          )}
+          <div className="px-6 py-5 border-t border-border-subtle flex flex-wrap gap-4 justify-between items-center">
+            <div className="text-[10px] text-text-muted">
+              <p className="flex gap-1.5 items-center mb-1">
+                {dirty ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                 ) : (
-                  <span className="text-[10px] uppercase font-medium text-text-muted bg-surface-container px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                    <Lock className="w-2.5 h-2.5" /> Locked
-                  </span>
-                )
+                  <Check size={11} />
+                )}
+                <span>{dirty ? "Unsaved changes" : "All changes saved"}</span>
+              </p>
+              <p>
+                {draftContent.length.toLocaleString()} characters ·{" "}
+                {draftContent.trim()
+                  ? draftContent.trim().split(/\s+/).length
+                  : 0}{" "}
+                words
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {!locked && (
+                <button
+                  className="btn-secondary !min-h-10 !py-2"
+                  disabled={!dirty || !!busy || !draftContent.trim()}
+                  onClick={() => void onSave()}
+                >
+                  {busy === "save" ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Check size={13} />
+                  )}
+                  Save changes
+                </button>
+              )}
+              <button
+                disabled={locked || !!busy}
+                className="btn-primary !min-h-10 !py-2"
+                onClick={() =>
+                  placeholders.length ? setConfirm(true) : onFinalize()
+                }
+              >
+                {busy === "finalize" ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : locked ? (
+                  <Lock size={13} />
+                ) : (
+                  <ArrowUpRight size={13} />
+                )}{" "}
+                {locked
+                  ? `Draft ${finalizedDraftIndex || activeDraftIndex} Finalized`
+                  : "Finalize"}
+              </button>
+            </div>
+          </div>
+          {original && original !== draftContent && (
+            <div className="px-6 py-4 border-t border-border-subtle">
+              <button
+                className="text-[11px] text-text-muted underline"
+                onClick={() => setCompare((v) => !v)}
+              >
+                {compare ? "Hide" : "Compare with"} original generation
+              </button>
+              {compare && (
+                <div
+                  className="prose-draft !text-xs mt-4 p-5 bg-surface-subtle rounded-lg"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(original) }}
+                />
               )}
             </div>
+          )}
+        </section>
+        <aside className="paper overflow-hidden">
+          <div className="p-6 border-b border-border-subtle">
+            <p className="eyebrow !text-primary mb-2 flex items-center gap-2">
+              <Feather size={13} />
+              Your thought partner
+            </p>
+            <h2 className="font-serif text-xl text-text-display">
+              A little refinement.
+            </h2>
+            <p className="text-xs text-text-muted mt-2 leading-relaxed">
+              Keep the idea. Find a sharper way to say it.
+            </p>
           </div>
-
-          {/* Chat messages */}
-          <div ref={chatListRef} className="flex-1 overflow-y-auto p-space-md space-y-space-md custom-scrollbar min-h-[200px]">
-            {chatHistory.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center py-space-xl">
-                <MessageSquare className="w-8 h-8 text-outline mb-space-sm" />
-                <p className="font-body-sm text-body-sm text-text-muted">
-                  {isFinalized
-                    ? (isCurrentDraftFinalized
-                        ? `Draft ${activeDraftIndex} was finalized. Chat stream is closed.`
-                        : `Draft ${activeDraftIndex} is locked. Draft ${finalizedDraftIndex || 1} was finalized.`)
-                    : `Your revisions for Draft ${activeDraftIndex} will appear here`}
+          <div className="max-h-[380px] min-h-[180px] overflow-auto custom-scrollbar p-5 space-y-4">
+            {!chatHistory.length ? (
+              <div className="py-5">
+                <span className="text-primary">
+                  <Feather size={20} />
+                </span>
+                <p className="text-xs text-text-muted mt-4 leading-relaxed">
+                  Ask for a stronger opening, a quieter tone, or a more specific
+                  ending. Revisions are saved to this draft.
                 </p>
               </div>
-            )}
-            {chatHistory.map((msg, i) => (
-              <div
-                key={i}
-                className={`chat-bubble flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-              >
-                <span className="font-label-xs text-[10px] text-text-muted mb-1 px-1 flex items-center gap-1">
-                  {msg.role === "user" ? (
-                    "You"
-                  ) : (
-                    <>
-                      <Sparkles className="w-3 h-3 text-primary" />
-                      <span className="font-semibold text-primary">PostCraft AI</span>
-                    </>
-                  )}
-                </span>
+            ) : (
+              chatHistory.map((m, i) => (
                 <div
-                  className={`max-w-[90%] rounded-xl px-space-sm py-space-xs text-body-sm leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-primary text-on-primary rounded-tr-sm"
-                      : "bg-surface-subtle text-text-display border border-border-subtle rounded-tl-sm"
-                  }`}
+                  key={i}
+                  className={`p-3.5 rounded-xl text-xs leading-relaxed ${m.role === "user" ? "ml-5 bg-primary/10 text-text-body" : "mr-3 bg-surface-subtle text-text-body"}`}
                 >
-                  {msg.content}
+                  <span className="eyebrow !text-[8px] block mb-2">
+                    {m.role === "user" ? "You" : "PostCraft"}
+                  </span>
+                  {m.content}
                 </div>
-              </div>
-            ))}
-            {isEditing && (
-              <div className="chat-bubble flex flex-col items-start">
-                <span className="font-label-xs text-[10px] text-text-muted mb-1 px-1 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-primary animate-pulse" />
-                  <span className="font-semibold text-primary">PostCraft AI</span>
-                </span>
-                <div className="rounded-xl px-space-sm py-space-xs text-body-sm bg-surface-subtle text-text-muted border border-border-subtle flex items-center gap-space-xs">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                  <span>Revising Draft {activeDraftIndex} &amp; updating preview...</span>
-                </div>
-              </div>
+              ))
             )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Quick chips (only when draft is editable and no conversation yet) */}
-          {chatHistory.length === 0 && !isFinalized && (
-            <div className="px-space-md py-space-xs border-t border-border-subtle/50 bg-surface-card">
-              <p className="font-label-xs text-[11px] text-text-muted mb-1.5">
-                Quick prompts for Draft {activeDraftIndex}
+            {busy === "edit" && (
+              <p role="status" className="text-xs text-text-muted flex gap-2">
+                <Loader2 size={13} className="animate-spin" />
+                Considering your revision…
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {QUICK_CHIPS.map((chip) => (
+            )}
+            <div ref={end} />
+          </div>
+          <div className="border-t border-border-subtle p-5">
+            <form onSubmit={onEditSubmit}>
+              <label className="sr-only" htmlFor="edit-instruction">
+                Revision instruction
+              </label>
+              <textarea
+                id="edit-instruction"
+                value={editInstruction}
+                onChange={(e) => setEditInstruction(e.target.value)}
+                disabled={locked || !!busy}
+                maxLength={2000}
+                placeholder={`Change Draft ${activeDraftIndex}... (Enter to send)`}
+                rows={2}
+                className="field !text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (editInstruction.trim() && !locked && !busy)
+                      e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                disabled={locked || !!busy || !editInstruction.trim()}
+                className="btn-primary !min-h-9 !text-[11px] !py-2 w-full mt-2"
+              >
+                Refine draft
+                <Send size={12} />
+              </button>
+            </form>
+            {!locked && (
+              <div className="flex flex-wrap gap-1.5 mt-4">
+                {[
+                  "Make it shorter",
+                  "More conversational",
+                  "Strengthen the opening",
+                ].map((text) => (
                   <button
-                    key={chip}
-                    onClick={() => setEditInstruction(chip)}
-                    className="px-2.5 py-1 rounded-full bg-surface-subtle hover:bg-surface-container-high text-text-muted hover:text-text-display font-label-xs text-[11px] transition-colors"
+                    key={text}
+                    disabled={!!busy}
+                    onClick={() => setEditInstruction(text)}
+                    className="text-[10px] px-2.5 py-1.5 rounded-full border border-border-subtle text-text-muted hover:text-primary hover:border-primary/40"
                   >
-                    {chip}
+                    {text}
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Input or Finalized State */}
-          {isFinalized ? (
-            isCurrentDraftFinalized ? (
-              <div className="p-space-md border-t border-border-subtle bg-surface-subtle flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0 text-green-600">
-                  <Check className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    Draft {activeDraftIndex} Finalized
-                  </span>
-                  <span className="font-label-xs text-label-xs text-text-muted">
-                    This draft was chosen and finalized. Style preferences have been saved.
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="p-space-md border-t border-border-subtle bg-surface-subtle flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 text-text-muted">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    Draft {activeDraftIndex} Locked
-                  </span>
-                  <span className="font-label-xs text-label-xs text-text-muted">
-                    Draft {finalizedDraftIndex || 1} was finalized for this post. Other drafts are locked.
-                  </span>
-                </div>
-              </div>
-            )
-          ) : (
-            <form
-              onSubmit={onEditSubmit}
-              className="p-2 sm:p-2.5 border-t border-border-subtle bg-surface-subtle"
-            >
-              <div className="flex gap-2 items-end">
-                <textarea
-                  value={editInstruction}
-                  onChange={(e) => setEditInstruction(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!isEditing && editInstruction.trim()) {
-                        onEditSubmit(e);
-                      }
-                    }
-                  }}
-                  placeholder={`Change Draft ${activeDraftIndex}... (Enter to send)`}
-                  rows={1}
-                  className="flex-1 bg-surface-card border border-border-subtle rounded-lg px-2.5 py-1.5 text-body-xs sm:text-body-sm text-text-display placeholder:text-outline resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 min-h-[34px] max-h-[72px] leading-tight custom-scrollbar"
-                  disabled={isEditing}
-                />
-                <button
-                  type="submit"
-                  disabled={isEditing || !editInstruction.trim()}
-                  className="w-8 h-8 rounded-lg bg-primary hover:bg-primary-container text-on-primary flex items-center justify-center transition-colors disabled:opacity-40 disabled:pointer-events-none self-end flex-shrink-0 mb-0.5"
-                  aria-label="Send edit instruction"
-                >
-                  {isEditing ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
+            )}
+            {dirty && (
+              <p className="text-[10px] text-text-muted mt-3">
+                Save your manual changes before requesting a revision.
+              </p>
+            )}
+            {locked && (
+              <p className="text-[10px] text-text-muted mt-3">
+                This generation is finalized. Its variations are read-only.
+              </p>
+            )}
+          </div>
+        </aside>
+      </div>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_280px] gap-5 mt-6">
+        <ResearchPanel {...research} />
+        <div className="p-6">
+          <p className="eyebrow mb-3">Editorial note</p>
+          <p className="font-serif text-xl text-text-display">
+            Make the last pass yours.
+          </p>
+          <p className="text-xs text-text-muted mt-3 leading-relaxed">
+            {dirty
+              ? "Your current edits have not been evaluated. Save and review your changes before finalizing."
+              : applicableQuality?.result?.toLowerCase() === "pass"
+                ? "The last automated quality review passed. Verify the specifics and read it in your own voice."
+                : "No passing quality assessment is available for this text. Finalization runs the actual review."}
+          </p>
+          <p className="text-[10px] text-text-muted mt-4">
+            Finalizing saves your preferred draft and learns from your
+            refinements. It does not publish to social media.
+          </p>
         </div>
       </div>
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent>
+          <DialogTitle>Check the placeholders</DialogTitle>
+          <DialogDescription>
+            This draft still includes {placeholders.join(", ")}. Replace these
+            with verified details before sharing.
+          </DialogDescription>
+          <div className="flex gap-3 mt-4">
+            <button className="btn-secondary" onClick={() => setConfirm(false)}>
+              Keep editing
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setConfirm(false);
+                onFinalize();
+              }}
+            >
+              Finalize anyway
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
