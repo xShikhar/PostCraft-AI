@@ -62,3 +62,7 @@ design-reference/
 *.yml
 !docker-compose*.yml
 !backend/.github/workflows/*.yml
+
+chroma_data/
+**/chroma_data/
+scratch/

@@ -1,201 +1,49 @@
-# PostCraft AI — Deployment Architecture & Operations Guide
+# Deployment architecture and environment reference
 
-> **Durable Reference Document**: This document outlines the architecture, environment variables, startup lifecycle, and platform-specific behaviors for PostCraft AI. Review this document before changing any dependency, secret, Dockerfile, or configuration file.
+Updated 15 October 2026. This describes repository configuration, not certification of live dashboards.
 
----
+## Path A: primary managed deployment
 
-## 1. System Topology: Where Each Part Runs
+Browser -> Vercel Next.js -> HTTPS Render API -> Supabase PostgreSQL session pooler and embedded Chroma on a Render persistent disk. Select backend/render.yaml as Blueprint path; rootDir: backend scopes the Dockerfile and context. Supply an external Supabase URL; this Blueprint does not provision Render PostgreSQL. Vercel needs build-time NEXT_PUBLIC_API_URL pointing to Render. Configure exact frontend CORS origins and API hostnames; change checked-in domain defaults if your dashboards differ.
 
-PostCraft AI is designed around a **split-host platform-managed architecture** in production, with a decoupled backend and frontend:
+## Path B: self-hosted VM
 
-```
-                          ┌─────────────────────────────┐
-                          │       Client Browser        │
-                          └──────────────┬──────────────┘
-                                         │
-                 ┌───────────────────────┴───────────────────────┐
-                 │                                               │
-                 ▼ HTTPS                                         ▼ HTTPS
-       ┌───────────────────┐                           ┌───────────────────┐
-       │   Vercel Edge     │                           │   Render Cloud    │
-       │ (Next.js Frontend)│                           │ (FastAPI Backend) │
-       └───────────────────┘                           └─────────┬─────────┘
-                                                                 │
-                                                ┌────────────────┴────────────────┐
-                                                ▼                                 ▼
-                                     ┌─────────────────────┐           ┌─────────────────────┐
-                                     │  Render PostgreSQL  │           │   Persistent Disk   │
-                                     │ (Managed Database)  │           │  (/var/data Chroma) │
-                                     └─────────────────────┘           └─────────────────────┘
-```
+Caddy on ports 80/443 -> frontend and /api backend -> internal PostgreSQL/Chroma containers. Use docker-compose.prod.yml independently of the Blueprint. DOCKER_BUILD=true enables standalone Next packaging. Empty frontend API origin means same-origin behind Caddy. Caddy provides public TLS. Internal Compose PostgreSQL uses a private network and DATABASE_SSL=False; do not claim encrypted database traffic unless PostgreSQL TLS is separately configured.
 
-### Hosting Breakdown
+## Environment matrix
 
-| Component | Hosting Platform | Runtime / Execution Model | Public URL / Exposure |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | **Vercel** | Next.js 16 (Turbopack, Serverless/Edge) | `https://post-craft-ai-lemon.vercel.app` |
-| **Backend** | **Render** | Docker Container (`python:3.12-slim`) running `uvicorn` | `https://postcraft-ai-3p2x.onrender.com` |
-| **Database** | **Supabase** | PostgreSQL 16 (Permanent Free Tier, Supavisor Session Pooler) | `aws-0-<region>.pooler.supabase.com:5432` / `postgresql+asyncpg://...` |
-| **Vector DB** | **Render Ephemeral / Supabase Fallback** | ChromaDB (`CHROMA_PERSIST_DIR`, default `./chroma_data`) | Ephemeral container directory on Render free tier. Style profiles are durably stored in Supabase PostgreSQL (`StyleProfile`), enabling transparent fallback on container restarts. Persistent disk mount supported on paid plans. |
+| Variable | Requirement/default |
+|---|---|
+| DATABASE_URL | Required usable SQLAlchemy URL; postgres/postgresql schemes normalize to asyncpg. Supabase pooler details come from its dashboard. |
+| DATABASE_SSL | False locally/internal Compose; True for managed public PostgreSQL. Uses default CA-verified TLS, including Alembic. |
+| JWT_SECRET_KEY | Required, at least 32 characters; generate randomly. |
+| RESUME_ENCRYPTION_KEY | Required valid Fernet key; generate with Fernet.generate_key(), never hexadecimal. Validated at startup/migration. Preserve the matching key for existing data. |
+| GEMINI_API_KEY | Required for writing and resume analysis. |
+| GEMINI_MODEL | Base model, default gemini-3.5-flash-lite. Verify availability in your provider account. |
+| GEMINI_FAST_MODEL | Optional; blank/unset falls back to base. Extraction and judging. |
+| GEMINI_DRAFT_MODEL | Optional; blank/unset falls back to base. Drafting and editing. |
+| TAVILY_API_KEY / SERP_API_KEY | Optional; Tavily first, failure/empty fallback to SerpApi, then low-confidence synthetic structure. |
+| CHROMA_HOST / CHROMA_PORT | Explicit nonlocal host selects HTTP client; otherwise embedded. Port default 8000. |
+| CHROMA_PERSIST_DIR | Embedded directory, default ./chroma_data; Blueprint uses /var/data/chroma with disk. |
+| CORS_ORIGINS | CSV/JSON origins; default http://localhost:3000. Retry/rate headers are exposed. |
+| ALLOWED_HOSTS | CSV/JSON actual API hosts. Set deliberately for each path. |
+| ENVIRONMENT / DEBUG | Defaults development / False. Production adds HSTS/production guards. |
+| RATE_LIMIT_STORAGE_URI | Default memory:// requires a single process/replica. Shared storage requires its supported driver installed and staging verification. |
+| SENTRY_DSN | Optional; reduced event IDs/types only. Payloads, breadcrumbs, locals and tracing disabled. |
+| SENTRY_TRACES_SAMPLE_RATE | Accepted for compatibility; tracing remains disabled to avoid content-bearing spans. |
+| MODEL_TOKEN_PRICES | Optional JSON mapping model names to prompt/completion rates per million tokens. |
+| COST_PROMPT_PER_MILLION / COST_COMPLETION_PER_MILLION | Configurable estimate assumptions, defaults 0.30 / 2.50; not verified provider pricing or invoices. Match your model selection. |
+| PORT | Listener, default 8000. |
+| RUN_RESUME_MIGRATION | Compatibility setting; startup now always validates/encrypts legacy private fields. |
+| NEXT_PUBLIC_API_URL | Frontend build-time API origin: HTTPS Render on Vercel, empty behind Caddy, localhost API in development. |
+| DOCKER_BUILD | Frontend Docker flag; omit on native Vercel builds. |
+| POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB | Required production Compose credentials. |
+| POSTCRAFT_DOMAIN / POSTCRAFT_ADMIN_EMAIL | Caddy host/contact; host included in API allowed hosts. |
 
-### How Frontend & Backend Communicate
-1. The browser loads the Next.js static pages and scripts from **Vercel**.
-2. When the user interacts with the app (Auth, Generation, History, Profile), the browser issues cross-origin `fetch()` requests directly to the **Render** backend URL specified by `NEXT_PUBLIC_API_URL`.
-3. The Render backend inspects:
-   - `ALLOWED_HOSTS`: Validates the Host header (`localhost`, `*.onrender.com`, or custom domain).
-   - `CORS_ORIGINS`: Permits cross-origin requests from the Vercel origin.
-   - `Authorization: Bearer <jwt>`: Validates user identity using `JWT_SECRET_KEY`.
+Unknown legacy dotenv keys are ignored for upgrade compatibility. ADMIN_USERNAMES cannot grant a role and should be removed from dashboards. Encryption-key rotation requires controlled re-encryption with the old key, not blind replacement.
 
----
+## Startup/lifecycle
 
-## 2. The Two Deployment Paths
+start.sh retries Alembic five times with two-second delays, then runs legacy private-field encryption before Uvicorn. Failures prevent startup. Current schema head: a2d4e6f8b0c1. Existing case-insensitive username collisions must be resolved; migration fails rather than merging accounts.
 
-There are **two distinct deployment paths** in this repository. They serve different environments and use completely different configuration files:
-
-```
-                            Deployment Paths
-                                   │
-        ┌──────────────────────────┴──────────────────────────┐
-        ▼                                                     ▼
-[Path A: Platform-Managed]                             [Path B: Self-Hosted VM]
-- Frontend: Vercel (Native)                            - Single Linux VPS (Hetzner, AWS EC2, etc.)
-- Backend: Render Web Service                          - Multi-container stack (`docker-compose.prod.yml`)
-- TLS: Render & Vercel Auto-SSL                        - TLS: Caddy reverse proxy (ports 80 & 443)
-- Routing: Direct cross-origin                         - Routing: Caddy reverse proxies `/api/*` to backend
-- Config: `render.yaml`, platform envs                 - Config: `.env`, `docker-compose.prod.yml`, `Caddyfile`
-```
-
-> [!IMPORTANT]
-> **Changes to one path DO NOT apply to the other**:
-> - If you edit `docker-compose.prod.yml` or `frontend/Caddyfile`, **Render and Vercel are completely unaffected**.
-> - Do **not** apply Caddy-specific assumptions (like relative `/api` calls without a public URL, or internal `http://backend:8000` DNS names) to the Vercel/Render path.
-> - In Next.js, `output: "standalone"` is **strictly reserved for Docker builds** (Path B). It must **never** be enabled when building on Vercel (Path A).
-
----
-
-## 3. Environment Variable Reference Matrix
-
-The table below lists every environment variable required across production services.
-
-| Variable Name | Required By | Where Set | Purpose | Behavior if Missing / Malformed |
-| :--- | :--- | :--- | :--- | :--- |
-| `JWT_SECRET_KEY` | Backend | Render Dashboard | Signs & verifies HS256 auth tokens | **CRASHES AT STARTUP**: Fail-closed guard exits with status 1 if missing or <32 chars. |
-| `RESUME_ENCRYPTION_KEY` | Backend | Render Dashboard | Fernet (AES-128-CBC + HMAC) key for encrypting resume PII at rest | **CRASHES ON RESUME ACTIONS**: Migration skips with warning; upload/view endpoints fail closed with status 1. |
-| `DATABASE_URL` | Backend | Render Dashboard | Connection string for Supabase PostgreSQL (e.g. `postgresql+asyncpg://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:5432/postgres`) | **CRASHES AT STARTUP**: SQLAlchemy engine cannot connect; migrations fail. |
-| `ALLOWED_HOSTS` | Backend | Render Dashboard | Trusted host whitelist for `TrustedHostMiddleware` | **HTTP 400 BAD REQUEST**: Returns 400 to any request with an unrecognized Host header. Defaults to `localhost,127.0.0.1,testserver,*.onrender.com`. |
-| `CORS_ORIGINS` | Backend | Render Dashboard | Allowed origins for browser CORS preflights | **BROWSER CORS BLOCK**: Requests from Vercel fail in the browser console. |
-| `GEMINI_API_KEY` | Backend | Render Dashboard | Google Gemini AI API key | **HTTP 500 / GENERATION FAILURE**: Pipeline nodes crash when calling the Gemini model. |
-| `GEMINI_MODEL` | Backend | Render Dashboard | Model version for pipeline nodes | Defaults to `gemini-2.5-flash` or pinned version (e.g. `gemini-3.5-flash-lite`). |
-| `GEMINI_DRAFT_MODEL` | Backend | Render Dashboard | Dedicated model for draft generation | Defaults to `GEMINI_MODEL` if unset. |
-| `ADMIN_USERNAMES` | Backend | Render Dashboard | Whitelisted usernames promoted to admin on login | Non-admin users attempting to access `/api/admin/*` receive HTTP 403 Forbidden. |
-| `RUN_RESUME_MIGRATION`| Backend | Render Dashboard | Run legacy resume encryption migration on container start | Defaults to `false`. Set to `true` to run one-off resume encryption. |
-| `SERP_API_KEY` | Backend | Render Dashboard | SerpApi search key (fallback search) | Non-fatal: Research node falls back to Tavily or synthetic context. |
-| `TAVILY_API_KEY` | Backend | Render Dashboard | Tavily search API key (primary search) | Non-fatal: Research node falls back to SerpApi or synthetic context. |
-| `SENTRY_DSN` | Backend | Render Dashboard (Optional) | Sentry error tracking DSN | Non-fatal: Error reporting is disabled silently. |
-| `ENVIRONMENT` | Backend | Render Dashboard | `production` vs `development` | Defaults to `development`. Controls CSP strictness and debug logging. |
-| `DEBUG` | Backend | Render Dashboard | `False` in production | Defaults to `True`. Enables verbose query logging. |
-| `NEXT_PUBLIC_API_URL` | Frontend | Vercel Dashboard | Public HTTPS URL of Render backend (`https://postcraft-ai-3p2x.onrender.com`) | **CLIENT FAILS**: Frontend fetches fallback to relative `/api` (hitting Vercel instead of Render) or `localhost:8000`. |
-
----
-
-## 4. Backend Startup Lifecycle (`start.sh`)
-
-When Render launches the backend container, it runs [`backend/start.sh`](file:///c:/Project/Ai%20post/backend/start.sh) as its container entrypoint (`CMD ["/app/start.sh"]`):
-
-```mermaid
-flowchart TD
-    A["Container Start (Render Web Service)"] --> B["1. Alembic Database Migrations"]
-    B -->|Attempt 1..5 with 2s backoff| C{"Migrations OK?"}
-    C -->|No| D["FATAL: Exit status 1 (Container Restarts)"]
-    C -->|Yes| E{"RUN_RESUME_MIGRATION == true?"}
-    E -->|Yes| F["Run one-off resume encryption"]
-    E -->|No / default| G["2. Read PORT from Render ($PORT)"]
-    F --> G
-    G --> H["3. Exec Uvicorn (app.main:app --port $PORT)"]
-    H --> I["4. Render Health Check (/api/health -> 200 OK)"]
-```
-
-### Startup Steps in Detail
-
-1. **Alembic Database Migrations (`alembic upgrade head`)**:
-   - Automatically applies pending schema revisions up to `head`.
-   - Incorporates a 5-attempt retry loop (2 seconds between attempts) to wait for database connection readiness on cold start.
-   - **Fatal**: If all 5 attempts fail, the container exits with code 1.
-2. **Resume Encryption Migration (`python -m app.core.migrate_resume_encryption`)**:
-   - Only executed if `RUN_RESUME_MIGRATION=true` is set.
-   - Scans `user_resumes` table for plaintext `raw_text` or `structured_summary` and encrypts with Fernet.
-   - Defaults to skipped (`false`), saving ~1.8s of container startup time on normal cold boots.
-3. **Lazy ChromaDB Initialization**:
-   - ChromaDB and vector dependencies are loaded on first vector retrieval, not at container import time.
-   - Speeds up `app.main` import from ~5.5s down to ~3.1s.
-4. **Port Binding & Uvicorn Launch**:
-   - Render automatically injects the `$PORT` environment variable (e.g., `10000`).
-   - `start.sh` extracts `PORT_TO_USE="${PORT:-8000}"` and executes:
-     ```bash
-     exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT_TO_USE"
-     ```
-5. **Health Check Endpoint (`/api/health`)**:
-   - Render pings `/api/health` every few seconds to verify the service is alive.
-   - Returns `{"status": "healthy"}` instantly without touching the database or loading ChromaDB.
-
-### Render Free Tier Keep-Alive & Quota Limits
-- **750 Instance Hours Limit**: Render provides 750 free hours per month per account.
-- A single service running 24/7 uses 720 hours (in a 30-day month) or 744 hours (in a 31-day month), leaving <1% headroom.
-- **Inactivity Timeout**: Render spins down inactive containers after 15 minutes of zero traffic. Cold wake from sleep takes 45–90s (dominated by Render provisioning overhead).
-- **Recommendation**: For production launch with real customers, upgrade to the **Render Starter tier ($7/month)** for always-on uptime without cold starts.
-
----
-
-## 5. "Before You Change X, Check Y" (Pre-Flight Tripwires)
-
-Before committing changes to this repository, verify this checklist:
-
-### If you add a new environment variable:
-- [ ] **Check Render**: If the variable is required by the backend, add it to the Render Web Service Environment settings **before** pushing to `main`.
-- [ ] **Check Vercel**: If the variable starts with `NEXT_PUBLIC_`, add it to Vercel's Environment Variables settings before deployment.
-- [ ] **Check Fail-Closed Logic**: If the code uses `sys.exit(1)` or raises during import, ensure it provides an actionable error message and loads `dotenv.load_dotenv()` for local dev/testing.
-
-### If you add a new Python dependency (`pyproject.toml`):
-- [ ] **Check System Libraries**: If the library relies on C extensions or OS packages (like `pdfplumber` needing `poppler-utils` or `psycopg2` needing `libpq5`), verify that [`backend/Dockerfile`](file:///c:/Project/Ai%20post/backend/Dockerfile) installs them in both `builder` and `runner` stages via `apt-get`.
-- [ ] **Check Lockfile**: Run `uv sync` to ensure the package resolves cleanly without dependency conflicts.
-
-### If you modify `next.config.ts`:
-- [ ] **Do NOT hardcode `output: "standalone"`**: Standalone output must only be enabled when `process.env.DOCKER_BUILD === "true"`. Vercel builds will fail with `ENOENT: next-server.js.nft.json` if standalone mode is active on Vercel.
-- [ ] **Do NOT create `outputDirectory: ".next"` in `vercel.json`**: Vercel handles Next.js builds automatically.
-
-### If you create a new Alembic migration:
-- [ ] **Check Module Imports**: Never import `security.py` or auth functions inside `env.py` or migration scripts. Keep database migrations isolated from auth runtime secrets.
-- [ ] **Run Heads Check**: Run `alembic heads` locally to ensure no branching revisions exist.
-
-### If you change domains or URLs:
-- [ ] **Update `ALLOWED_HOSTS`**: Ensure the new backend domain is allowed by Starlette's `TrustedHostMiddleware` (e.g. `*.onrender.com`).
-- [ ] **Update `CORS_ORIGINS`**: Ensure the new frontend domain is whitelisted on Render so browser cross-origin calls succeed.
-
----
-
-## 6. Rollback Procedures
-
-If a deployment breaks in production, follow these rapid recovery steps:
-
-### Instant Rollback on Render (Backend)
-1. Go to **Render Dashboard** -> Select `PostCraft-AI` service.
-2. Click **Deploys** in the left navigation.
-3. Find the last known-working deployment (e.g. before the broken commit).
-4. Click the **`...`** menu on the right of that deploy -> Select **Rollback to this deploy**.
-5. Render immediately stops the failed container and redeploys the last successful Docker image without waiting for a re-build.
-
-### Instant Rollback on Vercel (Frontend)
-1. Go to **Vercel Dashboard** -> Select `post-craft-ai` project.
-2. Click **Deployments** tab.
-3. Locate the last successful deployment.
-4. Click the **`...`** menu -> Click **Instant Rollback** (or **Promote to Production**).
-5. Vercel routes traffic to the previous deployment instantaneously (zero build time).
-
-### Emergency Git Rollback
-If you need to revert via source control:
-```bash
-# Revert the offending commit
-git revert <commit-hash>
-git push origin main
-```
-Both Render and Vercel will auto-deploy the revert commit within 2-3 minutes.
+Critical drafts/preferences/learned styles commit before responses. Optional indexing/cache/cost tasks use isolated sessions and drain for up to 20 seconds at shutdown. A worker retries durable vector erasure jobs every 30 seconds, removes expired research rows and marks abandoned generating records older than ten minutes failed. PostgreSQL row locks coordinate admission and vector writes with deletion; disposable SQLite tests cannot prove production locking/TLS guarantees.

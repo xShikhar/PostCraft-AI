@@ -42,7 +42,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Required only in signup mode. The submit button is disabled until
   // the user has actively checked the box — see the `canSubmit` calc
@@ -54,9 +54,10 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
   // stashed a flag in sessionStorage. Surface a single, clear confirmation
   // and clear the flag so it doesn't repeat on a re-login.
   useEffect(() => {
-    if (sessionStorage.getItem("postcraft:post_delete_notice") === "1") {
+    const notice = sessionStorage.getItem("postcraft:post_delete_notice");
+    if (notice) {
       sessionStorage.removeItem("postcraft:post_delete_notice");
-      toast.success("Your account and data have been deleted.");
+      toast.info(notice === "1" ? "Your account has been deleted." : notice);
     }
   }, []);
 
@@ -79,9 +80,9 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
       return;
     }
     if (isLoginMode) {
-      await login(username, password);
+      await login(username, password, rememberMe);
     } else {
-      await signup(username, password);
+      await signup(username, password, rememberMe);
     }
   };
 
@@ -126,6 +127,8 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                     className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-space-md py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
                     placeholder="name@domain.com"
                     required
+                    minLength={3}
+                    maxLength={255}
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -140,13 +143,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                   <label className="font-label-md text-label-md text-text-display" htmlFor="password">
                     Password
                   </label>
-                  <a
-                    className="font-body-sm text-body-sm text-primary hover:text-primary-container transition-colors cursor-pointer"
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                  >
-                    Forgot password?
-                  </a>
+
                 </div>
                 <div className="relative flex items-center">
                   <Lock className="absolute left-space-sm text-outline w-4 h-4 pointer-events-none" />
@@ -156,6 +153,8 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                     className="w-full bg-surface-container-low text-text-display font-body-sm text-body-sm pl-9 pr-10 py-space-sm rounded-lg border border-transparent focus:outline-none focus:bg-surface-card focus:border-primary/40 focus:ring-2 focus:ring-primary-container hover:border-border-hover transition-all duration-200 placeholder:text-outline"
                     placeholder="Enter password"
                     required
+                    minLength={isLoginMode ? 1 : 8}
+                    maxLength={128}
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -260,7 +259,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
             <div className="relative z-10 mt-space-lg pt-space-md flex flex-col items-center gap-space-2xs">
               <div className="inline-flex items-center gap-space-2xs text-text-muted font-body-sm text-body-sm bg-surface-subtle px-space-sm py-space-2xs rounded-full">
                 <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                <span>Enterprise 256-bit encryption</span>
+                <span>Encrypted private background</span>
               </div>
               <div className="flex items-center gap-space-xs font-body-sm text-body-sm text-text-muted">
                 <button
@@ -279,7 +278,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
                   Terms
                 </button>
                 <span className="w-1 h-1 rounded-full bg-outline-variant" />
-                <a className="hover:text-text-display transition-colors" href="#" onClick={(e) => e.preventDefault()}>Status</a>
+
               </div>
             </div>
           </div>

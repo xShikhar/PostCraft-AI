@@ -30,7 +30,7 @@ class PostGenerationPipeline:
             llm = create_gemini_client(
                 model=fast_model,
                 google_api_key=settings.GEMINI_API_KEY,
-                max_retries=1,
+                max_retries=0,
                 timeout=60.0,
             )
             draft_model_name = settings.GEMINI_DRAFT_MODEL or settings.GEMINI_MODEL
@@ -38,7 +38,7 @@ class PostGenerationPipeline:
                 draft_llm = create_gemini_client(
                     model=draft_model_name,
                     google_api_key=settings.GEMINI_API_KEY,
-                    max_retries=1,
+                    max_retries=0,
                     timeout=60.0,
                 )
             else:
@@ -63,6 +63,7 @@ class PostGenerationPipeline:
             "topic": state.topic,
             "raw_thoughts": state.raw_thoughts,
             "profile_context": state.profile_context or "",
+            "writing_style": state.writing_style or "",
             "use_context": state.use_context,
             "research_result": None,
             "extracted_pattern": None,
@@ -80,8 +81,8 @@ class PostGenerationPipeline:
             final = await self.graph.ainvoke(initial_state)
             state.telemetry = telemetry.finish()
         except Exception as e:
-            logger.error(f"LangGraph pipeline error: {e}", exc_info=True)
-            state.error = str(e)
+            logger.error(f"LangGraph pipeline error: {type(e).__name__}", exc_info=False)
+            state.error = "Generation unavailable. Please try again."
             state.telemetry = telemetry.finish()
             try:
                 gen_id = state.generation_id
@@ -93,7 +94,7 @@ class PostGenerationPipeline:
                     self.session.add(generation)
                     await self.session.commit()
             except Exception:
-                logger.error("Failed to save error state to DB", exc_info=True)
+                logger.error("Failed to save error state to DB", exc_info=False)
             return state
 
         return self._to_pipeline_state(state, final)

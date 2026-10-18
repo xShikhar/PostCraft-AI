@@ -21,12 +21,12 @@ services:
 
   # ─── ChromaDB ──────────────────────────────────────────
   chromadb:
-    image: chromadb/chroma:0.5.23
+    image: chromadb/chroma:1.5.9
     container_name: postcraft-chromadb
     restart: unless-stopped
     # No public ports — only backend reaches this on the internal Docker network.
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
@@ -42,6 +42,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      - DATABASE_SSL=False
+      - ENVIRONMENT=production
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
@@ -89,8 +91,6 @@ services:
       # (e.g. app.yourdomain.com) and POSTCRAFT_ADMIN_EMAIL for Let's Encrypt notifications.
       - POSTCRAFT_DOMAIN=${POSTCRAFT_DOMAIN:-localhost}
       - POSTCRAFT_ADMIN_EMAIL=${POSTCRAFT_ADMIN_EMAIL:-admin@localhost}
-      # Set POSTCRAFT_SKIP_TLS="true" to skip HTTPS for local dev. Leave unset for production.
-      - POSTCRAFT_SKIP_TLS=${POSTCRAFT_SKIP_TLS:-}
     depends_on:
       - backend
       - frontend

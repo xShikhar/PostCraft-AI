@@ -6,14 +6,14 @@ import uuid
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
 
-from app.models import Generation, StyleProfile, CostLog, User, UserResume
+from app.models import Generation, StyleProfile, CostLog, User, UserResume, Preference
 from app.services.research import cascading_search
 from app.services.vector import vector_service
-from app.core.crypto import decrypt
+from app.core.crypto import decrypt, encrypt, read_private
 
 from app.services.pipeline.deps import PipelineDeps
 from app.services.pipeline.state import GraphState, ExtractedPattern, GeneratedDrafts, QualityVerdict
-from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prompt, build_quality_prompt
+from app.services.pipeline.prompts import build_pattern_prompt, build_draft_prompt, build_quality_prompt, BANNED_AI_TELLS
 from app.services.pipeline.llm_utils import invoke_with_bounded_backoff
 from app.services.pipeline.structural_checks import check_structural_tells
 from app.services.pipeline.unsourced_numbers import check_unsourced_numbers
@@ -26,9 +26,6 @@ from app.services.pipeline.background_tasks import (
 
 logger = logging.getLogger(__name__)
 
-# Constants for cost logging
-PRICE_PER_1M_PROMPT_TOKENS = 0.30
-PRICE_PER_1M_COMPLETION_TOKENS = 2.50
 MAX_RETRIES = 2
 
 @asynccontextmanager
@@ -57,6 +54,7 @@ async def log_cost(deps: PipelineDeps, operation: str, raw_message, generation_i
                 operation=operation,
                 prompt_tokens=p_tok,
                 completion_tokens=c_tok,
+                model=(deps.settings.GEMINI_DRAFT_MODEL or deps.settings.GEMINI_MODEL) if operation in ("draft_generation", "edit") else (deps.settings.GEMINI_FAST_MODEL or deps.settings.GEMINI_MODEL),
             ),
             task_name=f"bg_log_cost_{operation}",
         )
@@ -71,8 +69,8 @@ async def node_research(state: GraphState, deps: PipelineDeps) -> dict:
                 state["topic"], state["platform"], deps.session, telemetry=telemetry
             )
         except Exception as e:
-            logger.error(f"Research failed: {e}", exc_info=True)
-            return {"error": str(e), "research_result": None, "skip_extraction": False}
+            logger.error(f"Research failed: {type(e).__name__}", exc_info=False)
+            return {"error": "Research service unavailable", "research_result": None, "skip_extraction": False}
 
         if result and result.source == "cache":
             t0 = time.perf_counter()
@@ -82,7 +80,7 @@ async def node_research(state: GraphState, deps: PipelineDeps) -> dict:
                     StyleProfile.user_id == uuid.UUID(str(state["user_id"])),
                     StyleProfile.platform == state["platform"],
                 )
-                .order_by(StyleProfile.id.desc())
+                .order_by(StyleProfile.created_at.desc(), StyleProfile.id.desc())
                 .limit(1)
             )
             res = await deps.session.execute(stmt)
@@ -133,7 +131,7 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
                 timeout=3.0,
             )
         except Exception as e:
-            logger.warning(f"Could not load temporal style bias (non-fatal): {e}")
+            logger.warning(f"Could not load temporal style bias (non-fatal): {type(e).__name__}")
             historical_bias = ""
         if telemetry:
             telemetry.record_call(
@@ -165,7 +163,7 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
             if telemetry:
                 telemetry.record_call(
                     node_name="pattern_extraction",
-                    target="gemini",
+                    target="gemini_result",
                     operation="pattern_extraction",
                     duration_s=t_llm,
                     prompt_tokens=p_tok,
@@ -176,15 +174,15 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
                 await log_cost(deps, "pattern_extraction", raw_msg, state["generation_id"])
         except Exception as e:
             t_llm = time.perf_counter() - t0
-            logger.warning(f"Structured extraction failed: {e}. Using default scaffold.")
+            logger.warning(f"Structured extraction failed: {type(e).__name__}. Using default scaffold.")
             if telemetry:
                 telemetry.record_call(
                     node_name="pattern_extraction",
-                    target="gemini",
+                    target="gemini_result",
                     operation="pattern_extraction",
                     duration_s=t_llm,
                     status="error",
-                    error_message=str(e),
+                    error_message=type(e).__name__,
                 )
             extracted = ExtractedPattern(
                 structure="Standard hook and body",
@@ -214,7 +212,7 @@ async def node_pattern_extraction(state: GraphState, deps: PipelineDeps) -> dict
                 task_name="bg_save_and_cleanup_style_profile",
             )
         except Exception as e:
-            logger.warning(f"Could not schedule background style profile write: {e}")
+            logger.warning(f"Could not schedule background style profile write: {type(e).__name__}")
 
         return {"extracted_pattern": extracted}
 
@@ -226,45 +224,14 @@ async def _build_temporal_style_bias(deps: PipelineDeps, user_id: str, platform:
     If ChromaDB is empty (e.g. after container restart on Render free tier), queries
     PostgreSQL StyleProfile table as resilient fallback and re-seeds ChromaDB.
     """
-    recent = await asyncio.to_thread(vector_service.get_recent_profiles, str(user_id), platform, limit=5)
+    try:
+        recent = await asyncio.wait_for(asyncio.to_thread(vector_service.get_recent_profiles, str(user_id), platform, limit=5), timeout=1.0)
+    except Exception:
+        recent = []
     if not recent:
-        # Fallback to PostgreSQL
-        try:
-            user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-            stmt = (
-                select(StyleProfile)
-                .where(
-                    StyleProfile.user_id == user_uuid,
-                    StyleProfile.platform == platform,
-                )
-                .order_by(StyleProfile.id.desc())
-                .limit(5)
-            )
-            res = await deps.session.execute(stmt)
-            db_profiles = res.scalars().all()
-            if db_profiles:
-                logger.info(f"ChromaDB empty/reset. Restored temporal style bias from {len(db_profiles)} PostgreSQL StyleProfile rows.")
-                recent = []
-                for p in db_profiles:
-                    style_concat = (
-                        f"Structure: {p.structure} | Tone: {p.tone} | "
-                        f"Pacing: {p.pacing} | Storytelling: {p.storytelling_technique} | "
-                        f"Format: {p.formatting} | CTA: {p.cta_style}"
-                    )
-                    recent.append({"id": str(p.id), "text": style_concat, "created_at": str(getattr(p, 'created_at', ''))})
-                    # Re-seed Chroma in background thread
-                    try:
-                        vector_service.save_style_profile(
-                            str(p.id),
-                            str(user_id),
-                            platform,
-                            style_concat,
-                            str(getattr(p, "created_at", "") or ""),
-                        )
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.warning(f"Failed to query PostgreSQL fallback for style profiles: {e}")
+        stmt = select(StyleProfile).where(StyleProfile.user_id == uuid.UUID(str(user_id)), StyleProfile.platform == platform).order_by(StyleProfile.created_at.desc(), StyleProfile.id.desc()).limit(5)
+        profiles = (await deps.session.execute(stmt)).scalars().all()
+        recent = [{"id": str(p.id), "text": " | ".join(f"{key}: {getattr(p, key) or ''}" for key in ExtractedPattern.model_fields), "created_at": p.created_at.isoformat()} for p in profiles]
 
     if not recent:
         return ""
@@ -322,7 +289,7 @@ async def _build_background_context(deps: PipelineDeps, user_id: str | uuid.UUID
             # JSON parse failure OR Fernet decryption failure (InvalidToken is a ValueError).
             # Without this split, the original `except (json.JSONDecodeError, Exception)`
             # made the second branch dead code.
-            logger.warning(f"Failed to decrypt/parse resume summary: {e}")
+            logger.warning(f"Failed to decrypt/parse resume summary: {type(e).__name__}")
             summary = {}
         if summary:
             bits = []
@@ -343,13 +310,13 @@ async def _build_background_context(deps: PipelineDeps, user_id: str | uuid.UUID
                 parts.append("Resume-derived: " + " | ".join(bits))
 
     # About me (free text)
-    if user and user.about_me and user.about_me.strip():
-        parts.append(f"About the author: {user.about_me.strip()}")
+    if user and user.about_me and read_private(user.about_me).strip():
+        parts.append(f"About the author: {read_private(user.about_me).strip()}")
 
     # Additional professional background notes (free text)
-    if user and user.profile_context and user.profile_context.strip():
+    if user and user.profile_context and read_private(user.profile_context).strip():
         # Strip out writing_style marker if stored in combined profile_context
-        clean_context = user.profile_context.split("[writing_style]")[0].strip().rstrip("-").strip()
+        clean_context = read_private(user.profile_context).split("[writing_style]")[0].strip().rstrip("-").strip()
         if clean_context:
             parts.append(f"Background notes: {clean_context}")
 
@@ -376,6 +343,7 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
             state["research_result"].content_snippets if state["research_result"] else []
         )
 
+        background_context = ""
         if state.get("use_context", True):
             t0 = time.perf_counter()
             background_context = await _build_background_context(deps, state["user_id"])
@@ -403,9 +371,19 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
             )
             snippets_text += feedback_injection
 
+        preferences = (await deps.session.execute(select(Preference).where(Preference.user_id == uuid.UUID(str(state["user_id"])), Preference.platform == state["platform"]).order_by(Preference.created_at.desc(), Preference.id.desc()).limit(5))).scalars().all()
+        learned = "\n".join(read_private(p.preference_text) for p in preferences)
         prompt = build_draft_prompt(state, pattern, snippets_text)
+        prompt += "\nWRITING STYLE INSTRUCTIONS (never evidence for personal claims):\n" + (state.get("writing_style") or "") + "\nLEARNED STYLE PREFERENCES (newest first):\n" + learned
+        state["factual_context"] = background_context
+        targets = state.get("failed_draft_indices") or [0, 1, 2]
+        schema = GeneratedDrafts
+        if retry_count and len(targets) < 3:
+            from pydantic import create_model
+            schema = create_model("TargetedDrafts", **{f"draft_{i+1}": (str, ...) for i in targets})
+            prompt += "\nOVERRIDE: Return ONLY these fields, regenerating only these drafts: " + ", ".join(f"draft_{i+1}" for i in targets)
         draft_model = deps.draft_llm or deps.llm
-        structured_llm = draft_model.with_structured_output(GeneratedDrafts, include_raw=True)
+        structured_llm = draft_model.with_structured_output(schema, include_raw=True)
 
         t0 = time.perf_counter()
         try:
@@ -426,7 +404,7 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
             if telemetry:
                 telemetry.record_call(
                     node_name="draft_generation",
-                    target="gemini",
+                    target="gemini_result",
                     operation="generate_drafts",
                     duration_s=t_llm,
                     prompt_tokens=p_tok,
@@ -436,256 +414,95 @@ async def node_draft_generation(state: GraphState, deps: PipelineDeps) -> dict:
             if raw_msg:
                 await log_cost(deps, "draft_generation", raw_msg, state["generation_id"])
 
-            # If retrying specific drafts, preserve the previously passing drafts
-            failed_indices = state.get("failed_draft_indices", [])
-            if retry_count > 0 and failed_indices and state.get("drafts"):
-                prev = state["drafts"]
-                d1 = drafts.draft_1 if 0 in failed_indices else getattr(prev, "draft_1", drafts.draft_1)
-                d2 = drafts.draft_2 if 1 in failed_indices else getattr(prev, "draft_2", drafts.draft_2)
-                d3 = drafts.draft_3 if 2 in failed_indices else getattr(prev, "draft_3", drafts.draft_3)
-                drafts = GeneratedDrafts(draft_1=d1, draft_2=d2, draft_3=d3)
-
-            return {"drafts": drafts}
+            if drafts is None:
+                raise ValueError("Draft response could not be parsed")
+            if retry_count and state.get("drafts"):
+                previous = state["drafts"].model_dump()
+                previous.update(drafts.model_dump())
+                drafts = GeneratedDrafts(**previous)
+            return {"drafts": drafts, "factual_context": background_context}
         except Exception as e:
             t_llm = time.perf_counter() - t0
-            logger.error(f"Failed to generate drafts: {e}", exc_info=True)
+            logger.error(f"Failed to generate drafts: {type(e).__name__}", exc_info=False)
             if telemetry:
                 telemetry.record_call(
                     node_name="draft_generation",
-                    target="gemini",
+                    target="gemini_result",
                     operation="generate_drafts",
                     duration_s=t_llm,
                     status="error",
-                    error_message=str(e),
+                    error_message=type(e).__name__,
                 )
-            return {"error": f"Failed to generate drafts: {e}"}
+            return {"error": "Draft generation unavailable. Please try again."}
+
+
+def _quality_result(message, hard=False, indices=None, score=None):
+    return {"quality_results": message, "is_hard_failure": hard,
+            "failed_draft_indices": indices or [], "quality_feedback": "" if message == "PASS" else message,
+            "substance_score": score}
 
 
 async def node_quality_check(state: GraphState, deps: PipelineDeps) -> dict:
-    retry_count = state.get("retry_count", 0)
-    logger.info("Executing node_quality_check")
     telemetry = state.get("telemetry")
-    async with _measure_node_ctx(telemetry, "quality_check", retry_count=retry_count) as metric:
-        drafts_obj = state.get("drafts")
-        if not drafts_obj:
-            return {"quality_results": "FAIL: No drafts to check."}
-
+    async with _measure_node_ctx(telemetry, "quality_check", retry_count=state.get("retry_count", 0)):
+        drafts = state.get("drafts")
+        if not drafts:
+            return _quality_result("FAIL: No drafts to evaluate")
         research = state.get("research_result")
-        snippets = (
-            research.content_snippets
-            if research and hasattr(research, "content_snippets") and research.content_snippets
-            else []
-        )
-        drafts_list = [
-            getattr(drafts_obj, "draft_1", "") or "",
-            getattr(drafts_obj, "draft_2", "") or "",
-            getattr(drafts_obj, "draft_3", "") or "",
-        ]
-
-        research_source = getattr(research, "source", None) if research else None
-
-        # Gate 1: Enhanced originality check against creator posts
-        t0 = time.perf_counter()
-        for i, draft in enumerate(drafts_list):
-            is_original, reason = check_originality(draft, snippets, research_source=research_source)
-            if not is_original:
-                if telemetry:
-                    telemetry.record_call(
-                        node_name="quality_check",
-                        target="python",
-                        operation="check_originality",
-                        duration_s=time.perf_counter() - t0,
-                        status="fail",
-                    )
-                fail_msg = f"FAIL [originality]: Draft {i+1} failed — {reason}"
-                return {
-                    "quality_results": fail_msg,
-                    "is_hard_failure": True,
-                    "failed_draft_indices": [i],
-                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Paraphrase completely in your own words, do not copy phrases.",
-                }
-        if telemetry:
-            telemetry.record_call(
-                node_name="quality_check",
-                target="python",
-                operation="check_originality",
-                duration_s=time.perf_counter() - t0,
-            )
-
-        # Gate 1.5: Deterministic checks for structural AI tells (em-dash density, 'not X, it's Y', triple parallel lists)
-        t0 = time.perf_counter()
-        for i, draft in enumerate(drafts_list):
-            is_clean, reason = check_structural_tells(draft)
-            if not is_clean:
-                if telemetry:
-                    telemetry.record_call(
-                        node_name="quality_check",
-                        target="python",
-                        operation="check_structural_tells",
-                        duration_s=time.perf_counter() - t0,
-                        status="fail",
-                    )
-                fail_msg = f"FAIL [structural_tells]: Draft {i+1} failed — {reason}"
-                return {
-                    "quality_results": fail_msg,
-                    "is_hard_failure": True,
-                    "failed_draft_indices": [i],
-                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Rewrite this draft avoiding formulaic AI contrast tropes ('not X, it's Y'), triple parallel lists, or excessive em-dashes.",
-                }
-        if telemetry:
-            telemetry.record_call(
-                node_name="quality_check",
-                target="python",
-                operation="check_structural_tells",
-                duration_s=time.perf_counter() - t0,
-            )
-
-        # Gate 1.6: Deterministic unsourced-number check
-        source_texts = [
-            state.get("topic", "") or "",
-            state.get("raw_thoughts", "") or "",
-            state.get("profile_context", "") or "",
-        ]
-        if snippets:
-            source_texts.extend(snippets)
-        if state.get("use_context", True) and state.get("user_id"):
-            bg_ctx = await _build_background_context(deps, state["user_id"])
-            if bg_ctx:
-                source_texts.append(bg_ctx)
-
-        t0 = time.perf_counter()
-        all_warnings: list[str] = []
-        for i, draft in enumerate(drafts_list):
-            is_valid, fail_reason, warnings = check_unsourced_numbers(draft, source_texts)
+        snippets = research.content_snippets if research else []
+        source = research.source if research else None
+        background = await _build_background_context(deps, state["user_id"]) if state.get("use_context", True) else ""
+        state["factual_context"] = background
+        author_sources = [state.get("topic", ""), state.get("raw_thoughts", ""), state.get("profile_context", ""), background]
+        failures = []
+        warning_indices = []
+        indices = []
+        import re
+        for i, draft in enumerate(drafts.model_dump().values()):
+            checks = [check_originality(draft, snippets, research_source=source), check_structural_tells(draft)]
+            numbers_ok, reason, warnings = check_unsourced_numbers(draft, author_sources, snippets if source != "synthetic_structure" else [])
+            checks.append((numbers_ok, reason))
             if warnings:
-                all_warnings.extend([f"Draft {i+1}: {w}" for w in warnings])
-            if not is_valid:
-                if telemetry:
-                    telemetry.record_call(
-                        node_name="quality_check",
-                        target="python",
-                        operation="check_unsourced_numbers",
-                        duration_s=time.perf_counter() - t0,
-                        status="fail",
-                    )
-                fail_msg = f"FAIL [unsourced_numbers]: Draft {i+1} failed — {fail_reason}"
-                return {
-                    "quality_results": fail_msg,
-                    "is_hard_failure": True,
-                    "failed_draft_indices": [i],
-                    "quality_feedback": f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_msg}. Either omit the metric or wrap it in a bracketed placeholder like [insert MRR] or [X%].",
-                }
-        if all_warnings:
-            logger.warning(f"Quality check detected generic unsourced thresholds: {all_warnings}")
-        if telemetry:
-            telemetry.record_call(
-                node_name="quality_check",
-                target="python",
-                operation="check_unsourced_numbers",
-                duration_s=time.perf_counter() - t0,
-            )
-
+                warning_indices.append(i+1)
+            if any(re.search(r"\b" + re.escape(phrase) + r"\b", draft, re.I) for phrase in BANNED_AI_TELLS):
+                checks.append((False, "banned_phrases"))
+            if not draft.strip():
+                checks.append((False, "empty draft"))
+            failed = [reason for ok, reason in checks if not ok]
+            if failed:
+                indices.append(i)
+                # Feedback is private pipeline state; do not log excerpts.
+                failures.append(f"Draft {i+1}: " + "; ".join(failed))
+        if failures:
+            return _quality_result("FAIL: " + " | ".join(failures), True, indices)
+        if warning_indices:
+            return _quality_result("FAIL [grounding]: Review unsupported numeric thresholds in drafts " + ", ".join(map(str, warning_indices)))
         if not deps.llm:
-            return {"quality_results": "PASS", "is_hard_failure": False}
-
-        prompt = build_quality_prompt(state, drafts_obj)
-        structured_llm = deps.llm.with_structured_output(QualityVerdict, include_raw=True)
-
-        t0 = time.perf_counter()
+            return _quality_result("FAIL: Quality judge unavailable; manual review required")
         try:
-            response = await invoke_with_bounded_backoff(
-                structured_llm.ainvoke,
-                prompt,
-                telemetry=telemetry,
-                node_name="quality_check",
-            )
-            t_llm = time.perf_counter() - t0
-            if isinstance(response, dict):
-                verdict: QualityVerdict = response.get("parsed")
-                raw_msg = response.get("raw")
-            else:
-                verdict: QualityVerdict = response
-                raw_msg = None
-            p_tok, c_tok, r_tok = _extract_tokens(raw_msg)
-            if telemetry:
-                telemetry.record_call(
-                    node_name="quality_check",
-                    target="gemini",
-                    operation="quality_verdict",
-                    duration_s=t_llm,
-                    prompt_tokens=p_tok,
-                    completion_tokens=c_tok,
-                    reasoning_tokens=r_tok,
-                )
-            if raw_msg:
-                await log_cost(deps, "quality_check", raw_msg, state["generation_id"])
-
-            if metric:
-                metric.metadata["passed"] = verdict.passed
-                metric.metadata["failed_check"] = verdict.failed_check
-                metric.metadata["substance_score"] = verdict.substance_score
-
-            fail_reason = None
-            is_hard = False
-            failed_indices: list[int] = []
-            if not verdict.passed:
-                fail_check = verdict.failed_check or "unknown"
-                fail_reason = (
-                    f"FAIL [{fail_check}]: "
-                    f"{verdict.failed_drafts or 'No details provided.'}"
-                )
-                # Banned phrases is a hard failure; substance, cta_rules, and structure completeness are soft misses
-                is_hard = (fail_check == "banned_phrases")
-                failed_text = (verdict.failed_drafts or "").lower()
-                for idx in range(3):
-                    if f"draft {idx+1}" in failed_text:
-                        failed_indices.append(idx)
-                if not failed_indices:
-                    failed_indices = [0, 1, 2]
-
-            feedback_parts: list[str] = []
-            if fail_reason:
-                feedback_parts.append(
-                    f"CRITICAL FEEDBACK FROM PREVIOUS ATTEMPT: {fail_reason}"
-                )
-            if verdict.substance_score is not None and verdict.substance_score < 5:
-                feedback_parts.append(
-                    "SUBSTANCE FEEDBACK: Your drafts scored below 5/10 for substance/originality-of-thought. "
-                    "They read too generically / like AI filler. Inject more specific details, "
-                    "concrete examples, and a clear position."
-                )
-            quality_feedback = "\n".join(feedback_parts) if feedback_parts else ""
-
-            result: dict = {
-                "quality_results": fail_reason or "PASS",
-                "is_hard_failure": is_hard,
-                "failed_draft_indices": failed_indices,
-                "quality_feedback": quality_feedback,
-            }
-            if verdict.substance_score is not None:
-                result["substance_score"] = verdict.substance_score
-            return result
-
-        except Exception as e:
-            t_llm = time.perf_counter() - t0
-            logger.error(f"Quality check LLM call failed: {e}", exc_info=True)
-            if telemetry:
-                telemetry.record_call(
-                    node_name="quality_check",
-                    target="gemini",
-                    operation="quality_verdict",
-                    duration_s=t_llm,
-                    status="error",
-                    error_message=str(e),
-                )
-            return {"quality_results": "PASS"}
+            judge = deps.llm.with_structured_output(QualityVerdict, include_raw=True)
+            response = await invoke_with_bounded_backoff(judge.ainvoke, build_quality_prompt(state, drafts), telemetry=telemetry, node_name="quality_check")
+            verdict = response.get("parsed") if isinstance(response, dict) else response
+            raw = response.get("raw") if isinstance(response, dict) else None
+            if verdict is None:
+                raise ValueError("Unparseable quality verdict")
+            if raw:
+                await log_cost(deps, "quality_check", raw, state["generation_id"])
+            score = verdict.substance_score
+            if not verdict.passed or score is None or score < 7:
+                hard = verdict.failed_check in ("banned_phrases", "grounding")
+                return _quality_result(f"FAIL [{verdict.failed_check or 'substance'}]: {verdict.failed_drafts or 'Substance score below 7 or unavailable'}", hard, [0, 1, 2] if hard else [], score)
+            return _quality_result("PASS", score=score)
+        except Exception:
+            logger.warning("Quality judge unavailable; generation needs review")
+            return _quality_result("FAIL: Quality evaluation unavailable; manual review required")
 
 
 async def node_increment_retry(state: GraphState, deps: PipelineDeps) -> dict:
-    telemetry = state.get("telemetry")
-    if telemetry:
-        telemetry.retry_loops_taken += 1
-    return {"retry_count": state.get("retry_count", 0) + 1}
+    async with _measure_node_ctx(state.get("telemetry"), "increment_retry"):
+        if state.get("telemetry"):
+            state["telemetry"].retry_loops_taken += 1
+        return {"retry_count": state.get("retry_count", 0) + 1}
 
 
 async def node_save_generation(state: GraphState, deps: PipelineDeps) -> dict:
@@ -700,6 +517,8 @@ async def node_save_generation(state: GraphState, deps: PipelineDeps) -> dict:
 
         if generation:
             if state.get("drafts"):
+                if not generation.original_drafts:
+                    generation.original_drafts = state["drafts"].model_dump()
                 generation.draft_1 = state["drafts"].draft_1
                 generation.draft_2 = state["drafts"].draft_2
                 generation.draft_3 = state["drafts"].draft_3
@@ -713,6 +532,10 @@ async def node_save_generation(state: GraphState, deps: PipelineDeps) -> dict:
             if state.get("error"):
                 generation.status = "failed"
 
+            generation.context_snapshot = encrypt(json.dumps({"profile": state.get("profile_context") or "", "use_context": state.get("use_context", True)}))
+            research = state.get("research_result")
+            generation.research_data = research.model_dump() if research else None
+            generation.quality_data = {"result": state.get("quality_results"), "substance_score": state.get("substance_score")}
             deps.session.add(generation)
             await deps.session.commit()
             logger.info("Generation saved successfully.")

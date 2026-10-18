@@ -1,12 +1,14 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
+from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.database import get_db
 from app.models import Project, Generation, User, ChatHistory
+from app.core.crypto import read_private, encrypt
 from app.schemas.api import GenerateRequest, GenerateResponse, SourceItemResponse
 from app.services.pipeline.state import PipelineState
 from app.services.pipeline import PostGenerationPipeline
@@ -23,106 +25,51 @@ DAILY_GENERATION_CAP = 50
 @auth_limiter.limit("10/hour")
 async def generate_post(
     request: Request,
+    response: Response,
     req: GenerateRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Enforce daily per-user generation cap
-    today_start = datetime.now(timezone.utc) - timedelta(days=1)
-    daily_count_stmt = (
-        select(func.count(Generation.id))
-        .join(Project, Generation.project_id == Project.id)
-        .where(Project.user_id == current_user.id, Generation.created_at >= today_start)
-    )
-    daily_count = (await session.execute(daily_count_stmt)).scalar() or 0
-    if daily_count >= DAILY_GENERATION_CAP:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Daily generation limit reached ({DAILY_GENERATION_CAP} posts per 24 hours). Please try again tomorrow.",
-        )
-
-    # Fetch or create a project for this user/platform
-    stmt = select(Project).where(
-        Project.user_id == current_user.id,
-        Project.platform == req.platform
-    ).order_by(Project.id.desc()).limit(1)
-    res = await session.execute(stmt)
-    project = res.scalars().first()
-    
-    if not project:
-        project = Project(
-            user_id=current_user.id,
-            name=f"{req.platform.capitalize()} Content",
-            platform=req.platform
-        )
-        session.add(project)
-        await session.commit()
-        await session.refresh(project)
-
-    # Create Generation
-    gen = Generation(
-        project_id=project.id,
-        topic=req.topic,
-        raw_thoughts=req.raw_thoughts
-    )
-    session.add(gen)
-    await session.commit()
-    await session.refresh(gen)
-
-    # Initialize Pipeline State
-    profile_ctx = req.profile_context
-    if not profile_ctx and current_user.profile_context:
-        profile_ctx = current_user.profile_context
-
-    state = PipelineState(
-        generation_id=gen.id,
-        project_id=project.id,
-        user_id=current_user.id,
-        platform=req.platform,
-        topic=req.topic,
-        raw_thoughts=req.raw_thoughts,
-        profile_context=profile_ctx,
-        use_context=req.use_context,
-    )
-
-    # Run Pipeline with concurrency guard and queue timeout for slot acquisition
     try:
-        async with asyncio.timeout(QUEUE_WAIT_TIMEOUT_SECONDS):
-            await GENERATION_CONCURRENCY_SEMAPHORE.acquire()
+        await asyncio.wait_for(GENERATION_CONCURRENCY_SEMAPHORE.acquire(), timeout=QUEUE_WAIT_TIMEOUT_SECONDS)
     except TimeoutError:
-        raise HTTPException(
-            status_code=429,
-            detail="The generation service is currently processing maximum concurrent requests. Please wait a few seconds and try again.",
-        )
-
+        raise HTTPException(status_code=429, detail="Generation capacity is busy. Try again shortly.", headers={"Retry-After": "10"}) from None
+    gen = None
     try:
-        pipeline = PostGenerationPipeline(session)
-        final_state = await pipeline.run(state)
+        locked_user = (await session.execute(select(User.id).where(User.id == current_user.id).with_for_update())).scalar_one_or_none()
+        if locked_user is None:
+            raise HTTPException(401, "Account no longer exists")
+        today_start = datetime.now(timezone.utc) - timedelta(days=1)
+        daily_count = (await session.execute(select(func.count(Generation.id)).join(Project).where(Project.user_id == current_user.id, Generation.created_at >= today_start))).scalar() or 0
+        if daily_count >= DAILY_GENERATION_CAP:
+            raise HTTPException(status_code=429, detail="Daily generation limit reached.", headers={"Retry-After": "86400"})
+        project = (await session.execute(select(Project).where(Project.user_id == current_user.id, Project.platform == req.platform).order_by(Project.created_at.desc()).limit(1))).scalars().first()
+        if not project:
+            project = Project(user_id=current_user.id, name=f"{req.platform.capitalize()} Content", platform=req.platform)
+            session.add(project)
+            await session.flush()
+        profile = (req.profile_context or read_private(current_user.profile_context)) if req.use_context else ""
+        style = read_private(current_user.writing_style)
+        gen = Generation(project_id=project.id, topic=req.topic, raw_thoughts=req.raw_thoughts, context_snapshot=encrypt(profile))
+        session.add(gen)
+        await session.commit()
+        state = PipelineState(generation_id=gen.id, project_id=project.id, user_id=current_user.id, platform=req.platform, topic=req.topic, raw_thoughts=req.raw_thoughts, profile_context=profile, writing_style=style, use_context=req.use_context)
+        async with asyncio.timeout(300):
+            final_state = await PostGenerationPipeline(session).run(state)
+        if not (await session.execute(select(User.id).where(User.id == current_user.id))).first():
+            raise HTTPException(401, "Account no longer exists")
+        research = final_state.research_result
+        return GenerateResponse(generation_id=gen.id, status="failed" if final_state.error or not final_state.drafts else ("needs_review" if not (final_state.quality_results or "").startswith("PASS") else "editing"),
+            **(final_state.drafts.model_dump() if final_state.drafts else {}), sources=[item.model_dump() for item in research.sources] if research else [], research_confidence=research.confidence if research else None, research_source=research.source if research else None, substance_score=final_state.substance_score, error=final_state.error)
+    except BaseException:
+        await session.rollback()
+        if gen:
+            from sqlalchemy import update
+            await session.execute(update(Generation).where(Generation.id == gen.id).values(status="failed"))
+            await session.commit()
+        raise
     finally:
         GENERATION_CONCURRENCY_SEMAPHORE.release()
-
-    # Build sources list from research result
-    sources = []
-    research_confidence = None
-    research_source = None
-    if final_state.research_result:
-        research_confidence = final_state.research_result.confidence
-        research_source = final_state.research_result.source
-        for s in final_state.research_result.sources:
-            sources.append({"title": s.title, "snippet": s.snippet, "url": s.url})
-
-    return GenerateResponse(
-        generation_id=final_state.generation_id,
-        status=final_state.error if final_state.error else ("needs_review" if final_state.quality_results and not final_state.quality_results.startswith("PASS") else "editing"),
-        draft_1=final_state.drafts.draft_1 if final_state.drafts else None,
-        draft_2=final_state.drafts.draft_2 if final_state.drafts else None,
-        draft_3=final_state.drafts.draft_3 if final_state.drafts else None,
-        sources=sources,
-        research_confidence=research_confidence,
-        research_source=research_source,
-        substance_score=final_state.substance_score,
-        error=final_state.error
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +82,8 @@ async def list_generations(
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    platform: str | None = None,
-    q: str | None = None,
+    platform: Literal["linkedin", "x"] | None = None,
+    q: str | None = Query(default=None, max_length=255),
 ):
     """
     Returns a paginated list of the user's generations, newest first.
@@ -203,6 +150,16 @@ async def list_generations(
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+@router.get("/metrics")
+async def generation_metrics(session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    scope = Project.user_id == current_user.id
+    groups = (await session.execute(select(Generation.status, func.count()).join(Project).where(scope).group_by(Generation.status))).all()
+    counts = dict(groups)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    recent = (await session.execute(select(Generation.created_at).join(Project).where(scope, Generation.created_at >= cutoff))).scalars().all()
+    return {"total": sum(counts.values()), "finalized": counts.get("finalized", 0), "in_progress": counts.get("editing", 0) + counts.get("needs_review", 0), "recent_dates": [value.isoformat() for value in recent]}
+
+
 @router.get("/{gen_id}/full")
 async def get_generation_full(
     gen_id: str,
@@ -261,6 +218,8 @@ async def get_generation_full(
         "created_at": gen.created_at.isoformat() if gen.created_at else None,
         "updated_at": gen.updated_at.isoformat() if gen.updated_at else None,
         "chat_history": chat_history,
+        "sources": (gen.research_data or {}).get("sources", []),
+        "quality": gen.quality_data,
     }
 
 

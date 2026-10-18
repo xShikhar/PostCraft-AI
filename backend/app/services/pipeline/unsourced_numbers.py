@@ -32,15 +32,6 @@ def extract_source_numbers(sources: List[str]) -> Set[str]:
     for text in sources:
         if not text:
             continue
-        # Extract all digit sequences
-        raw_numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
-        for num in raw_numbers:
-            clean = num.replace(",", "")
-            found.add(clean)
-            # If float, also add stripped version (e.g., "4.0" -> "4")
-            if "." in clean:
-                found.add(clean.rstrip("0").rstrip("."))
-        
         # Also extract tokenized figures (e.g. '10k', '2m', '15%')
         for match in FIGURE_REGEX.finditer(text):
             found.add(match.group(0).lower().strip())
@@ -49,30 +40,17 @@ def extract_source_numbers(sources: List[str]) -> Set[str]:
 
 
 def is_number_sourced(token: str, source_numbers: Set[str]) -> bool:
-    """
-    Checks if a numeric token or its base numerical value is present in source_numbers.
-    """
-    token_clean = token.lower().strip()
-    if token_clean in source_numbers:
-        return True
-
-    # Extract digits from token
-    digit_match = re.search(r"\d+(?:[.,]\d+)?", token_clean)
-    if not digit_match:
-        return True
-    
-    num_str = digit_match.group(0).replace(",", "")
-    if num_str in source_numbers:
-        return True
-    if "." in num_str and num_str.rstrip("0").rstrip(".") in source_numbers:
-        return True
-
-    return False
+    # Preserve currencies, magnitudes and units. Bare equal digits are insufficient.
+    def normalize(value):
+        return re.sub(r"\s+", "", value.lower()).replace(",", "")
+    clean = normalize(token)
+    return clean in {normalize(value) for value in source_numbers}
 
 
 def check_unsourced_numbers(
     draft: str,
-    source_texts: List[str]
+    source_texts: List[str],
+    public_source_texts: List[str] | None = None,
 ) -> Tuple[bool, str, List[str]]:
     """
     Deterministic unsourced-number check:
@@ -85,6 +63,7 @@ def check_unsourced_numbers(
         (passed: bool, fail_reason: str, warnings: list[str])
     """
     source_numbers = extract_source_numbers(source_texts)
+    public_numbers = extract_source_numbers(public_source_texts or [])
 
     # 1. Exempt bracketed placeholders by removing them
     clean_draft = PLACEHOLDER_REGEX.sub(" ", draft)
@@ -124,7 +103,7 @@ def check_unsourced_numbers(
                 if not is_first_person:
                     continue
 
-            if not is_number_sourced(fig_clean, source_numbers):
+            if not is_number_sourced(fig_clean, source_numbers if is_first_person else source_numbers | public_numbers):
                 if is_first_person:
                     # HARD FAIL: First-person claim with unsourced figure
                     reason = (

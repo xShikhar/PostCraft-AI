@@ -100,10 +100,10 @@ def build_graph(deps: PipelineDeps):
             return "save_generation"
         # Only retry for hard failures (originality, structural tells, unsourced numbers, banned phrases)
         if state.get("is_hard_failure", True) and state.get("retry_count", 0) < MAX_RETRIES:
-            logger.warning(f"Quality Check Hard Failure. Retry count: {state.get('retry_count', 0)}. Reason: {qr}")
+            logger.warning("Quality hard failure; retrying failed drafts")
             return "increment_retry"
         # Soft misses (substance, generic CTA, etc.) route directly to save_generation as needs_review
-        logger.info(f"Quality check soft miss ({qr}) — proceeding to save_generation as needs_review without retrying.")
+        logger.info("Quality soft miss; saving for review")
         return "save_generation"
 
     builder.add_conditional_edges(

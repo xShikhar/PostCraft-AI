@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { listGenerations, type HistoryItem } from "@/lib/api/history";
@@ -95,6 +95,10 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
+  const [query, setQuery] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [error, setError] = useState("");
+  const requestVersion = useRef(0);
 
   // Enlarged preview modal state
   const [enlargedItem, setEnlargedItem] = useState<HistoryItem | null>(null);
@@ -103,7 +107,10 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
 
   useEffect(() => {
     let cancelled = false;
-    listGenerations({ limit: PAGE_SIZE, offset: 0 })
+    ++requestVersion.current;
+    const timer = setTimeout(() => {
+    setLoading(true); setError("");
+    listGenerations({ limit: PAGE_SIZE, offset: 0, q: query, platform })
       .then((res) => {
         if (!cancelled) {
           setItems(res.items);
@@ -111,12 +118,13 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
           setOffset(PAGE_SIZE);
         }
       })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) setError("History unavailable. Please try again."); })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, []);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, platform]);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -138,11 +146,13 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
   const handleLoadMore = async () => {
     setLoadingMore(true);
     try {
-      const res = await listGenerations({ limit: PAGE_SIZE, offset });
+      const version = requestVersion.current;
+      const res = await listGenerations({ limit: PAGE_SIZE, offset, q: query, platform });
+      if (version !== requestVersion.current) return;
       setItems((prev) => [...prev, ...res.items]);
       setOffset((prev) => prev + PAGE_SIZE);
     } catch {
-      // silently ignore
+      setError("Could not load more history. Please retry.");
     } finally {
       setLoadingMore(false);
     }
@@ -171,6 +181,11 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-3">
+        <input aria-label="Search history" placeholder="Search topics and notes" value={query} onChange={e => setQuery(e.target.value)} className="flex-1 min-w-40 p-3 rounded-xl bg-surface-card border border-border-subtle" />
+        <select aria-label="Filter platform" value={platform} onChange={e => setPlatform(e.target.value)} className="p-3 rounded-xl bg-surface-card border border-border-subtle"><option value="">All platforms</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select>
+      </div>
+      {error && <p role="alert" className="text-secondary">{error}</p>}
       {/* List */}
       {loading ? (
         <div className="flex flex-col gap-space-md">
@@ -192,7 +207,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
         </div>
       ) : (
         <div ref={listRef} className="flex flex-col gap-space-md">
-          {items.map((item) => {
+          {items.map((item, index) => {
             const activeDraftIdx = cardActiveDraft[item.generation_id] || 1;
             const activeDraftContent =
               (activeDraftIdx === 1
@@ -201,9 +216,12 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
                 ? item.draft_2
                 : item.draft_3) || item.preview || "";
 
+            const day = item.created_at ? new Date(item.created_at).toLocaleDateString(undefined, { dateStyle: "full" }) : "Undated";
+            const previousDay = index > 0 && items[index-1].created_at ? new Date(items[index-1].created_at!).toLocaleDateString(undefined, { dateStyle: "full" }) : "";
             return (
+              <Fragment key={item.generation_id}>
+              {day !== previousDay && <h2 className="font-serif text-title-lg mt-4">{day}</h2>}
               <div
-                key={item.generation_id}
                 onClick={() => {
                   setEnlargedItem(item);
                   setEnlargedDraftIndex(activeDraftIdx);
@@ -358,6 +376,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
                   </div>
                 </div>
               </div>
+              </Fragment>
             );
           })}
 

@@ -31,13 +31,14 @@ function CollapsedLogo() {
   );
 }
 
-type View = "home" | "editor" | "profile" | "history" | "privacy" | "terms";
+type View = "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms";
 
 interface AppShellProps {
   children: ReactNode;
   currentView: View;
-  onNavigate: (view: "home" | "editor" | "profile" | "history" | "privacy" | "terms") => void;
+  onNavigate: (view: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms") => void;
   onNewPost: () => void;
+  onOpenGeneration: (id: string) => void;
   headerTitle: string;
   username?: string;
   initials?: string;
@@ -49,11 +50,12 @@ export function AppShell({
   onNavigate,
   onNewPost,
   headerTitle,
+  onOpenGeneration,
   username,
   initials,
 }: AppShellProps) {
   const { logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const railRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
 
@@ -178,8 +180,8 @@ export function AppShell({
       {/* Main content area — adjusts left padding based on collapsed state */}
       <div
         className={`
-          flex flex-col min-h-screen transition-[padding-left] duration-[240ms] ease-out
-          ${collapsed ? "pl-16" : "pl-sidebar-width"}
+          flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out
+          ${collapsed ? "pl-16" : "pl-16 md:pl-sidebar-width"}
         `}
       >
         <TopHeader
@@ -188,10 +190,11 @@ export function AppShell({
           initials={initials}
           collapsed={collapsed}
           onNavigate={onNavigate}
+          onOpenGeneration={onOpenGeneration}
         />
 
         <main className="flex-1 w-full pt-16 bg-canvas-base">
-          <div className="max-w-7xl mx-auto px-layout-margin-desktop py-space-xl relative z-10">
+          <div className="max-w-7xl mx-auto px-4 md:px-layout-margin-desktop py-space-xl relative z-10">
             {children}
           </div>
         </main>

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, ForeignKey, Uuid, Integer
+from sqlalchemy import String, Text, DateTime, ForeignKey, Uuid, Integer, JSON, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,9 +15,13 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    __table_args__ = (Index("ix_users_username_normalized", func.lower(username), unique=True),)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=True) # nullable for backwards compatibility with sandbox DB
     profile_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     about_me: Mapped[str | None] = mapped_column(Text, nullable=True)
+    writing_style: Mapped[str | None] = mapped_column(Text, nullable=True)
+    terms_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -55,6 +59,10 @@ class Generation(Base):
     active_draft_index: Mapped[int] = mapped_column(default=1) # 1, 2, or 3
     
     status: Mapped[str] = mapped_column(String(50), default="generating")
+    context_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_drafts: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    research_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    quality_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -123,6 +131,8 @@ class CostLog(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     generation_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("generations.id"), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     operation: Mapped[str] = mapped_column(String(50)) # e.g., 'pattern_extraction', 'draft_generation', 'quality_check'
     prompt_tokens: Mapped[int] = mapped_column(default=0)
     completion_tokens: Mapped[int] = mapped_column(default=0)
@@ -145,12 +155,20 @@ class UserResume(Base):
 
 
 class AdminAuditLog(Base):
-    """Immutable audit trail for sensitive administrative operations."""
+    """Access/CLI history; deleted account references are nulled."""
     __tablename__ = "admin_audit_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    admin_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    admin_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(100))  # e.g. 'viewed_user_generations'
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class VectorDeletionJob(Base):
+    """Durable erasure tombstone; deliberately has no FK to the deleted account."""
+    __tablename__ = "vector_deletion_jobs"
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

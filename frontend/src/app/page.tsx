@@ -14,7 +14,6 @@ import { LegalView } from "@/features/legal/legal-view";
 import { getCurrentUser } from "@/lib/api/user";
 
 import { Loader2 } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Drafts, ChatMessage, SourceItem, generateDrafts, editDraft, finalizeDraft } from "@/lib/api/generation";
 import { getGenerationFull } from "@/lib/api/history";
@@ -25,6 +24,8 @@ function getHeaderTitle(view: string): string {
   switch (view) {
     case "history": return "Archive & Logs";
     case "profile": return "Persona Engine";
+    case "compose": return "New Generation";
+    case "selection": return "Draft Selection";
     case "editor": return "Draft Edition";
     case "privacy": return "Privacy Policy";
     case "terms": return "Terms of Service";
@@ -32,11 +33,11 @@ function getHeaderTitle(view: string): string {
   }
 }
 
-export default function Home() {
+function Workspace() {
   const { isAuthenticated, isInitializing } = useAuth();
 
   // View state
-  const [view, setView] = useState<"home" | "editor" | "profile" | "history" | "privacy" | "terms">("home");
+  const [view, setView] = useState<"home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms">("home");
 
   // Lets the unauthenticated footer links (Privacy / Terms) display the legal
   // doc without forcing the user through sign-up. Resets on auth.
@@ -74,18 +75,6 @@ export default function Home() {
         .then((u) => setUsername(u.username))
         .catch(() => setUsername("there"));
     }
-  }, [isAuthenticated]);
-
-  // Pick up any pending thought from the quick capture bar
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const thought = sessionStorage.getItem("postcraft:pending_thought");
-      if (thought) {
-        setRawThoughts((prev) => (prev ? prev + "\n" + thought : thought));
-        sessionStorage.removeItem("postcraft:pending_thought");
-      }
-    }, 0);
-    return () => clearTimeout(timer);
   }, [isAuthenticated]);
 
   // Honest elapsed timer during pipeline generation
@@ -130,6 +119,7 @@ export default function Home() {
         draft_3: data.draft_3,
       });
       setSources(data.sources || []);
+      setView("selection");
 
     } catch (err: unknown) {
       // 429s already carry a rate-limit-specific message; surface as-is.
@@ -166,7 +156,8 @@ export default function Home() {
         [currentIdx]: [...(prev[currentIdx] || []), { role: "assistant", content: botReply, draft_index: currentIdx }]
       }));
       setDrafts(prev => prev ? { ...prev, [`draft_${currentIdx}`]: data.revised_draft } : prev);
-      toast.success("Draft updated!");
+      if (data.status === "needs_review") toast.warning("Draft updated; quality review is still needed.");
+      else toast.success("Draft updated!");
     } catch (err: unknown) {
       const message = err instanceof ApiError
         ? err.message
@@ -184,7 +175,7 @@ export default function Home() {
   };
 
   const handleFinalize = async () => {
-    if (!generationId || activeDraftIndex === null) return;
+    if (!generationId || activeDraftIndex === null || isEditing) return;
     setLoading(true);
     try {
       await finalizeDraft(generationId, activeDraftIndex);
@@ -203,9 +194,9 @@ export default function Home() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast("Copied to clipboard!");
+  const copyToClipboard = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success("Copied to clipboard!"); }
+    catch { toast.error("Clipboard access was blocked. Select and copy the text manually."); }
   };
 
   const handleOpenHistoryItem = async (genId: string, preferredDraftIndex?: number) => {
@@ -213,6 +204,7 @@ export default function Home() {
     try {
       const full = await getGenerationFull(genId);
       setGenerationId(full.generation_id);
+      setSources(full.sources || []);
       setDrafts({
         draft_1: full.draft_1 || "",
         draft_2: full.draft_2 || "",
@@ -247,18 +239,22 @@ export default function Home() {
     }
   };
 
-  const handleNewPost = () => {
-    setView("home");
+  const handleNewPost = (thought = "") => {
+    setView("compose");
+    setGenerationId(null);
+    setSources([]);
+    setProfileContext("");
+    setUseContext(true);
     setActiveDraftIndex(null);
     setDrafts(null);
     setChatHistories({ 1: [], 2: [], 3: [] });
     setIsFinalized(false);
     setFinalizedDraftIndex(null);
     setTopic("");
-    setRawThoughts("");
+    setRawThoughts(thought);
   };
 
-  const handleNavigate = (v: "home" | "editor" | "profile" | "history" | "privacy" | "terms") => {
+  const handleNavigate = (v: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms") => {
     setView(v);
   };
 
@@ -291,11 +287,11 @@ export default function Home() {
       currentView={view}
       onNavigate={handleNavigate}
       onNewPost={handleNewPost}
+      onOpenGeneration={handleOpenHistoryItem}
       headerTitle={getHeaderTitle(view)}
       username={username}
       initials={username.slice(0, 2).toUpperCase()}
     >
-      <Toaster theme="light" position="top-center" richColors />
 
       <main key={view} className="w-full space-y-8 animate-fade-slide-up">
 
@@ -321,7 +317,7 @@ export default function Home() {
             loading={loading}
             onEditSubmit={handleEditSubmit}
             onFinalize={handleFinalize}
-            onBack={() => { setActiveDraftIndex(null); setView("home"); }}
+            onBack={() => { setActiveDraftIndex(null); setView("selection"); }}
             onCopy={copyToClipboard}
             renderMarkdown={renderMarkdown}
             allDrafts={drafts}
@@ -333,15 +329,15 @@ export default function Home() {
         ) : (
           <>
             {/* Home view (greeting + quick capture + recent drafts + cadence) */}
-            <HomeView
+            {view === "home" && <HomeView
               username={username}
               onNewPost={handleNewPost}
               onOpenHistory={handleOpenHistoryItem}
               onGoHistory={() => setView("history")}
-            />
+            />}
 
             {/* Generation form (shown when view === "home" and no drafts yet) */}
-            {!activeDraftIndex && (
+            {view === "compose" && (
               <GenerationForm
                 topic={topic}
                 setTopic={setTopic}
@@ -355,13 +351,12 @@ export default function Home() {
                 setUseContext={setUseContext}
                 loading={loading}
                 loadingStepText={elapsedSeconds === 0 ? "Initiating pipeline..." : `Synthesizing research & generating drafts... (${elapsedSeconds}s)`}
-                activeStep={2}
                 onSubmit={handleGenerate}
               />
             )}
 
             {/* Draft selection grid (shown after generation) */}
-            {drafts && !activeDraftIndex && (
+            {view === "selection" && drafts && !activeDraftIndex && (
               <DraftSelectionGrid
                 drafts={drafts}
                 platform={platform}
@@ -378,3 +373,12 @@ export default function Home() {
   );
 }
 
+
+export default function Home() {
+  const { token, isInitializing } = useAuth();
+  const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
+  if (isInitializing) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  if (!token) return legal ? <LegalView kind={legal} onBack={() => setLegal(null)} /> : <AuthScreen onOpenLegal={setLegal} />;
+  // A changed identity remounts every account-scoped component and pending state.
+  return <Workspace key={token} />;
+}

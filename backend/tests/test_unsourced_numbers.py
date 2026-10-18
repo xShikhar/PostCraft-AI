@@ -12,10 +12,10 @@ def test_extract_source_numbers():
         "Profile: 10 years experience as CTO at 500-person startup."
     ]
     numbers = extract_source_numbers(sources)
-    assert "100" in numbers or "100k" in numbers
-    assert "15" in numbers
-    assert "4.2" in numbers
-    assert "10" in numbers
+    assert "$100k" in numbers
+    assert "15%" in numbers
+    assert "4.2ms" in numbers
+    assert "10 years" in numbers
     assert "500" in numbers
 
 def test_first_person_unsourced_figure_hard_fails():
@@ -65,3 +65,6 @@ def test_calendar_years_and_enumerations_pass():
     passed, reason, warnings = check_unsourced_numbers(draft, sources)
     assert passed is True
     assert reason == ""
+
+def test_unit_mismatch_cannot_ground_personal_claim():
+    assert check_unsourced_numbers("I grew revenue to $10M.", ["I have 10 years of experience."])[0] is False

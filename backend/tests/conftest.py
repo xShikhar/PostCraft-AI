@@ -6,11 +6,19 @@ from typing import AsyncGenerator
 
 import os
 # Set environment variables for tests before importing app modules
-os.environ.setdefault("GEMINI_API_KEY", "mock_gemini_key")
-os.environ.setdefault("TAVILY_API_KEY", "mock_tavily_key")
-os.environ.setdefault("SERP_API_KEY", "mock_serp_key")
-os.environ.setdefault("JWT_SECRET_KEY", "mock_jwt_secret_key_at_least_32_chars_long_for_testing")
-os.environ.setdefault("RESUME_ENCRYPTION_KEY", "GqqEbSX3AX9Y4cKboWBIVmMjW_96ek-JjsUIi7lY_Xg=")
+os.environ.__setitem__("GEMINI_API_KEY", "mock_gemini_key")
+os.environ.__setitem__("TAVILY_API_KEY", "mock_tavily_key")
+os.environ.__setitem__("SERP_API_KEY", "mock_serp_key")
+os.environ.__setitem__("JWT_SECRET_KEY", "mock_jwt_secret_key_at_least_32_chars_long_for_testing")
+os.environ.__setitem__("RESUME_ENCRYPTION_KEY", "GqqEbSX3AX9Y4cKboWBIVmMjW_96ek-JjsUIi7lY_Xg=")
+
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["ENVIRONMENT"] = "test"
+os.environ["CHROMA_HOST"] = "localhost"
+os.environ["DATABASE_SSL"] = "False"
+os.environ["DEBUG"] = "False"
+os.environ["SENTRY_DSN"] = ""
+os.environ["RATE_LIMIT_STORAGE_URI"] = "memory://"
 
 from app.core.database import Base, get_db
 from app.main import app
@@ -41,7 +49,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.run_sync(Base.metadata.create_all)
         
     with mock.patch("app.core.database._session_maker", TestingSessionLocal), \
-         mock.patch("app.services.pipeline.background_tasks._session_maker", TestingSessionLocal):
+         mock.patch("app.services.pipeline.background_tasks._session_maker", TestingSessionLocal), \
+         mock.patch("app.services.deletion._session_maker", TestingSessionLocal):
         async with TestingSessionLocal() as session:
             yield session
         await wait_background_tasks(timeout=2.0)
@@ -58,3 +67,36 @@ async def client(db_session: AsyncSession):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+@pytest.fixture(autouse=True)
+def isolate_external_services(monkeypatch):
+    from unittest.mock import MagicMock, AsyncMock
+    def create_fake(**kwargs):
+        client = MagicMock()
+        def structured(schema, include_raw=False):
+            fields = schema.model_fields
+            if "structure" in fields:
+                data = {k: "Direct, concrete practitioner writing" for k in fields}
+            elif "passed" in fields:
+                data = {"passed": True, "substance_score": 8}
+            elif "revised_draft" in fields:
+                data = {"revised_draft": "Give async decisions an owner and a deadline. Without either, a document is just an inbox. DM me for the decision template.", "reply": "Tightened the argument and kept the practical next step."}
+            elif "role" in fields:
+                data = {"role": "Engineer", "industry": "Software", "expertise_areas": ["Python"], "experience_level": "senior"}
+            else:
+                data = {k: "Async work needs an explicit decision owner. Put the deadline beside the question so reviewers can act. DM me for the review template." for k in fields}
+            parsed = schema(**data)
+            raw = MagicMock(usage_metadata={"input_tokens": 30, "output_tokens": 20})
+            return MagicMock(ainvoke=AsyncMock(return_value={"parsed": parsed, "raw": raw} if include_raw else parsed))
+        client.with_structured_output = structured
+        client.ainvoke = AsyncMock(return_value=MagicMock(content="Hook > explanation > CTA", usage_metadata={}))
+        return client
+    monkeypatch.setattr("app.services.pipeline.llm_utils.create_gemini_client", create_fake)
+    monkeypatch.setattr("app.services.pipeline.pipeline.create_gemini_client", create_fake)
+    monkeypatch.setattr("app.services.research._search_tavily", AsyncMock(return_value=(["Public discussion about decision ownership."], [])))
+    monkeypatch.setattr("app.services.research._search_serp_api", AsyncMock(return_value=([], [])))
+    # Block HTTP providers without touching Windows event-loop sockets.
+    import httpx
+    async def deny_network(*args, **kwargs):
+        raise AssertionError("External HTTP is disabled in tests")
+    monkeypatch.setattr(httpx.AsyncClient, "request", deny_network)

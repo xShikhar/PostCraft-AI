@@ -12,7 +12,7 @@ from app.models import User
 async def test_resume_lifecycle_and_context(client: TestClient, db_session: AsyncSession):
     # 1. Signup user
     username = f"resumer_{uuid.uuid4().hex[:6]}"
-    res = client.post("/api/auth/signup", json={"username": username, "password": "password123"})
+    res = client.post("/api/auth/signup", json={"username": username, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     assert res.status_code == 200
     token = res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -54,7 +54,7 @@ async def test_resume_lifecycle_and_context(client: TestClient, db_session: Asyn
     user_stmt = select(User).where(User.username == username)
     user_res = await db_session.execute(user_stmt)
     u = user_res.scalars().first()
-    u.about_me = "I write about early-stage engineering."
+    u.about_me = __import__("app.core.crypto", fromlist=["encrypt"]).encrypt("I write about early-stage engineering.")
     await db_session.commit()
 
     from app.core.config import get_settings

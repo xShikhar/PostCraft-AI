@@ -9,12 +9,22 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash-lite"
-    GEMINI_FAST_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_FAST_MODEL: str | None = None
     GEMINI_DRAFT_MODEL: str | None = None
     SERP_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8000
+    CHROMA_PERSIST_DIR: str = "./chroma_data"
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
+    DATABASE_SSL: bool = False
+    RUN_RESUME_MIGRATION: bool = False
+    PORT: int = 8000
+    MODEL_TOKEN_PRICES: dict[str, dict[str, float]] = {}
+    COST_PROMPT_PER_MILLION: float = 0.30
+    COST_COMPLETION_PER_MILLION: float = 2.50
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
     CORS_ORIGINS: list[str] | str = ["http://localhost:3000"]
@@ -26,16 +36,6 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     # Fernet key for encrypting resume PII at rest. Same fail-closed pattern.
     RESUME_ENCRYPTION_KEY: str = ""
-    # Comma-separated usernames to automatically promote to admin (useful when Shell is unavailable)
-    ADMIN_USERNAMES: str = ""
-
-    @property
-    def admin_usernames_set(self) -> set[str]:
-        raw = self.ADMIN_USERNAMES.strip()
-        if not raw:
-            return set()
-        return {u.strip().lower() for u in raw.split(",") if u.strip()}
-
     @property
     def allowed_hosts_list(self) -> list[str]:
         raw = self.ALLOWED_HOSTS.strip()
@@ -93,7 +93,8 @@ class Settings(BaseSettings):
             return [item.strip() for item in v_str.split(",") if item.strip()]
         return v
     
-    model_config = SettingsConfigDict(env_file='.env')
+    # Ignore obsolete deployment keys; no environment variable can grant a role.
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
 @lru_cache
 def get_settings() -> Settings:

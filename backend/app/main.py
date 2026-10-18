@@ -16,32 +16,29 @@ from app.api.admin import router as admin_router
 from app.api.users import router as users_router
 from app.core.config import get_settings
 
+# App telemetry is visible without enabling HTTP libraries that can log URL keys.
+app_logger = logging.getLogger("app")
+app_logger.setLevel(logging.INFO)
+if not app_logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    app_logger.addHandler(handler)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Sentry — only initialize if SENTRY_DSN is set (i.e. in production).
 # In dev/local, this is a no-op so you don't have to create a Sentry project
 # just to run the app. Set SENTRY_DSN in your .env / prod secrets manager.
-_sentry_dsn = os.getenv("SENTRY_DSN")
-if _sentry_dsn:
+def scrub_event(event, hint):
+    return {key: event[key] for key in ("event_id", "timestamp", "level", "platform", "environment", "release") if key in event} | {"exception": {"values": [{"type": value.get("type", "Error")} for value in event.get("exception", {}).get("values", [])]}}
+
+if settings.SENTRY_DSN:
     import sentry_sdk
-    sentry_sdk.init(
-        dsn=_sentry_dsn,
-        environment=os.getenv("ENVIRONMENT", "development"),
-        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
-        # Don't send PII by default. Resumes, draft text, and chat history
-        # are user-generated content — must never end up in error reports.
-        send_default_pii=False,
-    before_send=lambda event, hint: (
-            # Scrub request data (query params, cookies, headers) before sending to Sentry.
-            # Resume text, chat history, and user-generated content must never appear in error reports.
-            event.update({"request": {k: v for k, v in event.get("request", {}).items() if k in ("url", "method")}})
-            or event
-        ),
-    )
-    logger.info("Sentry error reporting initialized.")
-else:
-    logger.info("SENTRY_DSN not set — error reporting disabled.")
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, environment=settings.ENVIRONMENT,
+                    traces_sample_rate=0, send_default_pii=False, before_send=scrub_event,
+                    include_local_variables=False, max_breadcrumbs=0)
 
 # CSP & security headers: applied via custom middleware below
 # (Starlette removed its built-in SecurityMiddleware in newer versions.)
@@ -65,9 +62,19 @@ CSP_DIRECTIVES = (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting PostCraft AI backend...")
-    yield
-    logger.info("Shutting down PostCraft AI backend...")
+    import asyncio
+    from app.core.crypto import _get_fernet
+    from app.services.deletion import erasure_worker
+    from app.services.pipeline.background_tasks import wait_background_tasks
+    _get_fernet()
+    worker = asyncio.create_task(erasure_worker()) if settings.ENVIRONMENT != "test" else None
+    try:
+        yield
+    finally:
+        if worker:
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+        await wait_background_tasks(timeout=20.0)
 
 
 app = FastAPI(
@@ -118,6 +125,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
 )
 
 app.include_router(health_router)
@@ -126,3 +134,8 @@ app.include_router(generations_router)
 app.include_router(editor_router)
 app.include_router(admin_router)
 app.include_router(users_router)
+
+@app.exception_handler(Exception)
+async def safe_internal_error(request: Request, exc: Exception):
+    logger.error("Unhandled request error: %s", type(exc).__name__)
+    return JSONResponse(status_code=500, content={"detail": "An internal error occurred. Please try again."})

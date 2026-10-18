@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,12 +11,15 @@ from app.api.auth import get_current_user
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+async def require_admin(request: Request, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)) -> User:
     """
     Authorization gate for admin-only endpoints.
     Enforces that current_user.is_admin is True.
     """
-    if not getattr(current_user, "is_admin", False):
+    permitted = bool(current_user.is_admin)
+    session.add(AdminAuditLog(admin_user_id=current_user.id, action=("access:" if permitted else "denied:") + getattr(request.scope.get("route"), "path", "/api/admin")[:85]))
+    await session.commit()
+    if not permitted:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required.",
@@ -273,3 +276,9 @@ async def get_cost_summary(
         "total_cost_usd": row.total_cost_usd or 0.0,
         "breakdown": breakdown,
     }
+
+@router.get("/audit-logs")
+async def get_audit_logs(session: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin), limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
+    total = (await session.execute(select(func.count(AdminAuditLog.id)))).scalar() or 0
+    logs = (await session.execute(select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).offset(offset).limit(limit))).scalars().all()
+    return {"total": total, "items": [{"id": str(log.id), "admin_user_id": str(log.admin_user_id) if log.admin_user_id else None, "target_user_id": str(log.target_user_id) if log.target_user_id else None, "action": log.action, "created_at": log.created_at.isoformat()} for log in logs]}

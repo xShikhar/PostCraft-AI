@@ -16,3 +16,7 @@ htmlcov
 .gitignore
 *.db
 chroma_db/
+
+chroma_data/
+**/chroma_data/
+scratch/

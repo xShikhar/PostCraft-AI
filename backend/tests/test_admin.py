@@ -20,7 +20,7 @@ async def test_admin_endpoints_unauthenticated(client: TestClient):
 async def test_admin_endpoints_non_admin_forbidden(client: TestClient):
     # 1. Signup regular user
     username = f"regular_{uuid.uuid4().hex[:6]}"
-    res = client.post("/api/auth/signup", json={"username": username, "password": "password123"})
+    res = client.post("/api/auth/signup", json={"username": username, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     assert res.status_code == 200
     token = res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -36,7 +36,7 @@ async def test_admin_endpoints_non_admin_forbidden(client: TestClient):
 async def test_admin_stats_and_users(client: TestClient, db_session: AsyncSession):
     # 1. Create admin user
     admin_name = f"admin_{uuid.uuid4().hex[:6]}"
-    res = client.post("/api/auth/signup", json={"username": admin_name, "password": "password123"})
+    res = client.post("/api/auth/signup", json={"username": admin_name, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     assert res.status_code == 200
     token = res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -81,7 +81,7 @@ async def test_admin_stats_and_users(client: TestClient, db_session: AsyncSessio
 async def test_admin_user_generations_and_audit_log(client: TestClient, db_session: AsyncSession):
     # 1. Create admin user
     admin_name = f"admin_{uuid.uuid4().hex[:6]}"
-    res = client.post("/api/auth/signup", json={"username": admin_name, "password": "password123"})
+    res = client.post("/api/auth/signup", json={"username": admin_name, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     token = res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -93,7 +93,7 @@ async def test_admin_user_generations_and_audit_log(client: TestClient, db_sessi
 
     # 2. Create target user with a generation
     target_name = f"target_{uuid.uuid4().hex[:6]}"
-    t_res = client.post("/api/auth/signup", json={"username": target_name, "password": "password123"})
+    t_res = client.post("/api/auth/signup", json={"username": target_name, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     t_token = t_res.json()["access_token"]
 
     t_user_stmt = select(User).where(User.username == target_name)
@@ -136,17 +136,9 @@ async def test_admin_user_generations_and_audit_log(client: TestClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_auto_promote_admin_usernames(client: TestClient, db_session: AsyncSession, monkeypatch):
-    bootstrap_admin = f"auto_admin_{uuid.uuid4().hex[:6]}"
-    from app.api.auth import settings
-    monkeypatch.setattr(settings, "ADMIN_USERNAMES", bootstrap_admin)
-
-    # 1. Signup user matching ADMIN_USERNAMES
-    res = client.post("/api/auth/signup", json={"username": bootstrap_admin, "password": "password123"})
-    assert res.status_code == 200
-    token = res.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # 2. Assert user is already admin and can access /api/admin/stats immediately
-    stats_res = client.get("/api/admin/stats", headers=headers)
-    assert stats_res.status_code == 200
+async def test_env_cannot_promote_admin(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_USERNAMES", "bootstrap")
+    res = client.post("/api/auth/signup", json={"username": "bootstrap", "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
+    headers = {"Authorization": "Bearer " + res.json()["access_token"]}
+    assert client.get("/api/admin/stats", headers=headers).status_code == 403
+    assert client.get("/api/users/me", headers=headers).json()["is_admin"] is False

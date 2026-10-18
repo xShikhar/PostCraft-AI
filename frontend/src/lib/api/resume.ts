@@ -1,4 +1,4 @@
-import { fetchApi, ApiError, API_URL } from "./client";
+import { fetchApi } from "./client";
 
 export type ResumeSummary = {
   role: string;
@@ -15,6 +15,7 @@ export type ResumeResponse = {
   structured_summary: ResumeSummary | null;
   uploaded_at: string;
   raw_text_length: number;
+  raw_text: string;
 };
 
 /**
@@ -23,34 +24,9 @@ export type ResumeResponse = {
  * error/401 handling as `fetchApi` so behavior stays consistent.
  */
 export async function uploadResume(file: File): Promise<ResumeResponse> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("postcraft_token") : null;
-
   const formData = new FormData();
   formData.append("file", file);
-
-  const res = await fetch(`${API_URL}/api/users/me/resume`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
-
-  if (res.status === 401) {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("postcraft_token");
-      window.dispatchEvent(new Event("auth-expired"));
-    }
-    throw new ApiError(401, "Your session has expired. Please sign in again.");
-  }
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new ApiError(
-      res.status,
-      data?.detail || data?.error || `Upload failed: ${res.statusText}`
-    );
-  }
-
-  return res.json();
+  return fetchApi<ResumeResponse>("/api/users/me/resume", { method: "POST", body: formData });
 }
 
 export async function getResume(): Promise<ResumeResponse | null> {
@@ -63,4 +39,8 @@ export async function deleteResume(): Promise<{ status: string; message: string 
   return fetchApi<{ status: string; message: string }>("/api/users/me/resume", {
     method: "DELETE",
   });
+}
+
+export async function updateResume(raw_text: string) {
+  return fetchApi<ResumeResponse>("/api/users/me/resume", { method: "PATCH", body: JSON.stringify({ raw_text }) });
 }

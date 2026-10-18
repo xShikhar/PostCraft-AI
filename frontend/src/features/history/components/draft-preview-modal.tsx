@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Copy, Check, Lock, ArrowRight, FileText, Sparkles } from "lucide-react";
 import type { HistoryItem } from "@/lib/api/history";
@@ -24,11 +24,13 @@ export function DraftPreviewModal({
   onOpenInEditor,
 }: DraftPreviewModalProps) {
   const mounted = useMounted();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [userDraft, setUserDraft] = useState<1 | 2 | 3 | null>(null);
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
 
-  if (item?.generation_id !== prevItemId) {
-    setPrevItemId(item?.generation_id ?? null);
+  const itemId = item?.generation_id ?? null;
+  if (itemId !== prevItemId) {
+    setPrevItemId(itemId);
     setUserDraft(null);
   }
 
@@ -41,7 +43,17 @@ export function DraftPreviewModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const focusTimer = setTimeout(() => dialogRef.current?.querySelector<HTMLElement>("button:not([disabled])")?.focus(), 0);
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input, textarea, select, [tabindex="0"]');
+        if (controls?.length) {
+          const first = controls[0], last = controls[controls.length - 1];
+          if (e.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+        }
+      }
       if (e.key === "Escape") {
         onClose();
       }
@@ -59,6 +71,8 @@ export function DraftPreviewModal({
     }
 
     return () => {
+      clearTimeout(focusTimer);
+      previousFocus?.focus();
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = prevOverflow;
       document.body.style.paddingRight = prevPaddingRight;
@@ -78,9 +92,9 @@ export function DraftPreviewModal({
   const charCount = currentContent.length;
   const wordCount = currentContent.split(/\s+/).filter(Boolean).length;
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!currentContent) return;
-    navigator.clipboard.writeText(currentContent);
+    try { await navigator.clipboard.writeText(currentContent); } catch { toast.error("Clipboard access blocked."); return; }
     setCopied(true);
     toast.success(`Draft ${activeDraft} copied to clipboard!`);
     setTimeout(() => setCopied(false), 2000);
@@ -95,7 +109,9 @@ export function DraftPreviewModal({
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
+      ref={dialogRef}
       role="dialog"
+      aria-label="Draft preview"
       aria-modal="true"
     >
       <div

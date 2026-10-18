@@ -36,12 +36,8 @@ class VectorService:
             chroma_port = os.getenv("CHROMA_PORT", "8000")
             # Only attempt remote HttpClient if an explicit non-local host is specified (e.g. dedicated container)
             if chroma_host and chroma_host not in ("localhost", "127.0.0.1", ""):
-                try:
-                    logger.info(f"Connecting to ChromaDB HttpClient at {chroma_host}:{chroma_port}...")
-                    self._client = chromadb.HttpClient(host=chroma_host, port=int(chroma_port))
-                except Exception as e:
-                    logger.warning(f"Failed to connect to ChromaDB at {chroma_host}:{chroma_port}: {e}. Falling back to PersistentClient.")
-                    self._client = chromadb.PersistentClient(path=self._persist_path)
+                from app.services.chroma_http import bounded_http_client
+                self._client = bounded_http_client(chroma_host, int(chroma_port))
             else:
                 self._client = chromadb.PersistentClient(path=self._persist_path)
         return self._client
@@ -64,30 +60,14 @@ class VectorService:
             if not created_at:
                 from datetime import datetime, timezone
                 created_at = datetime.now(timezone.utc).isoformat()
-            self.collection.add(
+            self.collection.upsert(
                 documents=[style_text],
                 metadatas=[{"user_id": str(user_id), "platform": platform, "created_at": str(created_at)}],
                 ids=[str(profile_id)],
             )
             logger.info(f"Saved StyleProfile {profile_id} to ChromaDB.")
         except Exception as e:
-            logger.error(f"Failed to save profile to ChromaDB: {e}")
-
-    def get_similar_profile(self, user_id: str, platform: str, query_text: str, n_results: int = 1):
-        try:
-            results = self.collection.query(
-                query_texts=[query_text],
-                n_results=n_results,
-                where={"$and": [{"user_id": str(user_id)}, {"platform": platform}]},
-            )
-
-            documents = results.get("documents") if results else None
-            if documents and documents[0]:
-                return documents[0][0]
-            return None
-        except Exception as e:
-            logger.error(f"Failed to query ChromaDB: {e}")
-            return None
+            logger.error(f"Failed to save profile to ChromaDB: {type(e).__name__}")
 
     def get_recent_profiles(self, user_id: str, platform: str, limit: int = 5) -> list[dict]:
         """
@@ -118,7 +98,7 @@ class VectorService:
             entries.sort(key=lambda e: e["created_at"], reverse=True)
             return entries[:limit]
         except Exception as e:
-            logger.error(f"Failed to get recent profiles from ChromaDB: {e}")
+            logger.error(f"Failed to get recent profiles from ChromaDB: {type(e).__name__}")
             return []
 
     def delete_oldest_profiles(self, user_id: str, platform: str, keep: int = 10) -> int:
@@ -142,7 +122,7 @@ class VectorService:
                 logger.info(f"Deleted {len(to_delete)} old style profiles from ChromaDB.")
             return len(to_delete)
         except Exception as e:
-            logger.error(f"Failed to delete old profiles from ChromaDB: {e}")
+            logger.error(f"Failed to delete old profiles from ChromaDB: {type(e).__name__}")
             return 0
 
     def delete_all_for_user(self, user_id: str) -> int:
@@ -162,8 +142,8 @@ class VectorService:
             logger.info(f"Deleted {len(ids)} style profiles for user {user_id} from ChromaDB.")
             return len(ids)
         except Exception as e:
-            logger.error(f"Failed to delete user {user_id}'s profiles from ChromaDB: {e}")
-            return 0
+            logger.error(f"Failed to delete user {user_id}'s profiles from ChromaDB: {type(e).__name__}")
+            raise
 
 
 # Module-level singleton.

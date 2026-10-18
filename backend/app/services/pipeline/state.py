@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, TypedDict, Any
+from typing import Optional, TypedDict, Any, Literal
 from pydantic import BaseModel, Field
 from app.schemas.research import ResearchResult
 
@@ -21,9 +21,9 @@ class GeneratedDrafts(BaseModel):
 class QualityVerdict(BaseModel):
     """Structured output for the LLM quality check gate (originality + structural completeness + lead-gen CTA + substance)."""
     passed: bool = Field(description="True if all drafts pass all checks.")
-    failed_check: Optional[str] = Field(
+    failed_check: Optional[Literal["originality", "structural_tells", "unsourced_numbers", "banned_phrases", "grounding", "structural_completeness", "lead_gen_cta", "substance"]] = Field(
         default=None,
-        description="Which check failed: 'originality', 'structural_completeness', 'lead_gen_cta', or 'substance'"
+        description="The check that failed, including grounding or banned_phrases for hard violations"
     )
     failed_drafts: Optional[str] = Field(
         default=None,
@@ -45,6 +45,7 @@ class PipelineState(BaseModel):
     topic: str
     raw_thoughts: str
     profile_context: Optional[str] = None  # Optional user bio/profile/resume text for lead-gen CTA context
+    writing_style: Optional[str] = None
     use_context: bool = True  # When False, skip background-context injection (resume/about-me)
 
     # Populated by node_research
@@ -75,6 +76,8 @@ class GraphState(TypedDict, total=False):
     raw_thoughts: str
     profile_context: Optional[str]
     use_context: bool
+    writing_style: Optional[str]
+    factual_context: Optional[str]
 
     research_result: Optional[ResearchResult]
     extracted_pattern: Optional[ExtractedPattern]

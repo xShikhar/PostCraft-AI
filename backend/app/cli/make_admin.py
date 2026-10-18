@@ -12,14 +12,14 @@ import argparse
 import asyncio
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.core.database import _session_maker, _engine
-from app.models import User
+from app.models import User, AdminAuditLog
 
 
 async def toggle_admin(username: str, revoke: bool = False) -> None:
     async with _session_maker() as session:
-        stmt = select(User).where(User.username == username)
+        stmt = select(User).where(func.lower(User.username) == username.strip().lower())
         result = await session.execute(stmt)
         user = result.scalars().first()
 
@@ -34,6 +34,7 @@ async def toggle_admin(username: str, revoke: bool = False) -> None:
             return
 
         user.is_admin = new_status
+        session.add(AdminAuditLog(admin_user_id=None, target_user_id=user.id, action="cli_revoked_admin" if revoke else "cli_granted_admin"))
         await session.commit()
 
         action = "Revoked administrator privileges from" if revoke else "Granted administrator privileges to"

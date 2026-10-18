@@ -1,5 +1,16 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+export function getAuthToken(): string | null {
+  return typeof window === "undefined" ? null : (sessionStorage.getItem("postcraft_token") || localStorage.getItem("postcraft_token"));
+}
+
+export function clearAuth() {
+  sessionStorage.removeItem("postcraft_token");
+  localStorage.removeItem("postcraft_token");
+  sessionStorage.removeItem("postcraft:pending_thought");
+  window.dispatchEvent(new Event("auth-changed"));
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string, public retryAfter?: number) {
     super(message);
@@ -15,14 +26,14 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 const LONG_RUNNING_TIMEOUT_MS = 600_000;
 
 function timeoutFor(endpoint: string): number {
-  return endpoint.startsWith("/api/generations") ? LONG_RUNNING_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+  return endpoint.startsWith("/api/generations") || endpoint.endsWith("/resume") ? LONG_RUNNING_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 }
 
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("postcraft_token") : null;
+  const token = getAuthToken();
 
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
@@ -53,11 +64,11 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
     clearTimeout(timeoutId);
   }
 
+  if (getAuthToken() !== token) throw new ApiError(499, "Account changed; response ignored.");
+
   if (response.status === 401) {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("postcraft_token");
-      // Trigger a custom event so the UI can listen and log out
-      window.dispatchEvent(new Event("auth-expired"));
+      clearAuth();
     }
   }
 
@@ -80,7 +91,7 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
     }
     throw new ApiError(
       response.status,
-      data?.detail || data?.error || `API Error: ${response.statusText}`
+      (typeof data?.detail === "string" ? data.detail : data?.detail ? "Please check the input requirements." : data?.error) || `API Error: ${response.statusText}`
     );
   }
 

@@ -21,16 +21,8 @@ interface GenerationFormProps {
   setUseContext: (v: boolean) => void;
   loading: boolean;
   loadingStepText: string;
-  activeStep: number;
   onSubmit: (e: React.FormEvent) => void;
 }
-
-const PIPELINE_STEPS = [
-  { label: "Research", description: "Gathering context" },
-  { label: "Analyze", description: "Tone & patterns" },
-  { label: "Generate", description: "Drafting content" },
-  { label: "Polish", description: "Quality check" },
-];
 
 export function GenerationForm({
   topic,
@@ -45,14 +37,11 @@ export function GenerationForm({
   setUseContext,
   loading,
   loadingStepText,
-  activeStep,
   onSubmit,
 }: GenerationFormProps) {
   const formContainerRef = useRef<HTMLDivElement>(null);
-  const trackerRef = useRef<HTMLDivElement>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
-  const stepTextRef = useRef<HTMLSpanElement>(null);
-  const labelsContainerRef = useRef<HTMLDivElement>(null);
+
+  const { contextSafe } = useGSAP({ scope: formContainerRef });
 
   // Subtle focus elevation for input and textarea fields
   useGSAP(() => {
@@ -61,7 +50,7 @@ export function GenerationForm({
 
     const mm = gsap.matchMedia();
     mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const handleFocusIn = (e: FocusEvent) => {
+      const handleFocusIn = contextSafe((e: FocusEvent) => {
         const target = e.target as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
           gsap.to(target, {
@@ -70,9 +59,9 @@ export function GenerationForm({
             ease: "power2.out",
           });
         }
-      };
+      });
 
-      const handleFocusOut = (e: FocusEvent) => {
+      const handleFocusOut = contextSafe((e: FocusEvent) => {
         const target = e.target as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
           gsap.to(target, {
@@ -82,7 +71,7 @@ export function GenerationForm({
             clearProps: "transform",
           });
         }
-      };
+      });
 
       container.addEventListener("focusin", handleFocusIn);
       container.addEventListener("focusout", handleFocusOut);
@@ -96,79 +85,15 @@ export function GenerationForm({
     return () => mm.revert();
   }, { scope: formContainerRef });
 
-  // Entrance animation for tracker card when loading begins
-  useGSAP(() => {
-    if (!loading || !trackerRef.current) return;
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!prefersReduced) {
-      gsap.from(trackerRef.current, {
-        opacity: 0,
-        y: -8,
-        duration: 0.24,
-        ease: "power2.out",
-      });
-    }
-  }, { dependencies: [loading], scope: trackerRef });
-
-  // State-to-state sequential pipeline step transition animation
-  useGSAP(() => {
-    if (!loading) return;
-
-    const mm = gsap.matchMedia();
-
-    mm.add("(prefers-reduced-motion: no-preference)", () => {
-      // Smooth progress bar fill
-      if (progressBarRef.current) {
-        gsap.to(progressBarRef.current, {
-          scaleX: (activeStep + 1) / PIPELINE_STEPS.length,
-          duration: 0.35,
-          ease: "power2.out",
-        });
-      }
-      // Subtitle cross-fade
-      if (stepTextRef.current) {
-        gsap.fromTo(
-          stepTextRef.current,
-          { opacity: 0, y: 3 },
-          { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
-        );
-      }
-      // Pulse active step label
-      if (labelsContainerRef.current) {
-        const labels = labelsContainerRef.current.querySelectorAll(".pipeline-step-label");
-        const activeLabel = labels[activeStep];
-        if (activeLabel) {
-          gsap.fromTo(
-            activeLabel,
-            { scale: 1.12 },
-            { scale: 1, duration: 0.22, ease: "back.out(2)" }
-          );
-        }
-      }
-    });
-
-    mm.add("(prefers-reduced-motion: reduce)", () => {
-      if (progressBarRef.current) {
-        gsap.set(progressBarRef.current, {
-          scaleX: (activeStep + 1) / PIPELINE_STEPS.length,
-        });
-      }
-      if (stepTextRef.current) {
-        gsap.set(stepTextRef.current, { opacity: 1, y: 0 });
-      }
-    });
-
-    return () => mm.revert();
-  }, { dependencies: [loading, activeStep, loadingStepText], scope: trackerRef });
   return (
     <div ref={formContainerRef} className="w-full max-w-5xl mx-auto">
       {/* Section header */}
       <div className="mb-space-lg">
         <p className="font-label-xs text-label-xs text-text-muted uppercase tracking-widest mb-space-2xs">
-          Step 1 of 4
+          New post
         </p>
         <h2 className="font-serif text-headline-lg text-text-display">
-          Studio Workspace
+          Draft composer
         </h2>
         <p className="font-body-sm text-body-sm text-text-muted mt-space-2xs">
           Describe your idea and let PostCraft do the rest
@@ -228,7 +153,8 @@ export function GenerationForm({
             <Input
               id="topic"
               placeholder="e.g. Why async communication is the future of remote work"
-              value={topic}
+              maxLength={255}
+                value={topic}
               onChange={e => setTopic(e.target.value)}
               required
               className="bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm focus:ring-2 focus:ring-primary/50"
@@ -243,7 +169,8 @@ export function GenerationForm({
             <Textarea
               id="profileContext"
               placeholder="Your bio, expertise, or what you're selling..."
-              value={profileContext}
+              maxLength={3000}
+                value={profileContext}
               onChange={e => setProfileContext(e.target.value)}
               rows={3}
               className="bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm resize-none focus:ring-2 focus:ring-primary/50"
@@ -283,7 +210,8 @@ export function GenerationForm({
             <Textarea
               id="rawThoughts"
               placeholder="Brain dump your core ideas here — don't worry about polish, just get the substance down..."
-              value={rawThoughts}
+              maxLength={5000}
+                value={rawThoughts}
               onChange={e => setRawThoughts(e.target.value)}
               required
               className="flex-1 min-h-[200px] bg-surface-subtle border-transparent text-text-display placeholder:text-outline text-body-sm resize-none focus:ring-2 focus:ring-primary/50"
@@ -296,41 +224,7 @@ export function GenerationForm({
           </div>
 
           {/* Pipeline tracker */}
-          {loading && (
-            <div
-              ref={trackerRef}
-              className="bg-surface-card rounded-xl border border-border-subtle p-space-md"
-            >
-              <div className="flex items-center justify-between mb-space-md">
-                <span ref={stepTextRef} className="font-label-xs text-label-xs text-text-muted">
-                  {loadingStepText}
-                </span>
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              </div>
-              {/* Single horizontal progress bar that fills to the current step's
-                 midpoint. Using scaleX (GPU) instead of width to avoid layout thrash. */}
-              <div className="w-full h-1.5 rounded-full bg-surface-container overflow-hidden mb-space-sm">
-                <div
-                  ref={progressBarRef}
-                  className="h-full w-full bg-primary pipeline-fill rounded-full"
-                  style={{ transform: `scaleX(${(activeStep + 1) / PIPELINE_STEPS.length})` }}
-                />
-              </div>
-              {/* Step labels — highlighted if reached, all visible at once */}
-              <div ref={labelsContainerRef} className="flex justify-between">
-                {PIPELINE_STEPS.map((step, i) => (
-                  <span
-                    key={step.label}
-                    className={`pipeline-step-label inline-block font-label-xs text-label-xs transition-colors duration-300 ${
-                      i <= activeStep ? "text-primary font-semibold" : "text-text-muted"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {loading && <div role="status" className="rounded-xl bg-surface-container p-4 text-text-body">{loadingStepText} Results appear when research, drafting and quality checks complete.</div>}
 
           {/* Generate button */}
           <Button

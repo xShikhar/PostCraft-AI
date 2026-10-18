@@ -9,7 +9,7 @@ RUN apt-get update && \
         libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -17,11 +17,10 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Copy project metadata and install dependencies
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
 # Use uv to create a venv and install deps
-RUN uv venv /app/.venv && \
-    VIRTUAL_ENV=/app/.venv uv pip install -r pyproject.toml
+RUN uv sync --frozen --no-dev --no-install-project
 
 # ─── Stage 2: Runtime ────────────────────────────────
 FROM python:3.12-slim
@@ -45,7 +44,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1
 
 # Copy application code and ensure start script is executable
-COPY . .
+COPY app ./app
+COPY alembic ./alembic
+COPY creators ./creators
+COPY alembic.ini start.sh ./
 RUN chmod +x /app/start.sh && python -m compileall -q /app
 
 EXPOSE 8000

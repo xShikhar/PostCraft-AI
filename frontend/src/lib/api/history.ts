@@ -55,8 +55,15 @@ export type GenerationFull = {
   created_at: string | null;
   updated_at: string | null;
   chat_history: ChatMessage[];
+  sources: { title: string; snippet: string; url: string }[];
+  quality?: { result: string; substance_score?: number };
 };
 
 export async function getGenerationFull(id: string): Promise<GenerationFull> {
   return fetchApi<GenerationFull>(`/api/generations/${id}/full`);
+}
+
+export type GenerationMetrics = { total: number; finalized: number; in_progress: number; recent_dates: string[] };
+export function getGenerationMetrics() {
+  return fetchApi<GenerationMetrics>("/api/generations/metrics");
 }

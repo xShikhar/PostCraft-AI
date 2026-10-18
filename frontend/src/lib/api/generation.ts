@@ -41,7 +41,7 @@ export async function generateDrafts(params: GenerationParams): Promise<Generati
     body: JSON.stringify(params),
   });
   
-  if (data.status === "failed") {
+  if (data.status === "failed" || data.error || !data.draft_1 || !data.draft_2 || !data.draft_3) {
     throw new Error(data.error || "Generation failed in the pipeline.");
   }
   
@@ -49,7 +49,7 @@ export async function generateDrafts(params: GenerationParams): Promise<Generati
 }
 
 export async function editDraft(generationId: string, draftIndex: number, instruction: string) {
-  return fetchApi<{ revised_draft: string; reply?: string }>(`/api/generations/${generationId}/edit`, {
+  return fetchApi<{ revised_draft: string; reply?: string; status: string }>(`/api/generations/${generationId}/edit`, {
     method: "POST",
     body: JSON.stringify({ instruction, draft_index: draftIndex }),
   });

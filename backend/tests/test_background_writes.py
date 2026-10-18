@@ -13,7 +13,7 @@ from app.services.pipeline.background_tasks import (
 
 @pytest.mark.asyncio
 async def test_bg_log_cost_failure_is_logged_and_does_not_raise(caplog):
-    generation_id = "test-gen-cost-fail-001"
+    generation_id = str(uuid.uuid4())
     caplog.set_level(logging.ERROR)
 
     # Simulate database session failure

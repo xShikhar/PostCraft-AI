@@ -1,6 +1,6 @@
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { login as apiLogin, signup as apiSignup } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, getAuthToken, clearAuth } from "@/lib/api/client";
 import { toast } from "sonner";
 import { useMounted } from "@/lib/use-mounted";
 
@@ -14,7 +14,7 @@ function subscribeAuth(callback: () => void) {
 }
 
 function getAuthSnapshot() {
-  return localStorage.getItem("postcraft_token");
+  return getAuthToken();
 }
 
 function getAuthServerSnapshot() {
@@ -26,24 +26,12 @@ export function useAuth() {
   const isMounted = useMounted();
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const handleAuthExpired = () => {
-      localStorage.removeItem("postcraft_token");
-      window.dispatchEvent(new Event("auth-changed"));
-      toast.error("Session expired. Please log in again.");
-    };
-
-    window.addEventListener("auth-expired", handleAuthExpired);
-    return () => {
-      window.removeEventListener("auth-expired", handleAuthExpired);
-    };
-  }, []);
-
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, rememberMe = false) => {
     try {
       setIsLoading(true);
-      const data = await apiLogin(username, password);
-      localStorage.setItem("postcraft_token", data.access_token);
+      const data = await apiLogin(username, password, rememberMe);
+      clearAuth();
+      (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Welcome back!");
       return true;
@@ -64,11 +52,12 @@ export function useAuth() {
     }
   };
 
-  const signup = async (username: string, password: string) => {
+  const signup = async (username: string, password: string, rememberMe = false) => {
     try {
       setIsLoading(true);
-      const data = await apiSignup(username, password);
-      localStorage.setItem("postcraft_token", data.access_token);
+      const data = await apiSignup(username, password, rememberMe);
+      clearAuth();
+      (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Account created successfully!");
       return true;
@@ -87,8 +76,7 @@ export function useAuth() {
   };
 
   const logout = () => {
-    localStorage.removeItem("postcraft_token");
-    window.dispatchEvent(new Event("auth-changed"));
+    clearAuth();
     toast("Logged out successfully");
   };
 

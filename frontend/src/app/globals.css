@@ -648,3 +648,7 @@ a:focus-visible {
   0%, 100% { border-color: var(--primary); }
   50% { border-color: var(--primary-container); }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

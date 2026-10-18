@@ -150,7 +150,7 @@ export function DraftSelectionGrid({
         gsap.to(c, {
           scale: isReduced ? 1 : 1.025,
           opacity: 1,
-          duration: 0.22,
+          duration: isReduced ? 0 : 0.22,
           ease: "power2.out",
           overwrite: "auto",
         });
@@ -158,7 +158,7 @@ export function DraftSelectionGrid({
         gsap.to(c, {
           scale: isReduced ? 1 : 0.985,
           opacity: 0.82,
-          duration: 0.22,
+          duration: isReduced ? 0 : 0.22,
           ease: "power2.out",
           overwrite: "auto",
         });
@@ -173,7 +173,7 @@ export function DraftSelectionGrid({
     gsap.to(cards, {
       scale: 1,
       opacity: 1,
-      duration: 0.25,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.25,
       ease: "power2.out",
       overwrite: "auto",
     });
@@ -186,7 +186,7 @@ export function DraftSelectionGrid({
     gsap.from(".draft-card", {
       opacity: 0,
       y: 12,
-      duration: 0.22,
+      duration: isReduced ? 0 : 0.22,
       stagger: 0.05,
       ease: "power2.out",
       clearProps: "all",
@@ -216,11 +216,6 @@ export function DraftSelectionGrid({
           <div
             key={num}
             onMouseEnter={(e) => handleCardMouseEnter(e.currentTarget)}
-            onMouseMove={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-              e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-            }}
             className="draft-card history-card spotlight-card"
           >
             <DraftCard

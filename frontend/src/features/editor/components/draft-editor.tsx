@@ -81,7 +81,7 @@ export function DraftEditor({
   };
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatEndRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [chatHistory.length, isEditing]);
 
   // Stagger in new chat bubbles when a response or message is added
@@ -194,7 +194,7 @@ export function DraftEditor({
           ) : (
             <Button
               onClick={handleFinalizeClick}
-              disabled={loading}
+              disabled={loading || isEditing}
               size="sm"
               className="rounded-full bg-primary hover:bg-primary-container text-on-primary font-label-sm font-semibold"
             >

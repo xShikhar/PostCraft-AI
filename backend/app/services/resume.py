@@ -20,107 +20,47 @@ logger = logging.getLogger(__name__)
 # Text extraction
 # ---------------------------------------------------------------------------
 
+MAX_EXTRACTED_CHARS = 100_000
+
 def extract_text(file_bytes: bytes, mime_type: str = "", filename: str = "") -> str:
-    """
-    Extract plain text from a resume file based on its MIME type, filename, or magic bytes.
-    Falls back to UTF-8 decode for plain text files.
-    Raises ValueError for unsupported types.
-    """
-    fname = (filename or "").lower()
-    mtype = (mime_type or "").lower()
-
-    if (
-        file_bytes.startswith(b"%PDF-")
-        or mtype in ("application/pdf", "application/x-pdf")
-        or fname.endswith(".pdf")
-    ):
-        return _extract_pdf(file_bytes)
-    elif (
-        fname.endswith(".docx")
-        or mtype in (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/msword",
-        )
-    ):
-        return _extract_docx(file_bytes)
-    elif fname.endswith((".txt", ".md")) or mtype in ("text/plain", "text/markdown"):
-        return _fallback_text_extraction(file_bytes)
-    else:
-        # If MIME type is octet-stream or unknown, check if printable plain text
-        try:
-            decoded = _fallback_text_extraction(file_bytes)
-            if len(decoded.strip()) > 10:
-                return decoded
-        except Exception:
-            pass
-
-        raise ValueError(
-            f"Unsupported resume file type: {mime_type or filename or 'unknown'}. "
-            "Please upload a PDF, DOCX, or plain text file."
-        )
-
-
-def _extract_pdf(file_bytes: bytes) -> str:
-    """Extract text from a PDF using pdfplumber, falling back to pypdf if available."""
-    text_parts: list[str] = []
-
-    # 1. Primary extractor: pdfplumber
-    try:
-        import pdfplumber
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text_parts.append(page_text)
-    except Exception as e:
-        logger.warning(f"pdfplumber extraction failed, trying fallback: {e}")
-
-    # 2. Fallback to pypdf if pdfplumber didn't extract text
-    if not text_parts:
-        try:
-            import pypdf
-            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-            for page in reader.pages:
-                pt = page.extract_text()
-                if pt:
-                    text_parts.append(pt)
-        except Exception as e:
-            logger.warning(f"pypdf extraction failed: {e}")
-
-    result = "\n".join(text_parts)
-    if not result.strip():
-        logger.warning("PDF text extraction returned empty")
-        return ""
-    return result
-
-
-def _extract_docx(file_bytes: bytes) -> str:
-    """Extract text from a DOCX using docx2txt."""
-    try:
+    """Strict format checks with a bounded decompressed document budget."""
+    import zipfile
+    from pathlib import PurePath
+    suffix = PurePath(filename.lower()).suffix
+    if len(file_bytes) > 5 * 1024 * 1024:
+        raise ValueError("Resume file too large (max 5MB)")
+    if suffix == ".pdf" and file_bytes.startswith(b"%PDF-"):
+        import pypdf
+        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        if reader.is_encrypted or len(reader.pages) > 50:
+            raise ValueError("PDF must be unencrypted and contain at most 50 pages")
+        parts = []
+        size = 0
+        for page in reader.pages:
+            chunk = page.extract_text() or ""
+            size += len(chunk)
+            if size > MAX_EXTRACTED_CHARS:
+                raise ValueError("Extracted resume exceeds 100,000 characters")
+            parts.append(chunk)
+        return "\n".join(parts)
+    if suffix == ".docx" and file_bytes.startswith(b"PK"):
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+            if "word/document.xml" not in archive.namelist() or sum(x.file_size for x in archive.infolist()) > 10 * 1024 * 1024 or len(archive.infolist()) > 1000:
+                raise ValueError("Invalid or oversized DOCX document")
         import docx2txt
-    except ImportError:
-        logger.warning("docx2txt not installed; cannot extract DOCX text")
-        return ""
-
-    try:
-        result = docx2txt.process(io.BytesIO(file_bytes))
-        if not result or not result.strip():
-            logger.warning("DOCX extraction returned empty")
-            return ""
-        return result
-    except Exception as e:
-        logger.error(f"DOCX extraction failed: {e}")
-        return ""
-
-
-def _fallback_text_extraction(file_bytes: bytes) -> str:
-    """Fallback text decode for plain text files: try UTF-8, then latin-1."""
-    for encoding in ("utf-8", "latin-1"):
+        result = docx2txt.process(io.BytesIO(file_bytes)) or ""
+    elif suffix in (".txt", ".md"):
         try:
-            return file_bytes.decode(encoding)
+            result = file_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
-            continue
-    return file_bytes.decode("utf-8", errors="replace")
+            raise ValueError("Text resumes must use UTF-8 encoding") from None
+        if any(not c.isprintable() and c not in "\n\r\t" for c in result):
+            raise ValueError("Text resume contains binary control characters")
+    else:
+        raise ValueError("Unsupported resume file type. Upload PDF, DOCX, TXT or Markdown.")
+    if len(result) > MAX_EXTRACTED_CHARS:
+        raise ValueError("Extracted resume exceeds 100,000 characters")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +90,7 @@ class ResumeSummary(BaseModel):
 async def summarize_to_structured(
     raw_text: str,
     gemini_api_key: str,
+    user_id: str | None = None,
 ) -> ResumeSummary:
     """
     Calls Gemini once to summarize a resume's raw text into a structured profile.
@@ -157,12 +98,17 @@ async def summarize_to_structured(
     """
     from app.services.pipeline.llm_utils import create_gemini_client, invoke_with_bounded_backoff
 
+    from app.core.config import get_settings
+    from app.services.pipeline.telemetry import operation_telemetry
+    import uuid
+    settings = get_settings()
     llm = create_gemini_client(
+        model=settings.GEMINI_FAST_MODEL or settings.GEMINI_MODEL,
         google_api_key=gemini_api_key,
-        max_retries=1,
+        max_retries=0,
         timeout=30.0,
     )
-    structured_llm = llm.with_structured_output(ResumeSummary, include_raw=False)
+    structured_llm = llm.with_structured_output(ResumeSummary, include_raw=True)
 
     prompt = f"""
 You are an HR analyst reading a candidate's resume. Extract a structured summary.
@@ -173,20 +119,18 @@ RESUME TEXT:
 {raw_text[:8000]}
 """
     try:
-        summary = await invoke_with_bounded_backoff(
-            structured_llm.ainvoke,
-            prompt,
-            node_name="resume_summary",
-        )
+        async with operation_telemetry("resume:" + str(uuid.uuid4()), "resume_summary") as telemetry:
+            summary = await invoke_with_bounded_backoff(structured_llm.ainvoke, prompt, node_name="resume_summary", telemetry=telemetry)
         if isinstance(summary, dict):
-            return ResumeSummary(**summary)
+            parsed, raw = summary.get("parsed"), summary.get("raw")
+            if raw:
+                from app.services.pipeline.background_tasks import run_in_background, bg_log_cost
+                usage = getattr(raw, "usage_metadata", None) or {}
+                run_in_background(bg_log_cost("", "resume_summary", usage.get("input_tokens", 0), usage.get("output_tokens", 0), user_id=user_id, model=settings.GEMINI_FAST_MODEL or settings.GEMINI_MODEL))
+            if parsed is None:
+                raise ValueError("Resume summary unavailable")
+            return parsed
         return summary
     except Exception as e:
-        logger.error(f"Resume summarization failed: {e}")
-        # Graceful degradation: return empty summary rather than failing the upload
-        return ResumeSummary(
-            role="",
-            industry="",
-            expertise_areas=[],
-            experience_level="",
-        )
+        logger.error(f"Resume summarization failed: {type(e).__name__}")
+        raise ValueError("Resume summarization is unavailable. Please try again.") from None

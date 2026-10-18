@@ -6,13 +6,13 @@ from fastapi.testclient import TestClient
 async def test_auth_isolation(client: TestClient):
     # 1. Signup User A
     username_a = f"user_a_{uuid.uuid4().hex[:6]}"
-    res_a = client.post("/api/auth/signup", json={"username": username_a, "password": "password123"})
+    res_a = client.post("/api/auth/signup", json={"username": username_a, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     assert res_a.status_code == 200
     token_a = res_a.json()["access_token"]
     
     # 2. Signup User B
     username_b = f"user_b_{uuid.uuid4().hex[:6]}"
-    res_b = client.post("/api/auth/signup", json={"username": username_b, "password": "password123"})
+    res_b = client.post("/api/auth/signup", json={"username": username_b, "password": "password123", "terms_version": "2026-10-15", "agreed_to_terms": True})
     assert res_b.status_code == 200
     token_b = res_b.json()["access_token"]
 

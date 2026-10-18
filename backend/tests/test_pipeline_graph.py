@@ -56,7 +56,7 @@ async def test_pipeline_full_execution(db_session: AsyncSession):
         draft_2="Draft 2: Stop having meetings. DM me for the framework.",
         draft_3="Draft 3: Velocity increases with focus. Send me a message."
     )
-    verdict_mock = QualityVerdict(passed=True)
+    verdict_mock = QualityVerdict(passed=True, substance_score=8)
 
     # Mock structured output
     def mock_with_structured(model, include_raw=False):

@@ -4,7 +4,7 @@ import uuid
 
 
 class GenerateRequest(BaseModel):
-    topic: str = Field(..., min_length=1, max_length=500)
+    topic: str = Field(..., min_length=1, max_length=255)
     platform: Literal["linkedin", "x"] = Field(..., description="Target platform: 'linkedin' or 'x'")
     raw_thoughts: str = Field(..., min_length=1, max_length=5000)
     profile_context: Optional[str] = Field(default=None, max_length=3000)
@@ -45,8 +45,11 @@ class UserResponse(BaseModel):
     username: str
     profile_context: Optional[str] = None
     about_me: Optional[str] = None
+    writing_style: Optional[str] = None
+    is_admin: bool = False
 
 
 class UserUpdate(BaseModel):
     profile_context: Optional[str] = Field(default=None, max_length=3000)
     about_me: Optional[str] = Field(default=None, max_length=2000)
+    writing_style: Optional[str] = Field(default=None, max_length=2000)

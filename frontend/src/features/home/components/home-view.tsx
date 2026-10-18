@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { listGenerations, type HistoryItem } from "@/lib/api/history";
+import { listGenerations, getGenerationMetrics, type GenerationMetrics, type HistoryItem } from "@/lib/api/history";
 import { DraftPreviewModal } from "@/features/history/components/draft-preview-modal";
 import { stripMarkdown } from "@/lib/utils/markdown";
 
@@ -24,7 +24,7 @@ import { toast } from "sonner";
 
 interface HomeViewProps {
   username: string;
-  onNewPost: () => void;
+  onNewPost: (thought?: string) => void;
   onOpenHistory: (id: string, draftIndex?: number) => void;
   onGoHistory: () => void;
 }
@@ -69,7 +69,8 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
   const [enlargedDraftIndex, setEnlargedDraftIndex] = useState<number>(1);
 
   // Cadence data (real, from history)
-  const [allGenerations, setAllGenerations] = useState<HistoryItem[]>([]);
+  const [metrics, setMetrics] = useState<GenerationMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState(false);
   const [loadingCadence, setLoadingCadence] = useState(true);
 
   const recentGridRef = useRef<HTMLDivElement>(null);
@@ -85,7 +86,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
         gsap.to(c, {
           scale: isReduced ? 1 : 1.02,
           opacity: 1,
-          duration: 0.22,
+          duration: isReduced ? 0 : 0.22,
           ease: "power2.out",
           overwrite: "auto",
         });
@@ -93,7 +94,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
         gsap.to(c, {
           scale: isReduced ? 1 : 0.98,
           opacity: 0.6,
-          duration: 0.22,
+          duration: isReduced ? 0 : 0.22,
           ease: "power2.out",
           overwrite: "auto",
         });
@@ -108,7 +109,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
     gsap.to(cards, {
       scale: 1,
       opacity: 1,
-      duration: 0.25,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.25,
       ease: "power2.out",
       overwrite: "auto",
     });
@@ -122,7 +123,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
     gsap.from(".recent-card", {
       opacity: 0,
       y: 12,
-      duration: 0.22,
+      duration: isReduced ? 0 : 0.22,
       stagger: 0.05,
       ease: "power2.out",
       clearProps: "all",
@@ -146,11 +147,11 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
     let cancelled = false;
     // Fetch a large enough window for the cadence chart. Backend limit is unbounded
     // for the authenticated user, so 200 covers most cases.
-    listGenerations({ limit: 200 })
+    getGenerationMetrics()
       .then((res) => {
-        if (!cancelled) setAllGenerations(res.items);
+        if (!cancelled) setMetrics(res);
       })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) setMetricsError(true); })
       .finally(() => {
         if (!cancelled) setLoadingCadence(false);
       });
@@ -170,9 +171,8 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
       date: d,
     });
   }
-  for (const gen of allGenerations) {
-    if (!gen.created_at) continue;
-    const d = new Date(gen.created_at);
+  for (const createdAt of metrics?.recent_dates || []) {
+    const d = new Date(createdAt);
     d.setHours(0, 0, 0, 0);
     const idx = days.findIndex((day) => day.date.getTime() === d.getTime());
     if (idx >= 0) days[idx].count += 1;
@@ -180,11 +180,9 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
   const maxCount = Math.max(1, ...days.map((d) => d.count));
 
   // Workspace Health: real counts
-  const totalCount = allGenerations.length;
-  const finalizedCount = allGenerations.filter((g) => g.status === "finalized").length;
-  const inProgressCount = allGenerations.filter(
-    (g) => g.status === "editing" || g.status === "needs_review"
-  ).length;
+  const totalCount = metrics?.total || 0;
+  const finalizedCount = metrics?.finalized || 0;
+  const inProgressCount = metrics?.in_progress || 0;
 
   const handleSubmitThought = (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,14 +191,13 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
       return;
     }
     // Hand the thought off to the new-generation view via parent.
-    onNewPost();
-    // Store in sessionStorage so New-Generation can read it on mount.
-    sessionStorage.setItem("postcraft:pending_thought", quickThought.trim());
+    onNewPost(quickThought.trim());
     toast.success("Loaded into the composer — paste where useful.");
   };
 
   return (
     <div className="flex flex-col w-full gap-space-2xl">
+      {metricsError && <p role="alert" className="text-secondary">Activity metrics unavailable. Refresh to retry.</p>}
       {/* Top Section: Greeting + Inspiration prompt + new-post CTA */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg relative">
         {/* Ambient orbs */}
@@ -219,7 +216,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             </span>
           </div>
           <h1 className="font-serif text-display-hero text-text-display tracking-tight leading-none">
-            {greeting()}, <span className="text-primary">{username}</span>
+            {greeting()}, <span className="text-primary break-words [overflow-wrap:anywhere]">{username}</span>
           </h1>
           <div className="flex items-center gap-space-sm pt-space-xs flex-wrap">
             <span className="font-body-md text-body-md text-text-muted">Inspiration prompt:</span>
@@ -245,7 +242,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
 
         <div className="flex items-center gap-space-sm self-start md:self-end">
           <button
-            onClick={onNewPost}
+            onClick={() => onNewPost()}
             className="flex items-center gap-space-xs py-space-sm px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md tracking-wide shadow-lg hover:scale-[1.01] active:scale-[0.98] transition-all btn-press"
           >
             <Plus className="w-4 h-4" />
@@ -278,7 +275,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             <div className="flex items-center gap-space-2xs px-space-sm py-space-2xs bg-surface-subtle rounded-full text-text-muted">
               <AudioLines className="w-3.5 h-3.5 text-secondary" />
               <span className="font-label-xs text-label-xs uppercase font-bold text-text-body">
-                Voice: Direct
+                Writing workspace
               </span>
             </div>
             <button
@@ -299,7 +296,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
             <h2 className="font-serif text-headline-md text-text-display">Recent drafts</h2>
             {recent.length > 0 && (
               <span className="px-space-xs py-space-2xs bg-surface-container text-primary font-label-xs text-label-xs rounded-full uppercase tracking-wider font-semibold">
-                {recent.length} active
+                {recent.filter(item => item.status !== "finalized").length} in progress
               </span>
             )}
           </div>
@@ -330,7 +327,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
               </p>
             </div>
             <button
-              onClick={onNewPost}
+              onClick={() => onNewPost()}
               className="mt-space-xs flex items-center gap-space-xs py-space-xs px-space-lg bg-text-display dark:bg-primary text-surface-card dark:text-on-primary rounded-full font-label-md text-label-md"
             >
               <Plus className="w-4 h-4" />
@@ -351,11 +348,6 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
                   setEnlargedDraftIndex(1);
                 }}
                 onMouseEnter={(e) => handleRecentCardMouseEnter(e.currentTarget)}
-                onMouseMove={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-                  e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-                }}
                 className="history-card recent-card spotlight-card group relative bg-surface-card rounded-xl p-space-lg shadow-card-light transition-colors flex flex-col justify-between min-h-[300px] text-left cursor-pointer"
                 title="Click to enlarge and read all drafts"
               >
@@ -443,7 +435,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
                 <div className="pt-space-md flex items-center justify-between mt-space-md relative z-10 border-t border-border-subtle/50">
                   <div className="flex items-center gap-space-xs">
                     <span className="font-label-xs text-label-xs text-text-muted">
-                      Edited {relativeTime(item.created_at)}
+                      Created {relativeTime(item.created_at)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -535,7 +527,7 @@ export function HomeView({ username, onNewPost, onOpenHistory, onGoHistory }: Ho
                 </div>
                 <div className="flex flex-col">
                   <span className="font-title-sm text-body-sm font-semibold text-text-display">
-                    {totalCount} posts created
+                    {totalCount} generation attempts
                   </span>
                   <span className="font-label-xs text-label-xs text-text-muted">All time</span>
                 </div>

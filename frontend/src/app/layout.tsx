@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Lato, Merriweather } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -28,11 +29,14 @@ export const metadata: Metadata = {
   description: "Transform your raw thoughts into high-performing social posts.",
 };
 
-export default function RootLayout({
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <html
       lang="en"
@@ -40,9 +44,9 @@ export default function RootLayout({
       className={`${lato.variable} ${merriweather.variable}`}
     >
       <body className="font-sans antialiased bg-canvas-base text-text-body min-h-screen">
-        <ThemeProvider defaultTheme="light" enableSystem>
+        <ThemeProvider nonce={nonce} defaultTheme="light" enableSystem>
           {children}
-          <Toaster theme="light" position="top-center" richColors />
+          <Toaster position="top-center" richColors />
         </ThemeProvider>
       </body>
     </html>

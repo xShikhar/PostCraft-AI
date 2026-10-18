@@ -14,11 +14,8 @@ until alembic upgrade head; do
   sleep 2
 done
 
-if [ "${RUN_RESUME_MIGRATION:-false}" = "true" ]; then
-  echo "==> Running one-time resume encryption migration..."
-  # Safe to re-run: already-encrypted rows are skipped. Won't block on failure.
-  python -m app.core.migrate_resume_encryption || echo "WARNING: Resume encryption migration failed. Existing plaintext rows are still readable — investigate and re-run manually."
-fi
+echo "==> Validating encryption and migrating legacy private fields..."
+python -m app.core.migrate_resume_encryption
 
 PORT_TO_USE="${PORT:-8000}"
 echo "==> Starting FastAPI with uvicorn on port $PORT_TO_USE..."

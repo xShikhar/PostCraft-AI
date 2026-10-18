@@ -67,7 +67,7 @@ class PipelineTelemetry:
             metric.status = "ok"
         except Exception as e:
             metric.status = "error"
-            metric.metadata["error"] = str(e)
+            metric.metadata["error"] = type(e).__name__
             raise
         finally:
             metric.end_time = time.perf_counter()
@@ -173,3 +173,12 @@ class PipelineTelemetry:
             "backoff_sleep_s": round(self.total_backoff_sleep_s, 4),
             "nodes": node_timings,
         }
+
+@asynccontextmanager
+async def operation_telemetry(identifier: str, operation: str):
+    telemetry = PipelineTelemetry(generation_id=identifier)
+    try:
+        async with telemetry.measure_node(operation):
+            yield telemetry
+    finally:
+        telemetry.finish()

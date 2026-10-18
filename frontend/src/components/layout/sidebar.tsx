@@ -22,10 +22,10 @@ import {
 import { getCurrentUser, type UserResponse } from "@/lib/api/user";
 
 interface SidebarProps {
-  currentView: "home" | "editor" | "profile" | "history" | "privacy" | "terms" | "new-generation";
+  currentView: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms" | "new-generation";
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onNavigate: (view: "home" | "editor" | "profile" | "history" | "privacy" | "terms") => void;
+  onNavigate: (view: "home" | "compose" | "selection" | "editor" | "profile" | "history" | "privacy" | "terms") => void;
   onNewPost: () => void;
   onLogout: () => void;
 }
@@ -223,7 +223,9 @@ export function Sidebar({
 
       {/* Bottom section — theme + user */}
       <div className="flex flex-col gap-space-md pt-space-md">
-        {/* Theme toggle pill */}
+        {user?.is_admin && <a href="/admin" className="mx-4 rounded-lg px-4 py-2 text-primary hover:bg-surface-container">Admin console</a>}
+
+      {/* Theme toggle pill */}
         <div ref={pillContainerRef} className="relative p-space-2xs bg-surface-subtle rounded-full flex items-center justify-between">
           <div
             ref={pillThumbRef}

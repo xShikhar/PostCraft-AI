@@ -14,7 +14,7 @@ def create_gemini_client(
     google_api_key: Optional[str] = None,
     temperature: Optional[float] = None,
     thinking_budget: Optional[int] = None,
-    max_retries: int = 1,
+    max_retries: int = 0,
     timeout: float = 60.0,
 ) -> ChatGoogleGenerativeAI:
     """
@@ -58,8 +58,16 @@ async def invoke_with_bounded_backoff(
     attempt = 0
     while True:
         try:
-            return await invoker_fn(*args, **kwargs)
+            started = time.perf_counter()
+            result = await invoker_fn(*args, **kwargs)
+            if telemetry:
+                raw = result.get("raw") if isinstance(result, dict) else result
+                usage = getattr(raw, "usage_metadata", None) or {}
+                telemetry.record_call(node_name=node_name, target="gemini", operation="invoke", duration_s=time.perf_counter() - started, prompt_tokens=usage.get("input_tokens", 0), completion_tokens=usage.get("output_tokens", 0))
+            return result
         except Exception as e:
+            if telemetry:
+                telemetry.record_call(node_name=node_name, target="gemini", operation="invoke", duration_s=time.perf_counter() - started, status="error", error_message=type(e).__name__)
             attempt += 1
             err_str = str(e).lower()
             is_rate_limit = (
@@ -68,6 +76,7 @@ async def invoke_with_bounded_backoff(
                 or "quota" in err_str
                 or "rate limit" in err_str
             )
+            hard_quota = any(marker in err_str for marker in ("daily", "per day", "billing", "insufficient_quota", "limit: 0"))
             is_transient = (
                 is_rate_limit
                 or "503" in err_str
@@ -79,28 +88,28 @@ async def invoke_with_bounded_backoff(
                 or "exceeded" in err_str
             )
 
-            if attempt > max_retries or not is_transient:
-                logger.error(f"[{node_name}] LLM invocation failed after {attempt} attempt(s): {e}")
+            if attempt > max_retries or not is_transient or hard_quota:
+                logger.error(f"[{node_name}] LLM invocation failed after {attempt} attempt(s): {type(e).__name__}")
                 raise
 
             # Bounded exponential backoff with jitter
             raw_delay = min(max_delay, base_delay * (1.5 ** (attempt - 1)))
-            jitter = random.uniform(0.1, 0.4)
-            sleep_time = min(max_delay, raw_delay + jitter)
+            sleep_time = random.uniform(0, raw_delay)
 
             logger.warning(
-                f"[{node_name}] Transient LLM error (attempt {attempt}/{max_retries}): {e}. "
+                f"[{node_name}] Transient LLM error (attempt {attempt}/{max_retries}): {type(e).__name__}. "
                 f"Retrying in {sleep_time:.2f}s..."
             )
 
             if telemetry and hasattr(telemetry, "record_call"):
                 telemetry.record_call(
                     node_name=node_name,
-                    target="gemini",
+                    target="backoff",
                     operation="rate_limit_backoff",
+                    backoff_sleep_s=sleep_time,
                     duration_s=sleep_time,
                     status="retry",
-                    error_message=str(e),
+                    error_message=type(e).__name__,
                 )
 
             await asyncio.sleep(sleep_time)

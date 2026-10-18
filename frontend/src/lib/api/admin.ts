@@ -86,3 +86,6 @@ export async function getUserGenerations(
     `/api/admin/users/${userId}/generations?limit=${limit}&offset=${offset}`
   );
 }
+
+export type AuditEntry = { id: string; action: string; admin_user_id: string | null; target_user_id: string | null; created_at: string };
+export function getAdminAuditLogs(offset = 0) { return fetchApi<{ items: AuditEntry[]; total: number }>(`/api/admin/audit-logs?limit=20&offset=${offset}`); }

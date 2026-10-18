@@ -23,6 +23,8 @@ import {
 import { toast } from "sonner";
 import {
   getAdminStats,
+  getAdminAuditLogs,
+  type AuditEntry,
   getAdminUsers,
   getUserGenerations,
   type AdminStats,
@@ -66,6 +68,10 @@ export default function AdminPage() {
   // Data state
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [userOffset, setUserOffset] = useState(0);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditError, setAuditError] = useState("");
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -78,15 +84,16 @@ export default function AdminPage() {
   const [activeDraftTabs, setActiveDraftTabs] = useState<Record<string, number>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const loadDashboardData = useCallback(async (query: string = "") => {
+  const loadDashboardData = useCallback(async (query: string = "", offset = 0) => {
     try {
       setIsLoading(true);
       const [statsData, usersData] = await Promise.all([
         getAdminStats(),
-        getAdminUsers({ q: query, limit: 50 }),
+        getAdminUsers({ q: query, limit: 50, offset }),
       ]);
       setStats(statsData);
       setUsers(usersData.items);
+      setUserOffset(offset);
       setTotalUsers(usersData.total);
       setIsAuthorized(true);
     } catch (err: unknown) {
@@ -155,6 +162,13 @@ export default function AdminPage() {
     }, 350);
     return () => clearTimeout(timer);
   }, [searchQuery, isAuthorized, loadDashboardData]);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+    let cancelled = false;
+    getAdminAuditLogs().then(data => { if (!cancelled) { setAuditEntries(data.items); setAuditTotal(data.total); } }).catch(() => { if (!cancelled) setAuditError("Audit log unavailable."); });
+    return () => { cancelled = true; };
+  }, [isAuthorized]);
 
   const handleInspectUser = async (user: AdminUserItem) => {
     setSelectedUser(user);
@@ -517,6 +531,17 @@ export default function AdminPage() {
               </table>
             </div>
           </div>
+        </section>
+        <div className="flex gap-3 items-center">
+          <button disabled={userOffset === 0 || isLoading} onClick={() => loadDashboardData(searchQuery, Math.max(0, userOffset - 50))} className="rounded border p-2 disabled:opacity-40">Previous users</button>
+          <span>{userOffset + 1}–{userOffset + users.length} of {totalUsers}</span>
+          <button disabled={userOffset + users.length >= totalUsers || isLoading} onClick={() => loadDashboardData(searchQuery, userOffset + 50)} className="rounded border p-2 disabled:opacity-40">Next users</button>
+        </div>
+        <section className="mt-8 rounded-2xl border border-border bg-card p-5 space-y-3">
+          <h2 className="font-bold">Administrative audit log</h2>
+          {auditError && <p role="alert">{auditError}</p>}
+          {auditEntries.map(entry => <div key={entry.id} className="border-b border-border py-2 text-sm"><strong>{entry.action}</strong><p className="text-muted-foreground">{formatDate(entry.created_at)} · Actor {entry.admin_user_id || "CLI / deleted account"}</p></div>)}
+          {auditEntries.length < auditTotal && <button className="rounded border p-2" onClick={async () => { try { const data = await getAdminAuditLogs(auditEntries.length); setAuditEntries(previous => [...previous, ...data.items]); setAuditTotal(data.total); } catch { setAuditError("Could not load more audit records."); } }}>Load more audit records</button>}
         </section>
       </main>
 

@@ -1,4 +1,5 @@
 import os
+import hashlib
 import json
 import logging
 import time
@@ -27,7 +28,7 @@ def load_creators(platform: str) -> List[str]:
 
 async def _check_cache(topic: str, platform: str, session: AsyncSession) -> Optional[ResearchResult]:
     stmt = select(ResearchCache).where(
-        ResearchCache.topic == topic,
+        ResearchCache.topic == hashlib.sha256(topic.encode()).hexdigest(),
         ResearchCache.platform == platform,
         ResearchCache.expires_at > datetime.now(timezone.utc)
     )
@@ -35,26 +36,10 @@ async def _check_cache(topic: str, platform: str, session: AsyncSession) -> Opti
     cache_entry = result.scalars().first()
     
     if cache_entry:
-        snippets = json.loads(cache_entry.results_json)
-        return ResearchResult(
-            topic=topic,
-            platform=platform,
-            content_snippets=snippets,
-            confidence="high", # Typically cached results are high/medium confidence
-            source="cache"
-        )
+        data = json.loads(cache_entry.results_json)
+        if isinstance(data, dict) and data.get("source") != "synthetic_structure":
+            return ResearchResult(topic=topic, platform=platform, **data)
     return None
-
-async def _save_cache(topic: str, platform: str, snippets: List[str], session: AsyncSession):
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    cache_entry = ResearchCache(
-        topic=topic,
-        platform=platform,
-        results_json=json.dumps(snippets),
-        expires_at=expires_at
-    )
-    session.add(cache_entry)
-    await session.commit()
 
 async def _search_tavily(query: str, api_key: str) -> tuple[List[str], List[SourceItem]]:
     async with httpx.AsyncClient() as client:
@@ -78,7 +63,7 @@ async def _search_tavily(query: str, api_key: str) -> tuple[List[str], List[Sour
                 raw = (r.get("raw_content") or "").strip()
                 summary = (r.get("content") or "").strip()
                 # Cap raw content per result to 1,500 chars to avoid 100k+ token prompt bloat and 429 quota exhaustion
-                content = raw[:1500].strip() if raw else summary
+                content = (raw or summary)[:1500].strip()
                 if content:
                     snippets.append(content)
                     sources.append(SourceItem(
@@ -88,7 +73,7 @@ async def _search_tavily(query: str, api_key: str) -> tuple[List[str], List[Sour
                     ))
             return snippets, sources
         else:
-            logger.error(f"Tavily search failed: {response.text}")
+            logger.error(f"Tavily search failed: {response.status_code}")
             return [], []
 
 async def _search_serp_api(query: str, api_key: str) -> tuple[List[str], List[SourceItem]]:
@@ -117,15 +102,21 @@ async def _search_serp_api(query: str, api_key: str) -> tuple[List[str], List[So
                     ))
             return snippets, sources
         else:
-            logger.error(f"SerpApi search failed: {response.text}")
+            logger.error(f"SerpApi search failed: {response.status_code}")
             return [], []
 
 async def _perform_search(query: str, settings) -> tuple[List[str], List[SourceItem]]:
-    if settings.TAVILY_API_KEY:
-        return await _search_tavily(query, settings.TAVILY_API_KEY)
-    elif settings.SERP_API_KEY:
-        return await _search_serp_api(query, settings.SERP_API_KEY)
+    for search, key in ((_search_tavily, settings.TAVILY_API_KEY), (_search_serp_api, settings.SERP_API_KEY)):
+        if not key:
+            continue
+        try:
+            snippets, sources = await search(query, key)
+            if snippets:
+                return snippets, sources
+        except httpx.HTTPError:
+            logger.warning("Research provider unavailable; trying next provider")
     return [], []
+
 
 async def _generate_synthetic_structure(topic: str, platform: str, settings, telemetry=None) -> tuple[List[str], int, int, int]:
     if not settings.GEMINI_API_KEY:
@@ -137,12 +128,12 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
     client = create_gemini_client(
         model=settings.GEMINI_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
-        max_retries=1,
+        max_retries=0,
         timeout=60.0,
     )
     prompt = (
         f"Provide 3 distinct examples of high-quality structural patterns for {platform} posts about '{topic}'. "
-        "Do not provide advice, just provide the raw simulated post texts so we can analyze their structure, pacing, and formatting."
+        "Return fictional STRUCTURE ONLY with bracketed placeholders. Never invent statistics, personal anecdotes, credentials or events. These are not factual research."
     )
     
     try:
@@ -161,7 +152,7 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
         if telemetry:
             telemetry.record_call(
                 node_name="research",
-                target="gemini",
+                target="gemini_result",
                 operation="synthetic_structure",
                 duration_s=t_call,
                 prompt_tokens=p_tok,
@@ -171,15 +162,15 @@ async def _generate_synthetic_structure(topic: str, platform: str, settings, tel
         if response.content:
             return [str(response.content)], p_tok, c_tok, r_tok
     except Exception as e:
-        logger.error(f"Fallback generation failed: {e}")
+        logger.error(f"Fallback generation failed: {type(e).__name__}")
         if telemetry:
             telemetry.record_call(
                 node_name="research",
-                target="gemini",
+                target="gemini_result",
                 operation="synthetic_structure",
                 duration_s=0.0,
                 status="error",
-                error_message=str(e),
+                error_message=type(e).__name__,
             )
         
     return [], 0, 0, 0
@@ -249,15 +240,18 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession, tel
 
     # 4. Model Synthetic Structure
     if not snippets:
-        synth_snippets, _, _, _ = await _generate_synthetic_structure(topic, platform, settings, telemetry=telemetry)
+        synth_snippets, synth_prompt, synth_completion, _ = await _generate_synthetic_structure(topic, platform, settings, telemetry=telemetry)
         snippets = synth_snippets
+        if telemetry and (synth_prompt or synth_completion):
+            from app.services.pipeline.background_tasks import run_in_background, bg_log_cost
+            run_in_background(bg_log_cost(str(telemetry.generation_id), "synthetic_structure", synth_prompt, synth_completion, model=settings.GEMINI_MODEL))
         sources = []  # No URLs for synthetic content
         if snippets:
             source = "synthetic_structure"
             confidence = "low"
 
     # Save to Cache if we got something (in background, off hot path)
-    if snippets and source:
+    if snippets and source and source != "synthetic_structure":
         try:
             from app.services.pipeline.background_tasks import run_in_background, bg_save_research_cache
             run_in_background(
@@ -266,11 +260,13 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession, tel
                     topic=topic,
                     platform=platform,
                     snippets=snippets,
+                    sources=[item.model_dump() for item in sources],
+                    source=source, confidence=confidence,
                 ),
                 task_name="bg_save_research_cache",
             )
         except Exception as e:
-            logger.warning(f"Could not schedule background research cache write: {e}")
+            logger.warning(f"Could not schedule background research cache write: {type(e).__name__}")
 
         return ResearchResult(
             topic=topic,
@@ -280,6 +276,9 @@ async def cascading_search(topic: str, platform: str, session: AsyncSession, tel
             confidence=confidence,
             source=source
         )
+
+    if snippets:
+        return ResearchResult(topic=topic, platform=platform, content_snippets=snippets, sources=sources, confidence=confidence, source=source)
 
     # Absolute ultimate failure
     return ResearchResult(

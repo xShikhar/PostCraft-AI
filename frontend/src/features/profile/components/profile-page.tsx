@@ -19,8 +19,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentUser, updateCurrentUser, deleteMyAccount } from "@/lib/api/user";
-import { getResume, uploadResume, deleteResume, type ResumeResponse } from "@/lib/api/resume";
+import { getResume, uploadResume, deleteResume, updateResume, type ResumeResponse } from "@/lib/api/resume";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { getStyleProfile, type StyleProfileDimensions } from "@/lib/api/style-profile";
+import { fetchApi } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/client";
 import {
   Dialog,
@@ -64,6 +66,7 @@ function ProfileCard({ icon, title, subtitle, children }: ProfileCardProps) {
 // ---------------------------------------------------------------------------
 
 interface ProfileFieldProps {
+  maxLength?: number;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
@@ -71,10 +74,11 @@ interface ProfileFieldProps {
   initial: string;
 }
 
-function ProfileField({ value, onChange, placeholder, rows = 6, initial }: ProfileFieldProps) {
+function ProfileField({ value, onChange, placeholder, rows = 6, initial, maxLength }: ProfileFieldProps) {
   return (
     <textarea
       value={value}
+      maxLength={maxLength}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
@@ -132,6 +136,8 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const profileContainerRef = useRef<HTMLDivElement>(null);
 
+  const { contextSafe } = useGSAP({ scope: profileContainerRef });
+
   // Subtle focus elevation for input and textarea fields across the profile
   useGSAP(() => {
     const container = profileContainerRef.current;
@@ -139,7 +145,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
     const mm = gsap.matchMedia();
     mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const handleFocusIn = (e: FocusEvent) => {
+      const handleFocusIn = contextSafe((e: FocusEvent) => {
         const target = e.target as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
           gsap.to(target, {
@@ -148,9 +154,9 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
             ease: "power2.out",
           });
         }
-      };
+      });
 
-      const handleFocusOut = (e: FocusEvent) => {
+      const handleFocusOut = contextSafe((e: FocusEvent) => {
         const target = e.target as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
           gsap.to(target, {
@@ -160,7 +166,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
             clearProps: "transform",
           });
         }
-      };
+      });
 
       container.addEventListener("focusin", handleFocusIn);
       container.addEventListener("focusout", handleFocusOut);
@@ -179,6 +185,9 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const [savingResume, setSavingResume] = useState(false);
   const [savingStyle, setSavingStyle] = useState(false);
 
+  const [learnedStyle, setLearnedStyle] = useState<StyleProfileDimensions | null>(null);
+  const [editingResume, setEditingResume] = useState(false);
+  const [resumeText, setResumeText] = useState("");
   const [initialAbout, setInitialAbout] = useState("");
   const [initialResume, setInitialResume] = useState("");
   const [initialStyle, setInitialStyle] = useState("");
@@ -197,8 +206,10 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
     Promise.all([
       getCurrentUser(),
       getResume().catch(() => null),
+      getStyleProfile(),
     ])
-      .then(([u, rData]) => {
+      .then(([u, rData, learned]) => {
+        setLearnedStyle(learned.current);
         if (cancelled) return;
         // about_me → About Me
         const a = u.about_me ?? "";
@@ -206,7 +217,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
         const r = u.profile_context ?? "";
         // Extract writing_style from profile_context if it was previously saved
         const styleMatch = r.match(/\[writing_style\]\s*([\s\S]*)$/);
-        const w = styleMatch ? styleMatch[1].trim() : "";
+        const w = u.writing_style || (styleMatch ? styleMatch[1].trim() : "");
         setAboutMe(a);
         setResumeBackground(r.replace(/\[writing_style\]\s*[\s\S]*$/, "").trim());
         setWritingStyle(w);
@@ -215,6 +226,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
         setInitialStyle(w);
         setInitialUsername(u.username ?? "");
         setResumeData(rData);
+        setResumeText(rData?.raw_text || "");
       })
       .catch(() => {
         toast.error("Failed to load profile.");
@@ -237,7 +249,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
     }
 
     const name = file.name.toLowerCase();
-    if (!name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".txt")) {
+    if (!name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".txt") && !name.endsWith(".md")) {
       toast.error("Please upload a PDF, DOCX, or TXT file.");
       return;
     }
@@ -318,10 +330,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
     // treats as opaque text.
     setSavingStyle(true);
     try {
-      const combined = resumeBackground
-        ? `${resumeBackground}\n\n---\n[writing_style]\n${writingStyle}`
-        : `[writing_style]\n${writingStyle}`;
-      await updateCurrentUser({ profile_context: combined });
+      await updateCurrentUser({ writing_style: writingStyle });
       setInitialStyle(writingStyle);
       toast.success("Writing style saved.");
     } catch (err) {
@@ -342,13 +351,14 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
     if (deleteConfirm.trim() !== initialUsername) return;
     setDeleting(true);
     try {
-      await deleteMyAccount();
+      const result = await deleteMyAccount();
+      if (result.status === "deletion_pending") toast.info(result.message);
       // Server confirmed. The toast lands in the new (logged-out) session;
       // sonner keeps it visible across the auth flip because the Toaster
       // is mounted in AppShell only when authenticated. To make sure the
       // confirmation reaches the user after they land on AuthScreen, we
       // also stash a flag in sessionStorage and clear the token in one go.
-      sessionStorage.setItem("postcraft:post_delete_notice", "1");
+      sessionStorage.setItem("postcraft:post_delete_notice", result.message);
       logout();
     } catch (err) {
       const msg =
@@ -413,7 +423,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
           subtitle="A short bio — who you write for, what you stand for, what you are tired of."
         >
           <ProfileField
-            value={aboutMe}
+            maxLength={2000} value={aboutMe}
             onChange={setAboutMe}
             initial={initialAbout}
             rows={5}
@@ -649,7 +659,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
               Add any extra context, current ventures, or details not on your resume that you want the model to remember.
             </span>
             <ProfileField
-              value={resumeBackground}
+              maxLength={3000} value={resumeBackground}
               onChange={setResumeBackground}
               initial={initialResume}
               rows={5}
@@ -670,7 +680,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
           subtitle="Tone, cadence, vocabulary, and the topics or phrasings you want to avoid."
         >
           <ProfileField
-            value={writingStyle}
+            maxLength={2000} value={writingStyle}
             onChange={setWritingStyle}
             initial={initialStyle}
             rows={7}
@@ -725,6 +735,13 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       </div>
 
       {/* Confirmation dialog — type your username to confirm */}
+      <section className="rounded-xl bg-surface-card border border-border-subtle p-6 space-y-4">
+        <h2 className="font-serif text-headline-sm">Learned writing style</h2>
+        {learnedStyle ? <dl className="grid gap-3">{(["structure", "tone", "pacing", "storytelling_technique", "formatting", "cta_style"] as const).map(key => <div key={key}><dt className="font-semibold capitalize">{key.replaceAll("_", " ")}</dt><dd className="text-text-muted">{learnedStyle[key]}</dd></div>)}</dl> : <p>Finalize a post to save your chosen writing style.</p>}
+        {resumeData && <><button className="rounded bg-surface-container px-4 py-2" onClick={() => { setResumeText(resumeData.raw_text); setEditingResume(!editingResume); }}>Edit extracted resume text</button>{editingResume && <div className="space-y-3"><textarea aria-label="Extracted resume text" className="w-full min-h-64 rounded p-3 bg-surface-container" maxLength={100000} value={resumeText} onChange={e => setResumeText(e.target.value)} /><button disabled={uploadingResume} onClick={async () => { setUploadingResume(true); try { const updated = await updateResume(resumeText); setResumeData(updated); setEditingResume(false); toast.success("Resume updated and reanalyzed."); } catch (error) { toast.error(error instanceof Error ? error.message : "Update failed"); } finally { setUploadingResume(false); } }} className="rounded bg-primary text-on-primary px-4 py-2">Save resume text</button></div>}</>}
+        <button className="block rounded bg-surface-container px-4 py-2" onClick={async () => { try { const data = await fetchApi<unknown>("/api/users/me/export"); const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = "postcraft-export.json"; link.click(); URL.revokeObjectURL(url); } catch { toast.error("Export unavailable. Please retry."); } }}>Export my data</button>
+      </section>
+
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="bg-surface-card border-border-subtle shadow-card-light">
           <DialogHeader>
