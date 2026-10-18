@@ -50,7 +50,7 @@ export function GenerationForm({
         description="Bring the insight. We’ll help you find the words. Start with what you know, what you noticed, or what you can’t stop thinking about."
       />
       <div className="grid xl:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
-        <form onSubmit={onSubmit} className="paper overflow-hidden">
+        <form data-motion="panel" onSubmit={onSubmit} className="paper overflow-hidden">
           <div className="p-6 sm:p-8 space-y-7">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="eyebrow">01 / The brief</span>
@@ -203,7 +203,7 @@ Bullet points, messy notes, and unfinished thoughts are welcome."
           )}
         </form>
         <aside className="space-y-5">
-          <section className="paper p-6">
+          <section data-motion="panel" className="paper p-6">
             <p className="eyebrow mb-5">A little craft. A lot of you.</p>
             <div className="space-y-6">
               {[

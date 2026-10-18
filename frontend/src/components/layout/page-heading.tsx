@@ -11,7 +11,7 @@ export function PageHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between mb-8">
+    <div data-motion="heading" className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between mb-8">
       <div>
         <p className="eyebrow mb-3">{eyebrow}</p>
         <h1 className="page-title">{title}</h1>

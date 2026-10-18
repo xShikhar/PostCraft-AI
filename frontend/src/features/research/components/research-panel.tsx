@@ -27,7 +27,7 @@ export function ResearchPanel({
     ? new Date(research_retrieved_at)
     : null;
   return (
-    <section className="paper p-5 sm:p-6">
+    <section data-motion="panel" className="paper p-5 sm:p-6">
       <div className="flex justify-between items-start gap-3">
         <div>
           <p className="eyebrow mb-2 flex items-center gap-2">

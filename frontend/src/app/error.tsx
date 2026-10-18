@@ -1,5 +1,6 @@
 "use client";
 import { RefreshCw } from "lucide-react";
+import { MotionScene } from "@/components/motion/motion-scene";
 export default function ErrorPage({
   reset,
 }: {
@@ -7,10 +8,10 @@ export default function ErrorPage({
   reset: () => void;
 }) {
   return (
-    <main className="min-h-[75vh] flex items-center justify-center p-6">
-      <section className="paper p-10 sm:p-14 max-w-lg text-center">
+    <MotionScene scene="error"><main className="min-h-[75vh] flex items-center justify-center p-6">
+      <section data-motion="panel" className="paper p-10 sm:p-14 max-w-lg text-center">
         <p className="eyebrow mb-5">A momentary interruption</p>
-        <h1 className="page-title">
+        <h1 data-motion="heading" className="page-title">
           Let’s pick up
           <br />
           <em className="text-primary">the thread.</em>
@@ -23,6 +24,6 @@ export default function ErrorPage({
           Try again
         </button>
       </section>
-    </main>
+    </main></MotionScene>
   );
 }

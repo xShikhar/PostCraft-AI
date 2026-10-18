@@ -55,11 +55,11 @@ export function AppShell({
       <a href="#workspace-content" className="skip-link">
         Skip to content
       </a>
-      <aside className="hidden lg:block fixed inset-y-0 left-0 w-[236px] bg-surface-subtle border-r border-border-subtle z-40">
+      <aside className="workspace-sidebar-surface hidden lg:block fixed inset-y-0 left-0 w-[236px] bg-surface-subtle border-r border-border-subtle z-40">
         {sidebar}
       </aside>
       <Dialog open={mobile} onOpenChange={setMobile}>
-        <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 !h-dvh !max-w-[290px] !rounded-none !p-0 !gap-0 overflow-auto">
+        <DialogContent className="workspace-drawer !left-0 !top-0 !translate-x-0 !translate-y-0 !h-dvh !max-w-[290px] !rounded-none !p-0 !gap-0 overflow-auto">
           <DialogTitle className="sr-only">Workspace navigation</DialogTitle>
           <DialogDescription className="sr-only">
             Navigate PostCraft and manage your session.

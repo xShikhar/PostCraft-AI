@@ -23,7 +23,22 @@ function EditorialStage({ dark }: { dark: boolean }) {
   useGSAP(() => {
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
-      gsap.from(".auth-stage-enter", { y: 18, opacity: 0, duration: 0.6, stagger: 0.06, ease: "power2.out" });
+      if (document.hidden) return;
+      const lines = stage.current?.querySelectorAll<SVGGeometryElement>(".auth-orbit ellipse, .auth-orbit path");
+      lines?.forEach(line => {
+        const length = line.getTotalLength();
+        gsap.set(line, { strokeDasharray: length, strokeDashoffset: length });
+      });
+      const entrance = gsap.timeline({ defaults: { duration: 0.52, ease: "power3.out" } })
+        .from(".auth-brand, .auth-stage-copy .auth-overline", { y: 8, opacity: 0, stagger: 0.04 }, 0)
+        .from(".auth-title-line > span", { yPercent: 105, rotation: 2, stagger: 0.055, duration: 0.62 }, 0.06)
+        .from(".auth-stage-description", { y: 8, opacity: 0 }, 0.22)
+        .from("[data-auth-paper]", { y: 24, opacity: 0, rotationX: -8, stagger: 0.055, clearProps: "transform,opacity" }, 0.25)
+        .to(".auth-orbit ellipse, .auth-orbit path", { strokeDashoffset: 0, duration: 0.65, stagger: 0.04 }, 0.16)
+        .from(".auth-orbit circle, .auth-art-caption, .auth-stage-footer", { opacity: 0, stagger: 0.035 }, 0.35);
+      const visibility = () => { if (document.hidden) entrance.progress(1); };
+      document.addEventListener("visibilitychange", visibility);
+      return () => document.removeEventListener("visibilitychange", visibility);
     });
     media.add("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)", () => {
       const element = stage.current;
@@ -31,25 +46,56 @@ function EditorialStage({ dark }: { dark: boolean }) {
       const movers = Array.from(element.querySelectorAll<HTMLElement>("[data-auth-paper]")).map((paper, index) => ({
         x: gsap.quickTo(paper, "x", { duration: 0.65, ease: "power3.out" }),
         y: gsap.quickTo(paper, "y", { duration: 0.65, ease: "power3.out" }),
+        rotateX: gsap.quickTo(paper, "rotationX", { duration: 0.65, ease: "power3.out" }),
+        rotateY: gsap.quickTo(paper, "rotationY", { duration: 0.65, ease: "power3.out" }),
+        lightX: gsap.quickTo(paper, "--auth-light-x", { duration: 0.65, ease: "power3.out" }),
+        lightY: gsap.quickTo(paper, "--auth-light-y", { duration: 0.65, ease: "power3.out" }),
         depth: (index + 1) * 4,
       }));
       let bounds = element.getBoundingClientRect();
       const measure = () => { bounds = element.getBoundingClientRect(); };
       const move = (event: PointerEvent) => {
-        const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-        const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-        movers.forEach(mover => { mover.x(x * mover.depth * 2); mover.y(y * mover.depth * 2); });
+        if (document.hidden || document.activeElement?.matches("input, textarea") || window.getSelection()?.toString()) return;
+        const x = gsap.utils.clamp(-0.5, 0.5, (event.clientX - bounds.left) / bounds.width - 0.5);
+        const y = gsap.utils.clamp(-0.5, 0.5, (event.clientY - bounds.top) / bounds.height - 0.5);
+        movers.forEach(mover => {
+          mover.x(x * mover.depth * 2); mover.y(y * mover.depth * 2);
+          mover.rotateX(-y * 3); mover.rotateY(x * 3);
+          mover.lightX(50 + x * 60); mover.lightY(35 + y * 50);
+        });
       };
-      const reset = () => movers.forEach(mover => { mover.x(0); mover.y(0); });
+      const reset = () => movers.forEach(mover => {
+        mover.x(0); mover.y(0); mover.rotateX(0); mover.rotateY(0); mover.lightX(50); mover.lightY(35);
+      });
+      const visibility = () => {
+        if (!document.hidden) return;
+        reset();
+        movers.forEach(mover => {
+          [mover.x, mover.y, mover.rotateX, mover.rotateY, mover.lightX, mover.lightY].forEach(to => to.tween.progress(1).pause());
+        });
+      };
       element.addEventListener("pointerenter", measure);
       element.addEventListener("pointermove", move);
       element.addEventListener("pointerleave", reset);
       window.addEventListener("resize", measure);
+      window.addEventListener("blur", reset);
+      document.addEventListener("focusin", reset);
+      document.addEventListener("visibilitychange", visibility);
       return () => {
         element.removeEventListener("pointerenter", measure);
         element.removeEventListener("pointermove", move);
         element.removeEventListener("pointerleave", reset);
         window.removeEventListener("resize", measure);
+        window.removeEventListener("blur", reset);
+        document.removeEventListener("focusin", reset);
+        document.removeEventListener("visibilitychange", visibility);
+        // This media context can be reverted while the entrance is mid-flight.
+        // Explicitly restore the static CSS composition for a live preference change.
+        element.querySelectorAll<HTMLElement>("[data-auth-paper]").forEach(paper => {
+          paper.style.removeProperty("transform");
+          paper.style.removeProperty("--auth-light-x");
+          paper.style.removeProperty("--auth-light-y");
+        });
       };
     });
     return () => media.revert();
@@ -63,7 +109,7 @@ function EditorialStage({ dark }: { dark: boolean }) {
       </div>
       <div className="auth-stage-copy auth-stage-enter">
         <p className="auth-overline"><span /> A SPACE FOR YOUR PERSPECTIVE</p>
-        <h2>Good ideas.<br />Your <em>voice.</em><br />Lasting impact.</h2>
+        <h2><span className="auth-title-line"><span>Good ideas.</span></span><span className="auth-title-line"><span>Your <em>voice.</em></span></span><span className="auth-title-line"><span>Lasting impact.</span></span></h2>
         <p className="auth-stage-description">Turn what you know into something<br className="auth-desktop-break" /> worth putting into words.</p>
       </div>
       <div className="auth-art auth-stage-enter" aria-hidden="true">
@@ -102,7 +148,8 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
   useGSAP(() => {
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
-      gsap.from(heading.current, { opacity: 0, y: 5, duration: 0.2, ease: "power2.out" });
+      if (document.hidden) return;
+      gsap.from(heading.current?.children ?? [], { opacity: 0, duration: 0.18, stagger: 0.025, ease: "power2.out" });
     });
     return () => media.revert();
   }, { scope: heading, dependencies: [isLoginMode], revertOnUpdate: true });

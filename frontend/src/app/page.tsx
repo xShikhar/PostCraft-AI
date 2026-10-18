@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { AuthScreen } from "@/features/auth/components/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
+import { MotionScene } from "@/components/motion/motion-scene";
 import { HomeView } from "@/features/home/components/home-view";
 import { GenerationForm } from "@/features/generation/components/generation-form";
 import { DraftEditor } from "@/features/editor/components/draft-editor";
@@ -98,7 +99,7 @@ function Workspace() {
       {busy === "load" ? (
         <Loading />
       ) : (
-        <main key={view} className="min-w-0">
+        <MotionScene key={view} scene={view}><main className="min-w-0">
           {view === "home" ? (
             <HomeView
               username={user?.username || "writer"}
@@ -210,7 +211,7 @@ function Workspace() {
           ) : (
             <Loading />
           )}
-        </main>
+        </main></MotionScene>
       )}
       <Dialog
         open={!!pending}
@@ -270,13 +271,13 @@ export default function Home() {
   if (isInitializing) return <Loading />;
   if (!token)
     return legal ? (
-      <LegalView
+      <MotionScene scene={legal}><LegalView
         kind={legal}
         onBack={() => {
           setLegal(null);
           window.history.replaceState({}, "", "/");
         }}
-      />
+      /></MotionScene>
     ) : (
       <AuthScreen
         onOpenLegal={(kind) => {

@@ -107,7 +107,7 @@ export function HomeView({
   const complete = steps.filter((s) => s.done).length;
   return (
     <div className="space-y-10 workspace-enter">
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <section data-motion="heading" className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <p className="eyebrow mb-4 flex items-center gap-2">
             <span className="w-1.5 h-1.5 bg-primary rounded-full" />
@@ -129,7 +129,7 @@ export function HomeView({
           New post
         </button>
       </section>
-      <section className="paper !border-primary/15 relative overflow-hidden p-5 sm:p-7">
+      <section data-motion="panel" className="paper !border-primary/15 relative overflow-hidden p-5 sm:p-7">
         <div className="flex justify-between items-center mb-4">
           <span className="eyebrow !text-primary">The scratchpad</span>
           <Feather size={17} className="text-primary/50" />
@@ -242,7 +242,7 @@ export function HomeView({
                     item.active_draft_index || 1,
                   )
                 }
-                className="paper group text-left p-6 min-h-60 flex flex-col hover:border-border-hover hover:-translate-y-1 transition-[transform,border-color] duration-200"
+                data-motion="card" className="paper group text-left p-6 min-h-60 flex flex-col hover:border-border-hover hover:-translate-y-1 transition-[transform,border-color] duration-200"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="eyebrow !text-[9px] !tracking-[.08em]">
@@ -281,7 +281,7 @@ export function HomeView({
         )}
       </section>
       <div className="grid xl:grid-cols-5 gap-5">
-        <section className="paper p-6 sm:p-7 xl:col-span-3">
+        <section data-motion="panel" className="paper p-6 sm:p-7 xl:col-span-3">
           <div className="flex justify-between items-start gap-4">
             <div>
               <p className="eyebrow mb-2">Make room for the practice</p>
@@ -325,6 +325,7 @@ export function HomeView({
                       {d.count}
                     </span>
                     <div
+                      data-motion="bar"
                       className={`w-full max-w-8 rounded-t-md ${d.count ? "bg-primary/75" : "bg-surface-container"}`}
                       style={{
                         height: d.count
@@ -361,7 +362,7 @@ export function HomeView({
             </>
           )}
         </section>
-        <section className="paper p-6 sm:p-7 xl:col-span-2">
+        <section data-motion="panel" className="paper p-6 sm:p-7 xl:col-span-2">
           <p className="eyebrow mb-2">Make it sound like you</p>
           <h2 className="font-serif text-xl text-text-display">
             Your voice, in focus.

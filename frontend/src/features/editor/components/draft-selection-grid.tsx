@@ -63,7 +63,7 @@ export function DraftSelectionGrid({
         {([1, 2, 3] as const).map((n) => {
           const text = drafts[`draft_${n}`];
           return (
-            <article key={n} className="paper overflow-hidden flex flex-col">
+            <article data-motion="card" key={n} className="paper overflow-hidden flex flex-col">
               <div className="p-6 border-b border-border-subtle flex justify-between items-center">
                 <span className="eyebrow !text-primary">Variation 0{n}</span>
                 <span className="text-[10px] text-text-muted">

@@ -36,7 +36,7 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
         </button>
 
         {/* Title block */}
-        <header className="mt-space-lg flex flex-col gap-space-xs">
+        <header data-motion="heading" className="mt-space-lg flex flex-col gap-space-xs">
           <span className="font-label-xs text-label-xs uppercase tracking-widest text-primary font-bold">
             LEGAL
           </span>
@@ -61,8 +61,8 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
           />
 
           {!isPrivacy && (
-            <section className="mt-space-2xl pt-space-lg border-t border-border-subtle">
-              <h2 className="font-serif text-headline-md text-text-display mb-space-sm">
+            <section data-motion="panel" className="mt-space-2xl pt-space-lg border-t border-border-subtle">
+              <h2 data-motion="heading" className="font-serif text-headline-md text-text-display mb-space-sm">
                 GDPR Notes (EU/UK)
               </h2>
               <LegalMarkdown source={GDPR_NOTES_MARKDOWN} />
@@ -86,7 +86,7 @@ function LegalMarkdown({ source }: { source: string }) {
         components={{
           h1: () => null, // We render the title ourselves above
           h2: ({ children }) => (
-            <h2 className="font-serif text-headline-md text-text-display mt-space-xl mb-space-sm first:mt-0">
+            <h2 data-motion="heading" className="font-serif text-headline-md text-text-display border-t border-border-subtle pt-6 mt-space-xl mb-space-sm first:mt-0">
               {children}
             </h2>
           ),
@@ -96,7 +96,7 @@ function LegalMarkdown({ source }: { source: string }) {
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-space-sm first:mt-0 last:mb-0">{children}</p>
+            <p data-motion="panel" className="my-space-sm first:mt-0 last:mb-0">{children}</p>
           ),
           ul: ({ children }) => (
             <ul className="my-space-sm pl-space-lg list-disc space-y-1">

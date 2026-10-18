@@ -89,13 +89,17 @@ export function DraftEditor({
   const [undo, setUndo] = useState<string[]>([]);
   const [redo, setRedo] = useState<string[]>([]);
   const end = useRef<HTMLDivElement>(null);
+  const previousMessageCount = useRef(chatHistory.length);
   useEffect(() => {
-    end.current?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "nearest",
-    });
+    if (chatHistory.length > previousMessageCount.current) {
+      // Keep navigation and initial typing steady; scroll only the chat viewport.
+      const viewport = end.current?.parentElement;
+      viewport?.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    }
+    previousMessageCount.current = chatHistory.length;
   }, [chatHistory.length]);
   const locked = isFinalized;
   const placeholders = getUnfilledPlaceholders(draftContent);
@@ -248,7 +252,7 @@ export function DraftEditor({
                 ) : (
                   <Check size={11} />
                 )}
-                <span>{dirty ? "Unsaved changes" : "All changes saved"}</span>
+                <span key={dirty ? "dirty" : "saved"} data-motion="feedback">{dirty ? "Unsaved changes" : "All changes saved"}</span>
               </p>
               <p>
                 {draftContent.length.toLocaleString()} characters ·{" "}
@@ -310,7 +314,7 @@ export function DraftEditor({
             </div>
           )}
         </section>
-        <aside className="paper overflow-hidden">
+        <aside data-motion="panel" className="paper overflow-hidden">
           <div className="p-6 border-b border-border-subtle">
             <p className="eyebrow !text-primary mb-2 flex items-center gap-2">
               <Feather size={13} />

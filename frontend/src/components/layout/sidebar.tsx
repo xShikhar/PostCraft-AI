@@ -1,4 +1,5 @@
 "use client";
+import type { CSSProperties } from "react";
 import {
   ArrowUpRight,
   Home,
@@ -39,35 +40,42 @@ export function Sidebar({
     { view: "history", label: "History", icon: History },
     { view: "profile", label: "Profile & Voice", icon: Feather },
   ] as const;
+  const activeIndex = items.findIndex(({ view }) => view === currentView);
   return (
-    <div className="flex flex-col h-full px-5 py-7">
+    <div className="workspace-sidebar flex flex-col h-full px-5 py-7">
       <button
         onClick={() => onNavigate("home")}
         aria-label="PostCraft home"
-        className="text-left mb-9"
+        className="workspace-brand-button text-left mb-9"
       >
         <Brand />
       </button>
       <button
         onClick={onNewPost}
-        className="btn-primary w-full justify-between mb-9"
+        className="workspace-new-post btn-primary w-full justify-between mb-9"
       >
         <span>New post</span>
         <Plus size={16} />
       </button>
       <p className="eyebrow px-3 mb-3 text-[9px]">Your workspace</p>
-      <nav aria-label="Main navigation" className="space-y-1.5">
+      <nav
+        aria-label="Main navigation"
+        className="workspace-nav"
+        style={{ "--nav-index": Math.max(activeIndex, 0) } as CSSProperties}
+        data-active={activeIndex >= 0}
+      >
+        <span className="workspace-nav-indicator" aria-hidden="true" />
         {items.map(({ view, label, icon: Icon }) => (
           <button
             key={view}
             onClick={() => onNavigate(view)}
             aria-current={currentView === view ? "page" : undefined}
-            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-[13px] transition-colors ${currentView === view ? "bg-primary/10 text-primary font-bold" : "text-text-muted hover:bg-surface-container hover:text-text-display"}`}
+            className={`workspace-nav-item w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-[13px] transition-colors ${currentView === view ? "text-primary font-bold" : "text-text-muted hover:bg-surface-container hover:text-text-display"}`}
           >
             <Icon size={17} strokeWidth={1.65} />
             {label}
             {currentView === view && (
-              <span className="ml-auto w-1 h-1 rounded-full bg-primary" />
+              <span className="workspace-nav-dot ml-auto w-1 h-1 rounded-full bg-primary" />
             )}
           </button>
         ))}

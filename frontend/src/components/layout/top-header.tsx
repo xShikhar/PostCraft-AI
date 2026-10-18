@@ -60,7 +60,7 @@ export function TopHeader({
   }, []);
   return (
     <>
-      <header className="h-[76px] flex items-center justify-between border-b border-border-subtle px-5 sm:px-8 lg:px-10 gap-3">
+      <header className="workspace-header h-[76px] flex items-center justify-between border-b border-border-subtle px-5 sm:px-8 lg:px-10 gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onMenu}
@@ -76,7 +76,7 @@ export function TopHeader({
         </div>
         <div className="flex items-center gap-3">
           <button
-            className="icon-button sm:!w-auto sm:gap-3 sm:px-3 sm:border sm:border-border-subtle sm:bg-surface-card"
+            className="workspace-search-trigger icon-button sm:!w-auto sm:gap-3 sm:px-3 sm:border sm:border-border-subtle sm:bg-surface-card"
             onClick={() => setOpen(true)}
             aria-label="Search history"
             ref={searchTrigger}
@@ -92,7 +92,7 @@ export function TopHeader({
           <button
             aria-label="Profile settings"
             onClick={onProfile}
-            className="w-9 h-9 rounded-full border border-border-subtle bg-surface-card text-xs font-bold text-primary"
+            className="workspace-avatar w-9 h-9 rounded-full border border-border-subtle bg-surface-card text-xs font-bold text-primary"
           >
             {username.slice(0, 2).toUpperCase() || "P"}
           </button>
@@ -100,7 +100,7 @@ export function TopHeader({
       </header>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="!rounded-2xl p-6"
+          className="workspace-search-dialog !rounded-2xl p-6"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             searchTrigger.current?.focus();
@@ -149,7 +149,7 @@ export function TopHeader({
                     setOpen(false);
                     onOpenGeneration(item.generation_id);
                   }}
-                  className="w-full flex text-left items-center gap-4 py-4 border-b border-border-subtle last:border-0 hover:text-primary"
+                  className="workspace-search-result w-full flex text-left items-center gap-4 py-4 border-b border-border-subtle last:border-0 hover:text-primary"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="eyebrow !text-[9px] mb-1">{item.platform}</p>
