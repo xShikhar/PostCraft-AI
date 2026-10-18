@@ -24,6 +24,8 @@ export type SourceItem = {
 
 export type GenerationResponse = {
   generation_id: string;
+  updated_at: string;
+  research_retrieved_at?: string | null;
   draft_1: string;
   draft_2: string;
   draft_3: string;
@@ -59,5 +61,21 @@ export async function finalizeDraft(generationId: string, finalDraftIndex: numbe
   return fetchApi<{ status: string }>(`/api/generations/${generationId}/finalize`, {
     method: "POST",
     body: JSON.stringify({ final_draft_index: finalDraftIndex }),
+  });
+}
+
+
+export type SaveDraftResponse = {
+  generation_id: string;
+  draft_index: 1 | 2 | 3;
+  content: string;
+  updated_at: string;
+  status: string;
+};
+
+export function saveDraft(generationId: string, draftIndex: number, content: string, expectedUpdatedAt: string): Promise<SaveDraftResponse> {
+  return fetchApi<SaveDraftResponse>(`/api/generations/${generationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ draft_index: draftIndex, content, expected_updated_at: expectedUpdatedAt }),
   });
 }

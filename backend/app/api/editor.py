@@ -2,12 +2,14 @@ import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.config import get_settings
 from app.core.crypto import encrypt, decrypt, read_private
-from app.models import Generation, ChatHistory, StyleProfile, Preference, Project, User
+from app.models import Generation, ChatHistory, StyleProfile, Preference, Project, User, CostLog
+from app.schemas.api import SaveDraftRequest, SaveDraftResponse
+from datetime import datetime, timedelta, timezone
 from app.schemas.editor import EditRequest, EditResponse, FinalizeRequest
 from app.api.auth import get_current_user, auth_limiter
 from app.services.pipeline.pipeline import PostGenerationPipeline
@@ -46,6 +48,46 @@ async def owned_generation(session, gen_id, user):
     if not row:
         raise HTTPException(404, "Generation not found")
     return row
+
+@router.patch("/{gen_id}", response_model=SaveDraftResponse)
+async def save_generation_draft(gen_id: uuid.UUID, req: SaveDraftRequest, session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    generation, _ = await owned_generation(session, gen_id, current_user)
+    if generation.status in {"finalized", "generating"}:
+        raise HTTPException(409, "This generation is locked. Reload it before continuing.")
+    # SQLite returns naive UTC; PostgreSQL returns timezone-aware timestamps.
+    expected = req.expected_updated_at
+    stored = generation.updated_at
+    expected_utc = expected.replace(tzinfo=timezone.utc) if expected.tzinfo is None else expected.astimezone(timezone.utc)
+    stored_utc = stored.replace(tzinfo=timezone.utc) if stored.tzinfo is None else stored.astimezone(timezone.utc)
+    if expected_utc != stored_utc:
+        raise HTTPException(409, "This draft changed since you opened it. Reload before saving.")
+    timestamp = max(datetime.now(timezone.utc), stored_utc + timedelta(microseconds=1))
+    changed = getattr(generation, f"draft_{req.draft_index}") != req.content
+    values = {f"draft_{req.draft_index}": req.content, "active_draft_index": req.draft_index, "updated_at": timestamp}
+    if changed:
+        values.update(quality_data=None, status="needs_review")
+    # Keep the version in the UPDATE predicate as well as the row/account locks.
+    # A concurrent writer must never succeed after this request's version check.
+    result = await session.execute(update(Generation).where(Generation.id == gen_id, Generation.updated_at == stored, Generation.status.notin_(["finalized", "generating"])).values(**values).execution_options(synchronize_session=False))
+    if result.rowcount != 1:
+        await session.rollback()
+        raise HTTPException(409, "This draft changed since you opened it. Reload before saving.")
+    await session.commit()
+    await session.refresh(generation)
+    return SaveDraftResponse(generation_id=generation.id, draft_index=req.draft_index, content=req.content, updated_at=generation.updated_at, status=generation.status)
+
+
+@router.delete("/{gen_id}", status_code=204)
+async def delete_generation(gen_id: uuid.UUID, session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    generation, _ = await owned_generation(session, gen_id, current_user)
+    if generation.status == "generating":
+        raise HTTPException(409, "Generation is still running. Try deletion again after it finishes.")
+    await session.execute(delete(ChatHistory).where(ChatHistory.generation_id == gen_id))
+    await session.execute(delete(CostLog).where(CostLog.generation_id == gen_id))
+    await session.execute(delete(Generation).where(Generation.id == gen_id))
+    await session.commit()
+    return Response(status_code=204)
+
 
 async def quality_state(generation, project, user, candidate, session, telemetry=None, draft_index=1, new_facts=""):
     messages = (await session.execute(select(ChatHistory.content).where(ChatHistory.generation_id == generation.id, ChatHistory.role == "user", (ChatHistory.draft_index == draft_index) | ChatHistory.draft_index.is_(None)).order_by(ChatHistory.created_at))).scalars().all()
@@ -99,7 +141,7 @@ async def edit_generation(request: Request, response: Response, gen_id: uuid.UUI
     setattr(generation, f"draft_{req.draft_index}", revised.revised_draft)
     generation.active_draft_index = req.draft_index
     generation.status = "editing" if quality["quality_results"] == "PASS" else "needs_review"
-    generation.quality_data = {"result": quality["quality_results"], "substance_score": quality["substance_score"]}
+    generation.quality_data = {"result": quality["quality_results"], "substance_score": quality["substance_score"], "scope": "draft", "draft_index": req.draft_index}
     await session.commit()
     return EditResponse(revised_draft=revised.revised_draft, reply=revised.reply, status=generation.status)
 
@@ -133,7 +175,7 @@ async def finalize_generation(request: Request, response: Response, gen_id: uuid
     session.add(learned_profile)
     generation.active_draft_index = req.final_draft_index
     generation.status = "finalized"
-    generation.quality_data = {"result": "PASS", "substance_score": quality["substance_score"]}
+    generation.quality_data = {"result": "PASS", "substance_score": quality["substance_score"], "scope": "draft", "draft_index": req.final_draft_index}
     await session.commit()
     run_in_background(bg_index_style_profile(str(learned_profile.id), str(current_user.id)), task_name="index_learned_style")
     # Voice memory is committed before returning. Chats remain intact.

@@ -1,6 +1,7 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 import uuid
+from datetime import datetime
 
 
 class GenerateRequest(BaseModel):
@@ -27,6 +28,8 @@ class SourceItemResponse(BaseModel):
 class GenerateResponse(BaseModel):
     generation_id: uuid.UUID
     status: str
+    updated_at: datetime
+    research_retrieved_at: Optional[str] = None
     draft_1: Optional[str] = None
     draft_2: Optional[str] = None
     draft_3: Optional[str] = None
@@ -53,3 +56,24 @@ class UserUpdate(BaseModel):
     profile_context: Optional[str] = Field(default=None, max_length=3000)
     about_me: Optional[str] = Field(default=None, max_length=2000)
     writing_style: Optional[str] = Field(default=None, max_length=2000)
+
+
+class SaveDraftRequest(BaseModel):
+    draft_index: Literal[1, 2, 3]
+    content: str = Field(min_length=1, max_length=20000)
+    expected_updated_at: datetime
+
+    @field_validator("content")
+    @classmethod
+    def nonblank_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Draft content cannot be blank")
+        return value
+
+
+class SaveDraftResponse(BaseModel):
+    generation_id: uuid.UUID
+    draft_index: Literal[1, 2, 3]
+    content: str
+    updated_at: datetime
+    status: str

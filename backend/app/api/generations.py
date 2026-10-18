@@ -59,7 +59,8 @@ async def generate_post(
         if not (await session.execute(select(User.id).where(User.id == current_user.id))).first():
             raise HTTPException(401, "Account no longer exists")
         research = final_state.research_result
-        return GenerateResponse(generation_id=gen.id, status="failed" if final_state.error or not final_state.drafts else ("needs_review" if not (final_state.quality_results or "").startswith("PASS") else "editing"),
+        await session.refresh(gen)
+        return GenerateResponse(generation_id=gen.id, updated_at=gen.updated_at, research_retrieved_at=(gen.research_data or {}).get("retrieved_at"), status="failed" if final_state.error or not final_state.drafts else ("needs_review" if not (final_state.quality_results or "").startswith("PASS") else "editing"),
             **(final_state.drafts.model_dump() if final_state.drafts else {}), sources=[item.model_dump() for item in research.sources] if research else [], research_confidence=research.confidence if research else None, research_source=research.source if research else None, substance_score=final_state.substance_score, error=final_state.error)
     except BaseException:
         await session.rollback()
@@ -84,6 +85,8 @@ async def list_generations(
     offset: int = Query(default=0, ge=0),
     platform: Literal["linkedin", "x"] | None = None,
     q: str | None = Query(default=None, max_length=255),
+    status: Literal["generating", "editing", "needs_review", "failed", "finalized"] | None = None,
+    sort: Literal["newest", "oldest"] = "newest",
 ):
     """
     Returns a paginated list of the user's generations, newest first.
@@ -107,6 +110,10 @@ async def list_generations(
         base_stmt = base_stmt.where(Project.platform == platform)
         count_stmt = count_stmt.where(Project.platform == platform)
 
+    if status:
+        base_stmt = base_stmt.where(Generation.status == status)
+        count_stmt = count_stmt.where(Generation.status == status)
+
     if q:
         q_lower = f"%{q.lower()}%"
         base_stmt = base_stmt.where(
@@ -123,7 +130,7 @@ async def list_generations(
     # Paginated results
     res = await session.execute(
         base_stmt
-        .order_by(Generation.created_at.desc())
+        .order_by(Generation.created_at.asc() if sort == "oldest" else Generation.created_at.desc(), Generation.id.asc())
         .offset(offset)
         .limit(limit)
     )
@@ -220,6 +227,10 @@ async def get_generation_full(
         "chat_history": chat_history,
         "sources": (gen.research_data or {}).get("sources", []),
         "quality": gen.quality_data,
+        "original_drafts": gen.original_drafts,
+        "research_source": (gen.research_data or {}).get("source"),
+        "research_confidence": (gen.research_data or {}).get("confidence"),
+        "research_retrieved_at": (gen.research_data or {}).get("retrieved_at"),
     }
 
 

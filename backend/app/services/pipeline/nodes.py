@@ -535,7 +535,7 @@ async def node_save_generation(state: GraphState, deps: PipelineDeps) -> dict:
             generation.context_snapshot = encrypt(json.dumps({"profile": state.get("profile_context") or "", "use_context": state.get("use_context", True)}))
             research = state.get("research_result")
             generation.research_data = research.model_dump() if research else None
-            generation.quality_data = {"result": state.get("quality_results"), "substance_score": state.get("substance_score")}
+            generation.quality_data = {"result": state.get("quality_results"), "substance_score": state.get("substance_score"), "scope": "generation"}
             deps.session.add(generation)
             await deps.session.commit()
             logger.info("Generation saved successfully.")

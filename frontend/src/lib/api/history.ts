@@ -26,6 +26,8 @@ export type HistoryListParams = {
   offset?: number;
   platform?: string;
   q?: string;
+  status?: "generating" | "editing" | "needs_review" | "failed" | "finalized";
+  sort?: "newest" | "oldest";
 };
 
 export async function listGenerations(params: HistoryListParams = {}): Promise<HistoryListResponse> {
@@ -34,6 +36,8 @@ export async function listGenerations(params: HistoryListParams = {}): Promise<H
   if (params.offset !== undefined) search.set("offset", String(params.offset));
   if (params.platform) search.set("platform", params.platform);
   if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.sort) search.set("sort", params.sort);
 
   const qs = search.toString();
   return fetchApi<HistoryListResponse>(`/api/generations${qs ? `?${qs}` : ""}`);
@@ -56,7 +60,11 @@ export type GenerationFull = {
   updated_at: string | null;
   chat_history: ChatMessage[];
   sources: { title: string; snippet: string; url: string }[];
-  quality?: { result: string; substance_score?: number };
+  original_drafts?: Partial<Record<"draft_1" | "draft_2" | "draft_3", string>> | null;
+  research_source?: string | null;
+  research_confidence?: "low" | "medium" | "high" | null;
+  research_retrieved_at?: string | null;
+  quality?: { result: string; substance_score?: number | null; scope?: "generation" | "draft"; draft_index?: number } | null;
 };
 
 export async function getGenerationFull(id: string): Promise<GenerationFull> {
@@ -66,4 +74,9 @@ export async function getGenerationFull(id: string): Promise<GenerationFull> {
 export type GenerationMetrics = { total: number; finalized: number; in_progress: number; recent_dates: string[] };
 export function getGenerationMetrics() {
   return fetchApi<GenerationMetrics>("/api/generations/metrics");
+}
+
+
+export async function deleteGeneration(id: string): Promise<void> {
+  await fetchApi<null>(`/api/generations/${id}`, { method: "DELETE" });
 }
