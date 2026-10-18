@@ -2,7 +2,7 @@
 
 Date: 2026-10-18
 Branch: `frontend-redesign`
-Status: proposed design for user review; product implementation has not started.
+Status: approved by the user and implemented on `frontend-redesign`; see `docs/FRONTEND_REDESIGN_VERIFICATION.md` for evidence.
 
 ## Intent and constraints
 
