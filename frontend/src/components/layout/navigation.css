@@ -105,7 +105,9 @@
 }
 /* Width and page inset share one duration, so the rail never crosses the content. */
 .workspace-sidebar-surface { width: 236px; transition: width 560ms cubic-bezier(.22,1,.36,1); }
-.workspace-sidebar { overflow-y: auto; overflow-x: hidden; transition: padding 560ms cubic-bezier(.22,1,.36,1); }
+.workspace-sidebar { scrollbar-width: none; overflow-y: auto; overflow-x: hidden; transition: padding 560ms cubic-bezier(.22,1,.36,1); }
+/* Keep wheel, touch and keyboard scrolling without a second visible scrollbar. */
+.workspace-sidebar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .workspace-sidebar svg, .workspace-brand-button img { flex-shrink: 0; }
 .sidebar-content { min-height: 620px; }
 .sidebar-toggle { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 8px 12px; margin-bottom: 20px; color: var(--text-muted); border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); text-align: left; font-size: 11px; }

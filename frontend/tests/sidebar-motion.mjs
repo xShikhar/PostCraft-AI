@@ -39,6 +39,12 @@ try {
   await page.setViewportSize({width:1440,height:1000});await page.getByRole('button',{name:'Resume motion',exact:true}).click();await page.emulateMedia({reducedMotion:'reduce'});await rail.getByRole('button',{name:'Expand sidebar',exact:true}).click();assert.equal((await rail.boundingBox()).width,236,'OS reduced motion is immediate');
   await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='postcraft:sidebar-collapsed')throw new DOMException('Full','QuotaExceededError');return original.call(this,key,value);};});
   await rail.getByRole('button',{name:'Collapse sidebar',exact:true}).click();assert.equal((await rail.boundingBox()).width,80,'Storage failure does not disable toggle');
+  await page.setViewportSize({width:1440,height:600});
+  const sidebar=rail.locator('.workspace-sidebar');
+  assert.equal(await sidebar.evaluate(el=>getComputedStyle(el).scrollbarWidth),'none','Sidebar scrollbar stays hidden');
+  await rail.getByRole('button',{name:'Terms',exact:true}).focus();
+  assert.ok(await sidebar.evaluate(el=>el.scrollTop>0),'Keyboard focus reaches lower controls on short screens');
+  await page.screenshot({path:'../scratch/sidebar-motion/short-no-scrollbar.png'});
   assert.deepEqual(errors,[]);await context.close();
  }
  console.log('Sidebar passed: interpolated width, synchronized layout, keyboard, interruption, persistence, icon navigation, themes, pause/reduce, mobile drawer and no overflow.');
