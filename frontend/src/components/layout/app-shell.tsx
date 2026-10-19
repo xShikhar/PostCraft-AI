@@ -1,5 +1,7 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useSidebarPreference } from "./use-sidebar-preference";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Sidebar, type WorkspaceView } from "./sidebar";
 import { TopHeader } from "./top-header";
 import {
@@ -32,13 +34,22 @@ export function AppShell({
   onLogout?: () => void;
 }) {
   const [mobile, setMobile] = useState(false);
+  const { collapsed, toggle: toggleSidebar } = useSidebarPreference();
+  useEffect(() => {
+    // Re-measure native scroll scenes after the coordinated width transition.
+    const timer = window.setTimeout(() => ScrollTrigger.refresh(), 600);
+    return () => window.clearTimeout(timer);
+  }, [collapsed]);
   const { logout } = useAuth();
   const nav = (v: WorkspaceView) => {
     setMobile(false);
     onNavigate(v);
   };
-  const sidebar = (
+  const sidebar = (drawer = false) => (
     <Sidebar
+      collapsed={!drawer && collapsed}
+      onToggle={drawer ? () => setMobile(false) : toggleSidebar}
+      drawer={drawer}
       currentView={currentView}
       onNavigate={nav}
       onNewPost={() => {
@@ -51,12 +62,12 @@ export function AppShell({
     />
   );
   return (
-    <div className="min-h-screen">
+    <div className="workspace-shell min-h-screen" data-sidebar-collapsed={collapsed}>
       <a href="#workspace-content" className="skip-link">
         Skip to content
       </a>
-      <aside className="workspace-sidebar-surface hidden lg:block fixed inset-y-0 left-0 w-[236px] bg-surface-subtle border-r border-border-subtle z-40">
-        {sidebar}
+      <aside className="workspace-sidebar-surface hidden lg:block fixed inset-y-0 left-0 bg-surface-subtle border-r border-border-subtle z-40">
+        {sidebar()}
       </aside>
       <Dialog open={mobile} onOpenChange={setMobile}>
         <DialogContent className="workspace-drawer !left-0 !top-0 !translate-x-0 !translate-y-0 !h-dvh !max-w-[290px] !rounded-none !p-0 !gap-0 overflow-auto">
@@ -64,10 +75,10 @@ export function AppShell({
           <DialogDescription className="sr-only">
             Navigate PostCraft and manage your session.
           </DialogDescription>
-          {sidebar}
+          {sidebar(true)}
         </DialogContent>
       </Dialog>
-      <div className="lg:pl-[236px]">
+      <div className="workspace-main">
         <TopHeader
           title={headerTitle}
           username={username}

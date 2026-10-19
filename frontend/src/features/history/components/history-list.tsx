@@ -1,4 +1,5 @@
 "use client";
+import { KineticText } from "@/components/motion/kinetic-text";
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Eye, FileText, Loader2, Search, Trash2 } from "lucide-react";
@@ -61,7 +62,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
   const pages = Math.ceil(total / PAGE_SIZE);
 
   return <div className="mx-auto w-full max-w-6xl space-y-8 pb-12">
-    <header className="space-y-5"><button className="btn-secondary" onClick={onBack}><ArrowLeft size={16} /> Back to workspace</button><div data-motion="heading" className="flex flex-wrap items-end justify-between gap-5"><div><p className="eyebrow mb-3">Your writing collection</p><h1 className="page-title">Every idea has a place.</h1><p className="mt-4 text-base leading-7 text-text-muted">Return to a thought. Find your next draft.</p></div>{!loading && !error && <p className="text-sm text-text-muted" role="status">{total.toLocaleString()} {total === 1 ? "generation" : "generations"}{filtered ? " found" : " saved"}</p>}</div></header>
+    <header className="space-y-5"><button className="btn-secondary" onClick={onBack}><ArrowLeft size={16} /> Back to workspace</button><div data-motion="heading" className="flex flex-wrap items-end justify-between gap-5"><div><p className="eyebrow mb-3">Your writing collection</p><h1 className="page-title"><KineticText text="Every idea has a place." /></h1><p className="mt-4 text-base leading-7 text-text-muted">Return to a thought. Find your next draft.</p></div>{!loading && !error && <p className="text-sm text-text-muted" role="status">{total.toLocaleString()} {total === 1 ? "generation" : "generations"}{filtered ? " found" : " saved"}</p>}</div></header>
     <section data-motion="panel" aria-label="History filters" className="paper grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_170px_160px]">
       <div><label htmlFor="history-query" className="mb-2 block text-xs font-semibold text-text-muted">Search your archive</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-3.5 text-text-muted" size={16} /><input id="history-query" className="field w-full pl-10" placeholder="Topics and notes…" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} /></div></div>
       <div><label htmlFor="history-platform" className="mb-2 block text-xs font-semibold text-text-muted">Platform</label><select id="history-platform" className="field w-full" value={platform} onChange={event => { setPlatform(event.target.value); setPage(0); }}><option value="">All platforms</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select></div>

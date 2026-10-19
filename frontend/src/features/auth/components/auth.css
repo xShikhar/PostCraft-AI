@@ -126,3 +126,10 @@
   .auth-entry-footer { font-size: 9px; }
 }
 @media (prefers-reduced-motion: reduce) { .auth-loading { animation: none; } .auth-submit > svg, .auth-switch button > svg { transform: none !important; } .auth-page *, .auth-page *::before, .auth-page *::after { transition: none !important; } }
+
+/* A translucent ink impression sits behind the physical paper composition. */
+.auth-ink-plane { position: absolute; pointer-events: none; z-index: -1; width: 580px; height: 580px; right: -180px; bottom: -140px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--auth-line) 36%, transparent); background: radial-gradient(ellipse at 38% 30%, color-mix(in srgb, var(--auth-paper-middle) 34%, transparent), transparent 72%); }
+.auth-paper::after { background: radial-gradient(ellipse at var(--auth-light-x) var(--auth-light-y), #ffffff55, transparent 65%); }
+html[data-motion-paused="true"] .auth-page *, html[data-motion-paused="true"] .auth-page *::before, html[data-motion-paused="true"] .auth-page *::after { animation: none !important; transition: none !important; }
+html[data-motion-paused="true"] .auth-submit > svg, html[data-motion-paused="true"] .auth-switch button > svg { transform: none !important; }
+@media (max-width: 760px) { .auth-ink-plane { width: 300px; height: 300px; right: -130px; bottom: -120px; } }

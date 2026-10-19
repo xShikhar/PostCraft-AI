@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ArrowRight, Eye, EyeOff, Moon, Sun, ShieldCheck, Asterisk } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
+import { useMotionPreference } from "@/components/motion/use-motion-preference";
 import { useMounted } from "@/lib/use-mounted";
 import { useAuth } from "../hooks/use-auth";
 import "./auth.css";
@@ -20,7 +21,10 @@ interface AuthScreenProps {
 /** Brand illustration only: these papers never represent sample user data. */
 function EditorialStage({ dark }: { dark: boolean }) {
   const stage = useRef<HTMLElement>(null);
+  const paused = useMotionPreference();
+  const entering = useRef(false);
   useGSAP(() => {
+    if (paused || document.documentElement.dataset.motionPaused === "true") return;
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
       if (document.hidden) return;
@@ -29,13 +33,28 @@ function EditorialStage({ dark }: { dark: boolean }) {
         const length = line.getTotalLength();
         gsap.set(line, { strokeDasharray: length, strokeDashoffset: length });
       });
-      const entrance = gsap.timeline({ defaults: { duration: 0.52, ease: "power3.out" } })
-        .from(".auth-brand, .auth-stage-copy .auth-overline", { y: 8, opacity: 0, stagger: 0.04 }, 0)
-        .from(".auth-title-line > span", { yPercent: 105, rotation: 2, stagger: 0.055, duration: 0.62 }, 0.06)
-        .from(".auth-stage-description", { y: 8, opacity: 0 }, 0.22)
-        .from("[data-auth-paper]", { y: 24, opacity: 0, rotationX: -8, stagger: 0.055, clearProps: "transform,opacity" }, 0.25)
-        .to(".auth-orbit ellipse, .auth-orbit path", { strokeDashoffset: 0, duration: 0.65, stagger: 0.04 }, 0.16)
-        .from(".auth-orbit circle, .auth-art-caption, .auth-stage-footer", { opacity: 0, stagger: 0.035 }, 0.35);
+      entering.current = true;
+      const desktop = window.matchMedia("(hover: hover) and (pointer: fine) and (min-width: 761px)").matches;
+      const entrance = gsap.timeline({
+        defaults: { duration: 0.85, ease: "power4.out" },
+        onComplete: () => { entering.current = false; },
+      })
+        .from(".auth-brand, .auth-stage-copy .auth-overline", { y: 22, opacity: 0, stagger: 0.08 }, 0)
+        .from(".auth-title-line > span", { yPercent: 125, rotation: 7, stagger: 0.14, duration: 1.05 }, 0.12)
+        .from(".auth-stage-description", { y: 32, opacity: 0 }, 0.55)
+        .from(".auth-ink-plane", { scale: 0.45, rotation: -35, opacity: 0, duration: 1.5 }, 0.1)
+        .to(".auth-orbit ellipse, .auth-orbit path", { strokeDashoffset: 0, duration: 1.5, stagger: 0.1 }, 0.2)
+        .from(".auth-orbit circle, .auth-art-caption, .auth-stage-footer", { opacity: 0, stagger: 0.08 }, 0.8);
+      if (desktop) {
+        entrance.fromTo("[data-auth-paper]", {
+          x: (index: number) => [140, 20, -130][index],
+          y: (index: number) => [100, 160, 120][index],
+          z: -240, rotation: (index: number) => [24, -18, 20][index],
+          rotationX: -38, rotationY: 20, opacity: 0,
+        }, { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, opacity: 1,
+          duration: 1.25, stagger: 0.13, clearProps: "transform,opacity", ease: "expo.out" }, 0.34)
+          .from(".auth-paper-rule", { scaleX: 0, transformOrigin: "left", stagger: 0.12, duration: 0.7 }, 1);
+      }
       const visibility = () => { if (document.hidden) entrance.progress(1); };
       document.addEventListener("visibilitychange", visibility);
       return () => document.removeEventListener("visibilitychange", visibility);
@@ -43,6 +62,10 @@ function EditorialStage({ dark }: { dark: boolean }) {
     media.add("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)", () => {
       const element = stage.current;
       if (!element) return;
+      const orbitX = gsap.quickTo(".auth-orbit", "x", { duration: 1, ease: "power3.out" });
+      const orbitRotate = gsap.quickTo(".auth-orbit", "rotation", { duration: 1, ease: "power3.out" });
+      const inkX = gsap.quickTo(".auth-ink-plane", "x", { duration: 1.1, ease: "power3.out" });
+      const inkY = gsap.quickTo(".auth-ink-plane", "y", { duration: 1.1, ease: "power3.out" });
       const movers = Array.from(element.querySelectorAll<HTMLElement>("[data-auth-paper]")).map((paper, index) => ({
         x: gsap.quickTo(paper, "x", { duration: 0.65, ease: "power3.out" }),
         y: gsap.quickTo(paper, "y", { duration: 0.65, ease: "power3.out" }),
@@ -50,7 +73,7 @@ function EditorialStage({ dark }: { dark: boolean }) {
         rotateY: gsap.quickTo(paper, "rotationY", { duration: 0.65, ease: "power3.out" }),
         lightX: gsap.quickTo(paper, "--auth-light-x", { duration: 0.65, ease: "power3.out" }),
         lightY: gsap.quickTo(paper, "--auth-light-y", { duration: 0.65, ease: "power3.out" }),
-        depth: (index + 1) * 4,
+        depth: 19 + index * 8,
       }));
       let bounds = element.getBoundingClientRect();
       const measure = () => { bounds = element.getBoundingClientRect(); };
@@ -58,18 +81,25 @@ function EditorialStage({ dark }: { dark: boolean }) {
         if (document.hidden || document.activeElement?.matches("input, textarea") || window.getSelection()?.toString()) return;
         const x = gsap.utils.clamp(-0.5, 0.5, (event.clientX - bounds.left) / bounds.width - 0.5);
         const y = gsap.utils.clamp(-0.5, 0.5, (event.clientY - bounds.top) / bounds.height - 0.5);
+        orbitX(-x * 50); orbitRotate(x * 16); inkX(-x * 70); inkY(-y * 50);
         movers.forEach(mover => {
-          mover.x(x * mover.depth * 2); mover.y(y * mover.depth * 2);
-          mover.rotateX(-y * 3); mover.rotateY(x * 3);
+          if (!entering.current) {
+            mover.x(x * mover.depth * 2); mover.y(y * mover.depth * 2);
+            mover.rotateX(-y * 16); mover.rotateY(x * 16);
+          }
           mover.lightX(50 + x * 60); mover.lightY(35 + y * 50);
         });
       };
-      const reset = () => movers.forEach(mover => {
+      const reset = () => {
+        orbitX(0); orbitRotate(0); inkX(0); inkY(0);
+        movers.forEach(mover => {
         mover.x(0); mover.y(0); mover.rotateX(0); mover.rotateY(0); mover.lightX(50); mover.lightY(35);
-      });
+        });
+      };
       const visibility = () => {
         if (!document.hidden) return;
         reset();
+        [orbitX, orbitRotate, inkX, inkY].forEach(to => to.tween.progress(1).pause());
         movers.forEach(mover => {
           [mover.x, mover.y, mover.rotateX, mover.rotateY, mover.lightX, mover.lightY].forEach(to => to.tween.progress(1).pause());
         });
@@ -98,11 +128,19 @@ function EditorialStage({ dark }: { dark: boolean }) {
         });
       };
     });
-    return () => media.revert();
-  }, { scope: stage });
+    return () => {
+      media.revert();
+      // GSAP can normalize individual CSS rotate into a matrix; restore both
+      // representations after every media context has reverted.
+      stage.current?.querySelectorAll<HTMLElement>("[data-auth-paper]").forEach(paper => {
+        ["transform", "rotate", "translate", "scale", "opacity", "--auth-light-x", "--auth-light-y"].forEach(property => paper.style.removeProperty(property));
+      });
+    };
+  }, { scope: stage, dependencies: [paused], revertOnUpdate: true });
 
   return (
     <section className="auth-stage" ref={stage} aria-label="Your writing, with intention">
+      <div className="auth-ink-plane" aria-hidden="true" />
       <div className="auth-brand auth-stage-enter">
         <span className="auth-brand-mark"><Image src={dark ? "/logo-dark.png" : "/logo-light.png"} alt="" width={38} height={38} priority /></span>
         <h1>POSTCRAFT AI</h1><span className="auth-brand-edition">THE WRITING STUDIO</span>
@@ -128,6 +166,7 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
   const { login, signup, isLoading } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useMounted();
+  const paused = useMotionPreference();
   const dark = mounted && resolvedTheme === "dark";
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [username, setUsername] = useState("");
@@ -146,13 +185,14 @@ export function AuthScreen({ onOpenLegal }: AuthScreenProps = {}) {
     }
   }, []);
   useGSAP(() => {
+    if (paused || document.documentElement.dataset.motionPaused === "true") return;
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
       if (document.hidden) return;
       gsap.from(heading.current?.children ?? [], { opacity: 0, duration: 0.18, stagger: 0.025, ease: "power2.out" });
     });
     return () => media.revert();
-  }, { scope: heading, dependencies: [isLoginMode], revertOnUpdate: true });
+  }, { scope: heading, dependencies: [isLoginMode, paused], revertOnUpdate: true });
 
   const handleModeToggle = () => {
     setIsLoginMode(mode => !mode);

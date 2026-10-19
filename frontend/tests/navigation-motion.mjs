@@ -42,6 +42,7 @@ const settleMarker = async (marker, target) => {
 };
 try {
   const { context, page } = await setup();
+  await page.waitForFunction(() => document.documentElement.dataset.motionPaused === 'false');
   const nav = page.locator('aside .workspace-nav'), marker = nav.locator('.workspace-nav-indicator');
   assert.equal(await markerY(marker), 0);
   const samples = await nav.evaluate(async e => {

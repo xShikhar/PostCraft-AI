@@ -16,6 +16,7 @@ export function ThemeToggle() {
       {(["light", "dark"] as const).map((t) => (
         <button
           key={t}
+          aria-label={t === "light" ? "Light" : "Dark"} title={t === "light" ? "Light theme" : "Dark theme"}
           aria-pressed={mounted && resolvedTheme === t}
           onClick={() => setTheme(t)}
           className={`workspace-theme-option inline-flex min-h-8 items-center gap-2 rounded-full px-3 text-xs transition-colors ${mounted && resolvedTheme === t ? "text-text-display" : "text-text-muted"}`}

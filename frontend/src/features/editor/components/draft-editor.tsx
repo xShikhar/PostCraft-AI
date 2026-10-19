@@ -1,4 +1,5 @@
 "use client";
+import { KineticText } from "@/components/motion/kinetic-text";
 import { useRef, useState, useEffect } from "react";
 import {
   ArrowLeft,
@@ -122,8 +123,8 @@ export function DraftEditor({
           <p className="eyebrow mb-2">
             The writing room / {platform === "x" ? "X / Twitter" : "LinkedIn"}
           </p>
-          <h1 className="font-serif text-[clamp(23px,2.4vw,34px)] tracking-tight text-text-display max-w-2xl">
-            {topic}
+          <h1 data-motion="heading" className="font-serif text-[clamp(23px,2.4vw,34px)] tracking-tight text-text-display max-w-2xl">
+            <KineticText text={topic} />
           </h1>
         </div>
         <div

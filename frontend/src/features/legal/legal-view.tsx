@@ -2,6 +2,7 @@
 
 import { ArrowLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { KineticText } from "@/components/motion/kinetic-text";
 import {
   LAST_UPDATED,
   PRIVACY_POLICY_MARKDOWN,
@@ -41,7 +42,7 @@ export function LegalView({ kind, onBack }: LegalViewProps) {
             LEGAL
           </span>
           <h1 className="page-title">
-            {isPrivacy ? "Privacy Policy" : "Terms of Service"}
+            <KineticText text={isPrivacy ? "Privacy Policy" : "Terms of Service"} />
           </h1>
           <p className="font-body-sm text-body-sm text-text-muted">
             Last updated {LAST_UPDATED}

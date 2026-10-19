@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { KineticText } from "@/components/motion/kinetic-text";
 export function PageHeading({
   eyebrow,
   title,
@@ -14,7 +15,7 @@ export function PageHeading({
     <div data-motion="heading" className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between mb-8">
       <div>
         <p className="eyebrow mb-3">{eyebrow}</p>
-        <h1 className="page-title">{title}</h1>
+        <h1 className="page-title"><KineticText text={title} /></h1>
         {description && (
           <p className="mt-3 text-sm text-text-muted max-w-xl leading-relaxed">
             {description}

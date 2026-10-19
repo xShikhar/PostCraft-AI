@@ -17,6 +17,8 @@ import {
 import { getCurrentUser, type UserResponse } from "@/lib/api/user";
 import { getResume } from "@/lib/api/resume";
 import { stripMarkdown } from "@/lib/utils/markdown";
+import { CraftStory } from "@/components/motion/craft-story";
+import { KineticText } from "@/components/motion/kinetic-text";
 
 export function HomeView({
   username,
@@ -114,7 +116,7 @@ export function HomeView({
             Your writing studio
           </p>
           <h1 className="page-title !text-[clamp(32px,4vw,52px)]">
-            {greet},<br />
+            <KineticText text={`${greet},`} /><br />
             <span className="italic text-primary">{username || "writer"}.</span>
           </h1>
           <p className="text-text-muted mt-4 text-sm">
@@ -406,6 +408,7 @@ export function HomeView({
           )}
         </section>
       </div>
+      <CraftStory onNewPost={onNewPost} />
       <footer className="flex justify-between gap-4 border-t border-border-subtle pt-5 text-[10px] text-text-muted">
         <span>Thoughtfully written. Unmistakably yours.</span>
         <span>PostCraft AI</span>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Feather } from "lucide-react";
 import { Brand } from "@/components/layout/brand";
 import { MotionScene } from "@/components/motion/motion-scene";
+import { KineticText } from "@/components/motion/kinetic-text";
 export default function NotFound() {
   return (
     <MotionScene scene="not-found"><main className="min-h-screen px-6 py-10 max-w-6xl mx-auto flex flex-col">
@@ -14,9 +15,9 @@ export default function NotFound() {
         </span>
         <p className="eyebrow mb-5">404 / A page out of place</p>
         <h1 data-motion="heading" className="page-title !text-5xl max-w-xl">
-          Let’s turn to
+          <KineticText text="Let’s turn to" />
           <br />
-          <em className="text-primary">a fresh page.</em>
+          <em className="text-primary"><KineticText text="a fresh page." /></em>
         </h1>
         <p className="text-sm text-text-muted max-w-sm mt-6 mb-8">
           This page isn’t here. Your writing workspace is just one step away.

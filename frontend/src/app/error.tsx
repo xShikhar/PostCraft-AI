@@ -1,6 +1,7 @@
 "use client";
 import { RefreshCw } from "lucide-react";
 import { MotionScene } from "@/components/motion/motion-scene";
+import { KineticText } from "@/components/motion/kinetic-text";
 export default function ErrorPage({
   reset,
 }: {
@@ -12,9 +13,9 @@ export default function ErrorPage({
       <section data-motion="panel" className="paper p-10 sm:p-14 max-w-lg text-center">
         <p className="eyebrow mb-5">A momentary interruption</p>
         <h1 data-motion="heading" className="page-title">
-          Let’s pick up
+          <KineticText text="Let’s pick up" />
           <br />
-          <em className="text-primary">the thread.</em>
+          <em className="text-primary"><KineticText text="the thread." /></em>
         </h1>
         <p className="text-sm text-text-muted mt-6 mb-8">
           The workspace couldn’t open this view. Try again to continue.

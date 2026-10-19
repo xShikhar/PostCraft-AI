@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Lato, Merriweather } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { MotionAtmosphere } from "@/components/motion/motion-atmosphere";
 import "./globals.css";
 
 // Lato — navigation, body text, UI, buttons (replaces Inter)
@@ -45,6 +46,7 @@ export default async function RootLayout({
     >
       <body className="font-sans antialiased bg-canvas-base text-text-body min-h-screen">
         <ThemeProvider nonce={nonce} defaultTheme="light" enableSystem>
+          <MotionAtmosphere />
           {children}
           <Toaster position="top-center" richColors />
         </ThemeProvider>

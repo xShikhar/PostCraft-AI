@@ -1,4 +1,5 @@
 "use client";
+import { KineticText } from "@/components/motion/kinetic-text";
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Check, Download, FileText, Loader2, LogOut, Trash2, Upload } from "lucide-react";
@@ -129,7 +130,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   return <div className="mx-auto w-full max-w-5xl space-y-10 pb-12">
     <header className="space-y-5">
       <button className="btn-secondary" onClick={() => leave("back")}><ArrowLeft size={16} /> Back to workspace</button>
-      <div data-motion="heading"><p className="eyebrow mb-3">Your creative foundation</p><h1 className="page-title">Make it sound like you.</h1><p className="mt-4 max-w-xl text-base leading-7 text-text-muted">A little context goes a long way. Shape the background and voice behind your next draft.</p></div>
+      <div data-motion="heading"><p className="eyebrow mb-3">Your creative foundation</p><h1 className="page-title"><KineticText text="Make it sound like you." /></h1><p className="mt-4 max-w-xl text-base leading-7 text-text-muted">A little context goes a long way. Shape the background and voice behind your next draft.</p></div>
     </header>
     {loading ? <div data-motion="panel" role="status" className="paper flex items-center gap-3 p-8"><Loader2 className="animate-spin" size={20} /> Loading your profile…</div> : loadError ? <div data-motion="panel" role="alert" className="paper space-y-4 p-8"><p>We couldn’t load your profile. {loadError}</p><button className="btn-secondary" onClick={() => { setLoading(true); setRetry(n => n + 1); }}>Try again</button></div> : <>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_250px]">

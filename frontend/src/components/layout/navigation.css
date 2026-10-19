@@ -103,3 +103,44 @@
   .workspace-theme-option > svg { transform: none !important; }
   .workspace-drawer[data-state], .workspace-search-dialog { animation: none !important; }
 }
+/* Width and page inset share one duration, so the rail never crosses the content. */
+.workspace-sidebar-surface { width: 236px; transition: width 560ms cubic-bezier(.22,1,.36,1); }
+.workspace-sidebar { overflow-y: auto; overflow-x: hidden; transition: padding 560ms cubic-bezier(.22,1,.36,1); }
+.workspace-sidebar svg, .workspace-brand-button img { flex-shrink: 0; }
+.sidebar-content { min-height: 620px; }
+.sidebar-toggle { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 8px 12px; margin-bottom: 20px; color: var(--text-muted); border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); text-align: left; font-size: 11px; }
+.sidebar-toggle:hover { color: var(--primary); border-color: var(--border-hover); }
+.sidebar-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.sidebar-toggle > svg { transition: transform 560ms cubic-bezier(.22,1,.36,1); }
+.sidebar-label, .workspace-brand-button .wordmark { display: inline-block; max-width: 180px; opacity: 1; white-space: nowrap; overflow: hidden; transition: max-width 560ms cubic-bezier(.22,1,.36,1), opacity 220ms, transform 560ms cubic-bezier(.22,1,.36,1); }
+.sidebar-section-label { height: 14px; overflow: hidden; white-space: nowrap; transition: opacity 200ms; }
+.sidebar-quote { max-height: 150px; overflow: hidden; transition: max-height 560ms cubic-bezier(.22,1,.36,1), opacity 200ms, padding 560ms, margin 560ms; }
+.sidebar-account-name { transition: opacity 200ms; }
+.sidebar-legal-icon { display: none; }
+@media (min-width: 1024px) {
+  .workspace-main { padding-left: 236px; transition: padding-left 560ms cubic-bezier(.22,1,.36,1); }
+  .workspace-shell[data-sidebar-collapsed=true] > .workspace-sidebar-surface { width: 80px; }
+  .workspace-shell[data-sidebar-collapsed=true] > .workspace-main { padding-left: 80px; }
+}
+.workspace-sidebar[data-collapsed=true] { padding-inline: 12px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-toggle > svg { transform: rotate(180deg); }
+.workspace-sidebar[data-collapsed=true] .sidebar-label,
+.workspace-sidebar[data-collapsed=true] .wordmark { max-width: 0; opacity: 0; transform: translateX(-8px); }
+.workspace-sidebar[data-collapsed=true] .workspace-brand-button { padding-left: 11px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-toggle { gap: 0; justify-content: center; }
+.workspace-sidebar[data-collapsed=true] .workspace-new-post { padding-inline: 0; gap: 0; justify-content: center; }
+.workspace-sidebar[data-collapsed=true] .workspace-nav-item { gap: 0; padding-inline: 19px; }
+.workspace-sidebar[data-collapsed=true] .workspace-nav-dot { position: absolute; right: 7px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-section-label { opacity: 0; }
+.workspace-sidebar[data-collapsed=true] .sidebar-quote { max-height: 0; opacity: 0; padding-top: 0; margin-bottom: 0; border: 0; }
+.workspace-sidebar[data-collapsed=true] .workspace-theme { display: flex; flex-direction: column; width: 42px; margin-inline: auto; }
+.workspace-sidebar[data-collapsed=true] .workspace-theme-option { width: 32px; gap: 0; }
+.workspace-sidebar[data-collapsed=true] .workspace-theme-option span { display: none; }
+.workspace-sidebar[data-collapsed=true] .workspace-theme-thumb { width: 32px; }
+.workspace-sidebar[data-collapsed=true] .workspace-theme[data-theme=dark] .workspace-theme-thumb { transform: translateY(32px); }
+.workspace-sidebar[data-collapsed=true] .sidebar-account { flex-wrap: wrap; justify-content: center; gap: 8px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-account-name { display: none; }
+.workspace-sidebar[data-collapsed=true] .sidebar-legal { flex-direction: column; align-items: center; gap: 4px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-legal button { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; }
+.workspace-sidebar[data-collapsed=true] .sidebar-legal-icon { display: block; }
+@media (prefers-reduced-motion: reduce) { .workspace-sidebar-surface, .workspace-main, .workspace-sidebar, .sidebar-toggle > svg, .sidebar-label, .workspace-brand-button .wordmark, .sidebar-quote { transition: none !important; } }

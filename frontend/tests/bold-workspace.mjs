@@ -1,0 +1,80 @@
+// Fixtures isolate motion; real-backend.mjs separately verifies persistence.
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const origin=process.env.BASE_URL||'http://127.0.0.1:3131';
+const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+fs.mkdirSync('../scratch/bold-workspace',{recursive:true});
+try {
+ for(const policy of ['full']){
+  const context=await browser.newContext({viewport:{width:policy==='coarse'?390:1440,height:1000},reducedMotion:policy==='reduced'?'reduce':'no-preference',hasTouch:policy==='coarse',isMobile:policy==='coarse'});
+  await context.addInitScript(()=>sessionStorage.setItem('postcraft_token','motion-fixture'));
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const id='11111111-1111-4111-8111-111111111111';
+  const record={generation_id:id,project_id:id,topic:'A clearer decision',platform:'linkedin',status:'editing',active_draft_index:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),preview:'Give each review a named owner and a next action.',draft_1:'Give each review a named owner and a next action.',draft_2:'Review the decision, then name its owner.',draft_3:'One clear owner is a useful starting point.',raw_thoughts:'Practical review ownership',sources:[],chat_history:[],quality:null};
+  await page.route('**/api/**',async route=>{const u=new URL(route.request().url());let body={};if(u.pathname==='/api/users/me')body={id:'motion-user',username:'writer',is_admin:false};else if(u.pathname==='/api/users/me/resume')body=null;else if(u.pathname.endsWith('/metrics'))body={total:1,finalized:0,in_progress:1,recent_dates:[new Date().toISOString()]};else if(u.pathname.endsWith('/full'))body=record;else body={items:[record],total:1,offset:0,limit:20};await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});});
+
+  await page.goto(origin); await page.locator('#quick-thought').waitFor();
+  await page.waitForFunction(()=>document.querySelector('[data-motion-scene]')?.dataset.motionPolicy==='full');
+  await page.waitForTimeout(1300);
+  assert.ok(await page.locator('[data-kinetic-word]').count()>0,'React-owned kinetic typography');
+  const card=page.locator('[data-motion="card"]').first();await card.scrollIntoViewIfNeeded();await page.waitForTimeout(1200);
+  const box=await card.boundingBox();await page.mouse.move(box.x+box.width*.9,box.y+box.height*.2);await page.waitForTimeout(700);
+  const depth=await card.evaluate(el=>{const m=new DOMMatrix(getComputedStyle(el).transform);return Math.abs(m.m13)+Math.abs(m.m23);});
+  assert.ok(depth>.07,`Noticeable card depth: ${depth}`);
+  const button=page.getByRole('button',{name:'New post',exact:true}).nth(1);await button.scrollIntoViewIfNeeded();
+  const target=await button.boundingBox();await page.mouse.move(target.x+target.width*.8,target.y+target.height*.4);await page.waitForTimeout(650);
+  const icon=await button.locator('svg').evaluate(e=>new DOMMatrix(getComputedStyle(e).transform).m41);
+  assert.ok(Math.abs(icon)>2,'magnetic icon moves within a fixed button');
+  assert.deepEqual(await button.boundingBox(),target,'magnetism preserves hit target');
+  await page.getByRole('button',{name:'Pause motion',exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.dataset.motionPaused==='true');await page.waitForTimeout(100);
+  assert.equal(await page.locator('.pin-spacer .craft-stage').count(),0,'pause removes story pin');
+  assert.equal(await card.evaluate(e=>e.style.transform),'','pause reverts card depth');
+  await page.reload();await page.locator('#quick-thought').waitFor();
+  await page.getByRole('button',{name:'Resume motion',exact:true}).waitFor();
+  assert.equal(await page.locator('.pin-spacer .craft-stage').count(),0,'pause persists after reload');
+  await page.getByRole('button',{name:'Resume motion',exact:true}).click();
+  await page.locator('[data-story-mode="pinned"]').waitFor();
+  await page.getByRole('button',{name:'Profile & Voice',exact:true}).click();
+  await page.getByRole('heading',{name:'Make it sound like you.',exact:true}).waitFor();
+  await page.locator('#profile-about_me').waitFor();
+  await page.waitForFunction(()=>document.querySelector('[data-motion-scene=profile]')?.dataset.motionPolicy==='full');
+  await page.waitForTimeout(1400);
+  for(const panel of await page.locator('[data-motion=panel]').all()){await panel.scrollIntoViewIfNeeded();await page.waitForTimeout(1100);assert.equal(await panel.evaluate(el=>getComputedStyle(el).opacity),'1','Visible profile panels finish revealing');}
+  await page.screenshot({path:'../scratch/bold-workspace/profile-account.png'});
+  await page.evaluate(()=>scrollTo(0,0));
+  await page.waitForFunction(()=>[...document.querySelectorAll('[data-kinetic-word]')].every(el=>!el.style.transform));
+  await page.screenshot({path:'../scratch/bold-workspace/profile-light.png'});
+  await page.getByRole('button',{name:'Dark',exact:true}).click();await page.waitForTimeout(400);
+  await page.screenshot({path:'../scratch/bold-workspace/profile-dark.png'});
+  await page.getByRole('button',{name:'Pause motion',exact:true}).click();
+  await page.getByRole('button',{name:'Search history',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'visible'});await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Open navigation',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'visible'});await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Open navigation',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Home',exact:true}).click();
+  await page.locator('#quick-thought').fill('Pause keeps every control usable.');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Resume motion',exact:true}).click();
+  await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='postcraft:motion-paused')throw new DOMException('Quota full','QuotaExceededError');return original.call(this,key,value);};});
+  await page.getByRole('button',{name:'Pause motion',exact:true}).click();
+  await page.getByRole('button',{name:'Resume motion',exact:true}).waitFor();
+  assert.equal(await page.locator('.pin-spacer .craft-stage').count(),0,'pause works even when storage writes fail');
+  await page.evaluate(()=>window.dispatchEvent(new StorageEvent('storage',{key:'theme',newValue:'dark'})));
+  await page.getByRole('button',{name:'Resume motion',exact:true}).waitFor();
+  assert.equal(await page.locator('[data-motion-scene]').getAttribute('data-motion-policy'),'reduced','unrelated cross-tab storage cannot override live pause');
+  await page.getByRole('button',{name:'Resume motion',exact:true}).click();
+  await page.getByRole('button',{name:'Pause motion',exact:true}).waitFor();
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.getByRole('button',{name:'Motion reduced by system preference',exact:true}).waitFor();
+  assert.ok(await page.getByRole('button',{name:'Motion reduced by system preference',exact:true}).isDisabled(),'system reduction cannot be overridden');
+  assert.equal(await page.locator('[data-motion-scene]').getAttribute('data-motion-policy'),'reduced');
+  assert.deepEqual(errors,[]);await context.close();
+ }
+ console.log('Bold workspace passed: kinetic names, strong card depth, magnetic icons with fixed targets, persistent pause, pin teardown/resume, profile themes, OS preference and no browser errors.');
+}finally{await browser.close();}
