@@ -1,4 +1,5 @@
 "use client";
+import { prepareDraftTransition } from "@/components/motion/draft-transition";
 import { KineticText } from "@/components/motion/kinetic-text";
 
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -83,7 +84,7 @@ export function HistoryList({ onBack, onOpen }: HistoryListProps) {
               return <button key={number} className={`min-h-10 rounded-lg border px-3 text-xs transition-colors ${draft === number ? "border-primary/30 bg-primary/10 text-primary" : "border-border-subtle text-text-muted"}`} aria-pressed={draft === number} disabled={!available} onClick={() => setSelectedDraft(previous => ({ ...previous, [item.generation_id]: number }))}>Draft {number}{finalized ? number === item.active_draft_index ? " · Finalized" : " · Locked" : ""}</button>;
             })}</div>
             <p className="mt-5 max-w-3xl whitespace-pre-line text-sm leading-7 text-text-muted line-clamp-3">{hasContent ? stripMarkdown(content) : item.status === "failed" ? "This generation didn’t produce a saved draft." : item.status === "generating" ? "This generation is still being prepared." : "No saved content for this draft."}</p>
-            <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-5"><button className="icon-button text-text-muted" aria-label={`Delete ${item.topic || "untitled generation"}`} disabled={item.status === "generating"} onClick={() => { setDeletingItem(item); setDeleteError(""); }}><Trash2 size={17} /></button><div className="flex flex-wrap gap-3"><button className="btn-secondary" disabled={!hasContent} onClick={() => { setPreviewDraft(draft); setPreview(item); }}><Eye size={16} /> Preview</button><button className="btn-primary" disabled={!hasContent} onClick={() => onOpen(item.generation_id, draft)}>{finalized ? "View draft" : "Continue writing"}<ArrowRight size={16} /></button></div></footer>
+            <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-5"><button className="icon-button text-text-muted" aria-label={`Delete ${item.topic || "untitled generation"}`} disabled={item.status === "generating"} onClick={() => { setDeletingItem(item); setDeleteError(""); }}><Trash2 size={17} /></button><div className="flex flex-wrap gap-3"><button className="btn-secondary" disabled={!hasContent} onClick={() => { setPreviewDraft(draft); setPreview(item); }}><Eye size={16} /> Preview</button><button className="btn-primary" disabled={!hasContent} onClick={(event) => { prepareDraftTransition(item.generation_id, event.currentTarget.closest("article") || event.currentTarget); onOpen(item.generation_id, draft); }}>{finalized ? "View draft" : "Continue writing"}<ArrowRight size={16} /></button></div></footer>
           </article>
         </Fragment>;
       })}

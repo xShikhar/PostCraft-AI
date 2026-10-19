@@ -149,6 +149,7 @@ try {
   await page.locator("#username").fill("writer");
   await page.locator("#password").fill("password123");
   await page.getByRole("button", { name: /Sign in to PostCraft/i }).click();
+  await page.locator("#quick-thought").waitFor();
   await page.goto(`${origin}/?view=editor&generation=${id}&draft=1`);
   const editor = page.getByRole("textbox", { name: "Draft text", exact: true });
   await editor.waitFor();

@@ -87,6 +87,14 @@ export function DraftEditor({
   const [preview, setPreview] = useState(false),
     [confirm, setConfirm] = useState(false),
     [compare, setCompare] = useState(false);
+  const [savePulse, setSavePulse] = useState(0);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const saveWithFlourish = async () => {
+    const saved = await onSave();
+    if (saved && mounted.current) setSavePulse(value => value + 1);
+    return saved;
+  };
   const [undo, setUndo] = useState<string[]>([]);
   const [redo, setRedo] = useState<string[]>([]);
   const end = useRef<HTMLDivElement>(null);
@@ -146,7 +154,7 @@ export function DraftEditor({
         </div>
       </div>
       <div className="grid xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
-        <section className="paper overflow-hidden">
+        <section className="draft-writing-paper paper overflow-hidden">
           <div className="flex justify-between items-center px-5 sm:px-7 py-4 border-b border-border-subtle">
             <span className="eyebrow !text-[9px]">
               {locked ? "Finalized generation" : "Your draft, your words"}
@@ -228,7 +236,7 @@ export function DraftEditor({
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "s") {
                   e.preventDefault();
-                  if (dirty && !busy) void onSave();
+                  if (dirty && !busy) void saveWithFlourish();
                 }
               }}
               className="block w-full min-h-[440px] sm:min-h-[500px] p-6 sm:p-9 bg-transparent text-text-body text-[15px] leading-[1.95] outline-none !resize-y rounded-none border-0"
@@ -245,7 +253,8 @@ export function DraftEditor({
               </button>
             </div>
           )}
-          <div className="px-6 py-5 border-t border-border-subtle flex flex-wrap gap-4 justify-between items-center">
+          <div className="relative px-6 py-5 border-t border-border-subtle flex flex-wrap gap-4 justify-between items-center">
+            {savePulse > 0 && <span key={savePulse} className="save-flourish" data-save-confirmed={savePulse} aria-hidden="true"><svg viewBox="0 0 100 1" preserveAspectRatio="none"><path d="M0 .5 H100" pathLength="100" fill="none" stroke="currentColor" strokeWidth="1" /></svg></span>}
             <div className="text-[10px] text-text-muted">
               <p className="flex gap-1.5 items-center mb-1">
                 {dirty ? (
@@ -268,7 +277,7 @@ export function DraftEditor({
                 <button
                   className="btn-secondary !min-h-10 !py-2"
                   disabled={!dirty || !!busy || !draftContent.trim()}
-                  onClick={() => void onSave()}
+                  onClick={() => void saveWithFlourish()}
                 >
                   {busy === "save" ? (
                     <Loader2 size={13} className="animate-spin" />

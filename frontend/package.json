@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:smoke": "node tests/smoke.mjs",
     "test:motion": "node tests/auth-premium-motion.mjs && node tests/navigation-motion.mjs && node tests/premium-motion.mjs && node tests/premium-pages-motion.mjs",
+    "test:writing-motion": "node tests/writing-motion.mjs",
     "test:bold-motion": "node tests/bold-auth.mjs && node tests/bold-story.mjs && node tests/bold-workspace.mjs && node tests/sidebar-motion.mjs"
   },
   "dependencies": {

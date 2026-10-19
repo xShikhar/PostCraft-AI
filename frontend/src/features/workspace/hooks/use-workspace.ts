@@ -1,4 +1,5 @@
 "use client";
+import { revealDraft, clearDraftTransition } from "@/components/motion/draft-transition";
 import {
   useState,
   useEffect,
@@ -173,9 +174,15 @@ export function useWorkspace() {
         if (!alive.current) return;
         const idx = index || full.active_draft_index || 1;
         lastParams.current = null;
-        hydrate(full, idx, target);
-        if (writeLocation) writeUrl(target, id, idx, replace);
+        const show = () => {
+          if (!alive.current) return;
+          setOperation(null);
+          hydrate(full, idx, target);
+          if (writeLocation) writeUrl(target, id, idx, replace);
+        };
+        if (target === "editor") revealDraft(id, show); else show();
       } catch (e) {
+        clearDraftTransition();
         if (alive.current) {
           setError(
             e instanceof Error ? e.message : "Could not open this draft.",

@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { AuthScreen } from "@/features/auth/components/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
+import { hasDraftTransitionSource } from "@/components/motion/draft-transition";
 import { MotionScene } from "@/components/motion/motion-scene";
 import { HomeView } from "@/features/home/components/home-view";
 import { GenerationForm } from "@/features/generation/components/generation-form";
@@ -96,10 +97,11 @@ function Workspace() {
         })
       }
     >
-      {busy === "load" ? (
+      {busy === "load" && hasDraftTransitionSource() && <p role="status" className="pointer-events-none fixed right-6 top-24 z-50 rounded-full border border-border-subtle bg-surface-card px-4 py-2 text-xs text-primary shadow-sm">Opening your draft…</p>}
+      {busy === "load" && !hasDraftTransitionSource() ? (
         <Loading />
       ) : (
-        <MotionScene key={view} scene={view}><main className="min-w-0">
+        <MotionScene key={view} scene={view}><main className="min-w-0" inert={busy === "load"}>
           {view === "home" ? (
             <HomeView
               username={user?.username || "writer"}

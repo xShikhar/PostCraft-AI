@@ -1,0 +1,22 @@
+.writing-prompts { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--primary); font-size: 12px; }
+.writing-prompt-star { font-size: 22px; line-height: 1; }
+.writing-prompt-window { position: relative; height: 36px; flex: 1; overflow: hidden; perspective: 600px; }
+.writing-prompt-line { position: absolute; inset: 0; display: flex; align-items: center; opacity: 0; line-height: 1.5; }
+.writing-prompt-line:first-child { opacity: 1; }
+.writing-prompts[data-prompt-active=false] { color: var(--text-muted); }
+.draft-writing-paper { view-transition-name: draft-paper; }
+::view-transition-group(draft-paper) { animation-duration: 650ms; animation-timing-function: cubic-bezier(.22,1,.36,1); }
+::view-transition-old(draft-paper) { animation: paper-out 260ms ease-out both; }
+::view-transition-new(draft-paper) { animation: paper-in 650ms cubic-bezier(.22,1,.36,1) both; }
+::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition { pointer-events: none; }
+@keyframes paper-out { to { opacity: 0; filter: blur(3px); } }
+@keyframes paper-in { from { opacity: 0; clip-path: inset(0 0 80% 0 round 20px); } to { opacity: 1; clip-path: inset(0 round 16px); } }
+.save-flourish { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.save-flourish::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, rgb(var(--primary-rgb) / .12), transparent); animation: saved-wash 1100ms ease-out both; }
+.save-flourish svg { position: absolute; top: 0; left: 0; width: 100%; height: 3px; color: var(--primary); }
+.save-flourish path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: saved-ink 1100ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes saved-wash { from { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+@keyframes saved-ink { 60% { stroke-dashoffset: 0; opacity: 1; } to { stroke-dashoffset: 0; opacity: 0; } }
+html[data-motion-paused=true] .save-flourish { display: none; }
+@media (prefers-reduced-motion: reduce) { .save-flourish { display: none; } ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }

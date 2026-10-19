@@ -18,6 +18,8 @@ import { getCurrentUser, type UserResponse } from "@/lib/api/user";
 import { getResume } from "@/lib/api/resume";
 import { stripMarkdown } from "@/lib/utils/markdown";
 import { CraftStory } from "@/components/motion/craft-story";
+import { WritingPrompts } from "@/components/motion/writing-prompts";
+import { prepareDraftTransition } from "@/components/motion/draft-transition";
 import { KineticText } from "@/components/motion/kinetic-text";
 
 export function HomeView({
@@ -33,6 +35,7 @@ export function HomeView({
   onGoHistory: () => void;
   onGoProfile?: () => void;
 }) {
+  const [focused, setFocused] = useState(false);
   const [thought, setThought] = useState(""),
     [recent, setRecent] = useState<HistoryItem[]>([]),
     [metrics, setMetrics] = useState<GenerationMetrics | null>(null),
@@ -148,7 +151,10 @@ export function HomeView({
           >
             What’s on your mind?
           </label>
+          <WritingPrompts active={!focused && !thought} />
           <textarea
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             id="quick-thought"
             value={thought}
             onChange={(e) => setThought(e.target.value)}
@@ -238,12 +244,13 @@ export function HomeView({
             {recent.map((item, i) => (
               <button
                 key={item.generation_id}
-                onClick={() =>
+                onClick={(event) => {
+                  prepareDraftTransition(item.generation_id, event.currentTarget);
                   onOpenHistory(
                     item.generation_id,
                     item.active_draft_index || 1,
-                  )
-                }
+                  );
+                }}
                 data-motion="card" className="paper group text-left p-6 min-h-60 flex flex-col hover:border-border-hover hover:-translate-y-1 transition-[transform,border-color] duration-200"
               >
                 <div className="flex items-center justify-between gap-2">

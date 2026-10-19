@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { MotionAtmosphere } from "@/components/motion/motion-atmosphere";
 import "./globals.css";
+import "@/components/motion/writing-motion.css";
 
 // Lato — navigation, body text, UI, buttons (replaces Inter)
 const lato = Lato({
