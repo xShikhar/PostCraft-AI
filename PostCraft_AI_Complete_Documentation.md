@@ -1,6 +1,6 @@
 # PostCraft AI implementation reference
 
-Updated 15 October 2026. See DEPLOYMENT_ARCHITECTURE.md for settings, DEPLOYMENT.md for release operations, PROJECT_STATUS_REPORT.md for the historical audit and FIX_VERIFICATION.md for current checks.
+Updated 20 October 2026 for the `frontend-redesign` branch. See DEPLOYMENT_ARCHITECTURE.md for settings, DEPLOYMENT.md for release operations, PROJECT_STATUS_REPORT.md for the historical baseline audit and FIX_VERIFICATION.md for current checks.
 
 ## Request path and learning
 
@@ -46,9 +46,9 @@ There is no HTTP role-changing API. Only python -m app.cli.make_admin USER [--re
 
 ## Frontend
 
-Seven distinct experiences: sign-in, home, composer, selection, editor, history, profile/voice. Privacy/terms work before login; admin is a separate protected page. Header search uses the shared API and workspace open callback. History supports search/filter/date grouping/paging. Home uses aggregate metrics and direct quick capture. Identity changes remount workspace state and stale responses are ignored.
+Seven distinct experiences: sign-in, home, composer, selection, editor, history, profile/voice. Privacy/terms work before login; admin is a separate protected page. Header search uses the shared API and workspace open callback. History supports search/filter/date grouping/paging. Home uses aggregate metrics and direct quick capture. Identity changes remount workspace state and stale responses are ignored. The redesign adds an animated collapsible sidebar with persisted preference, reduced-motion fallbacks, cursor-reactive editorial surfaces, kinetic login/home treatment, and a playful generation intermission that remains available while drafts are being written and reveals a ready-drafts action when generation completes.
 
-Profile saves are independent. Learned style, editable extracted resume text and JSON export are visible. Remember is wired to seven-day session storage or 30-day local storage. Forgot-password/Status placeholders and fabricated notification/voice indicators were removed; no reset-email service is claimed. The loading UI shows elapsed time without fake percentages. Theme buttons map violet/white and coral/charcoal logos; Lato/Merriweather remain. One theme-aware toaster is mounted in the layout. Scoped GSAP cleanup and CSS reduced-motion behavior remain.
+Profile saves are independent. Learned style, editable extracted resume text and JSON export are visible. Remember is wired to seven-day session storage or 30-day local storage. Forgot-password/Status placeholders and fabricated notification/voice indicators were removed; no reset-email service is claimed. The loading UI uses the interactive intermission rather than a plain status line or fake percentage. Theme buttons map violet/white and coral/charcoal logos; Lato/Merriweather remain. One theme-aware toaster is mounted in the layout. Scoped GSAP cleanup and CSS reduced-motion behavior remain.
 
 ## Data and operations
 

@@ -1,6 +1,8 @@
 # PostCraft AI — Codebase Onboarding & Verification
 
-> Historical audit of b31bf7d. Repository fixes and current checks from 15 October 2026 are recorded in [FIX_VERIFICATION.md](<C:/Project/Ai post/FIX_VERIFICATION.md>). Findings below describe the audited revision, not the remediated working tree.
+> Historical audit of b31bf7d. The remediation and frontend-redesign work are recorded in [FIX_VERIFICATION.md](<C:/Project/Ai post/FIX_VERIFICATION.md>) and the current reference in [PostCraft_AI_Complete_Documentation.md](<C:/Project/Ai post/PostCraft_AI_Complete_Documentation.md>). Findings below describe the audited baseline, not the current working tree.
+
+> Current branch note (20 October 2026): `frontend-redesign` includes the audited backend remediation plus the production frontend redesign, animated sidebar preference, motion system, interactive generation intermission and advisory finalization review. Treat this document as historical evidence only; use the current reference and verification documents for implementation behavior.
 
 Audit date: 13 October 2026. Audited commit: `b31bf7d5b6f837db3f56f5bb5a1d4fb9d91d51f4` on `main`.
 
@@ -76,7 +78,7 @@ Reference HTML contains static scores, sample identities, posts, counters and op
 
 ## 3. Ranked problems and suggested fixes
 
-Severity is scoped to the observed issue. “Blocking” means unsafe public access or a reproducible failure in the documented setup, not proof that the current live deployment is down. No fixes were applied.
+Severity is scoped to the observed issue. “Blocking” means unsafe public access or a reproducible failure in the documented setup, not proof that the current live deployment is down. No fixes had been applied at the time of this historical audit.
 
 ### Blocking
 
@@ -225,4 +227,4 @@ Not verified without runtime/deployment access:
 3. Should the per-request context toggle also disable manually saved background/profile context, while keeping explicit writing-style instructions active?
 4. Which deployment configuration is authoritative now: the live Render/Vercel/Supabase setup described in the architecture table, or the checked-in paid Render Blueprint? Which remaining self-hosted path should be maintained?
 
-The requested audit is complete. No fixes have been applied. Awaiting your frontend task.
+The historical audit is complete. No further changes should be inferred from its “fix” recommendations; the current implementation and verification records supersede them.

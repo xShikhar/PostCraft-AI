@@ -114,7 +114,7 @@ Before coding, convert the approved design into an actionable implementation pla
 
 ## Verification and acceptance
 
-Baseline verification on 2026-10-18: backend tests 56 passed with two third-party deprecation warnings; frontend ESLint and TypeScript (`tsc --noEmit`) passed. `git diff --check` passed. Earlier browser tests use fixtures and do not prove live AI provider availability. A production build and a new browser acceptance run remain required after implementation.
+Baseline verification on 2026-10-18: backend tests 56 passed with two third-party deprecation warnings; frontend ESLint and TypeScript (`tsc --noEmit`) passed. `git diff --check` passed. Subsequent current-branch verification is recorded in `FIX_VERIFICATION.md`; earlier browser tests use fixtures and do not prove live AI provider availability.
 
 For implementation acceptance:
 

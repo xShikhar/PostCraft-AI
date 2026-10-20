@@ -1,6 +1,6 @@
 # PostCraft AI maintainer map
 
-Reconciled 15 October 2026. Read PostCraft_AI_Complete_Documentation.md for contracts, DEPLOYMENT_ARCHITECTURE.md for hosting/settings and DEPLOYMENT.md before release.
+Reconciled 20 October 2026 for `frontend-redesign`. Read PostCraft_AI_Complete_Documentation.md for contracts, DEPLOYMENT_ARCHITECTURE.md for hosting/settings and DEPLOYMENT.md before release.
 
 | Change | Main files |
 |---|---|

@@ -1,6 +1,6 @@
 # Performance implementation notes
 
-Updated 15 October 2026; supersedes previous benchmark/completeness claims. No new live-provider latency benchmark is claimed.
+Updated 20 October 2026; supersedes previous benchmark/completeness claims. No new live-provider latency benchmark is claimed. Visual motion is scoped to transforms/opacity where possible and respects reduced-motion preferences.
 
 - Tavily caps raw/summary fallback at 1,500 characters per result, up to five per search.
 - Base model plus optional FAST/DRAFT overrides; no SDK retries; at most two wrapper retries with full jitter capped at three seconds and recognized permanent-quota fail-fast.

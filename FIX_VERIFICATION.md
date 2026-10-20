@@ -1,6 +1,6 @@
 # PostCraft remediation and verification
 
-Updated 15 October 2026. This records fixes to the historical audit in `PROJECT_STATUS_REPORT.md`. Changes are local and uncommitted; no live application database was migrated, no production secrets were changed, and nothing was deployed or pushed.
+Updated 20 October 2026. This records fixes to the historical audit in `PROJECT_STATUS_REPORT.md` and the subsequent frontend redesign work on `frontend-redesign`. The documented implementation is committed locally and on the branch; no live application database was migrated, no production secrets were changed, and nothing was deployed from this verification record.
 
 ## Coverage of all 26 findings
 
@@ -44,14 +44,14 @@ Core implementation: [authentication](<C:/Project/Ai post/backend/app/api/auth.p
 
 ## Verification performed
 
-- Backend regression suite: **56 passed**, with two third-party deprecation warnings (Starlette/Argon2). Includes real graph execution with fake providers, authorization/consent/casing, encryption/startup failures, learning retrieval/recency, targeted retry schema, fail-closed quality, revision grounding, queue/failure contracts, rate headers, deletion outbox, restart reconciliation, bounded Chroma HTTP, resume validation/cost ownership, and fresh/idempotent migration tests.
+- Backend regression suite: **81 passed** in the latest complete recorded run, with third-party deprecation warnings. Includes real graph execution with fake providers, authorization/consent/casing, encryption/startup failures, learning retrieval/recency, targeted retry schema, fail-closed quality, revision grounding, queue/failure contracts, rate headers, deletion outbox, restart reconciliation, bounded Chroma HTTP, resume validation/cost ownership, and fresh/idempotent migration tests.
 - Fixtures explicitly replace application database/keys/provider clients/monitoring/rate storage. External HTTP is blocked. Migration tests use disposable SQLite files; the application's existing databases are not accessed.
 - Frontend TypeScript no-emit check: passed. `npm run lint`: passed. `npm run build` (Webpack): passed, including TypeScript and server-rendered route generation.
 - Headless Chrome fixture workflow: passed for authentication, direct capture, distinct composer/selection/editor states, generation, editing, finalization, header search, filtered history, profile, light/dark themes, account switching, mobile overflow and nonce CSP. Every API request is intercepted; no live providers or user accounts are involved.
 - `uv lock --check --offline` with a workspace cache: passed (147 packages). Both Compose configurations passed quiet validation without resolving real environment files. Render YAML parsed successfully. Python syntax and `git diff --check` passed.
 - Google's [official model page](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) lists the configured `gemini-3.5-flash-lite` identifier as stable with structured-output support. This verifies the public identifier, not this account's credentials, quota or latency.
 
-Reproducible checks: run `python -m pytest tests -q` in backend; run `npm run lint`, `npx tsc --noEmit --incremental false`, and `npm run build` in frontend. For browser checks, start the built frontend with `npm run start -- -p 3131`, then run `npm run test:smoke` in another terminal. The smoke script uses an isolated browser context and fixture APIs; set `BROWSER_PATH` if Chromium is not installed through Playwright. Windows sandbox execution could not initialize local event-loop/compiler sockets, so the affected local tests/builds ran with approved access outside the sandbox.
+Reproducible checks: run `python -m pytest tests -q` in backend; run `npm run lint`, `npx tsc --noEmit --incremental false`, and `npm run build` in frontend. Motion checks are grouped under `npm run test:motion`, `npm run test:finalize-review`, `npm run test:intermission`, `npm run test:living-studio`, `npm run test:writing-motion`, and `npm run test:bold-motion`. For browser checks, start the built frontend with `npm run start -- -p 3131`, then run `npm run test:smoke` in another terminal. The smoke script uses an isolated browser context and fixture APIs; set `BROWSER_PATH` if Chromium is not installed through Playwright. Windows sandbox execution could not initialize local event-loop/compiler sockets, so the affected local tests/builds ran with approved access outside the sandbox.
 
 ## Deployment and information still required
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Updated 15 October 2026.
+Updated 20 October 2026.
 
 PostCraft AI collects your username, password hash, consent version/time, writing inputs, drafts, chat history, optional resume and profile data, learned preferences, research results and estimated usage information to provide the writing service.
 

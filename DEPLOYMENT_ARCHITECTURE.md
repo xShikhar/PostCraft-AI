@@ -1,6 +1,6 @@
 # Deployment architecture and environment reference
 
-Updated 15 October 2026. This describes repository configuration, not certification of live dashboards.
+Updated 20 October 2026 for the `frontend-redesign` branch. This describes repository configuration, not certification of live dashboards.
 
 ## Path A: primary managed deployment
 

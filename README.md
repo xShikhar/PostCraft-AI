@@ -1,22 +1,25 @@
 # PostCraft AI
 
-A Next.js writing workspace backed by FastAPI, a six-node LangGraph workflow, PostgreSQL, ChromaDB, Gemini and optional Tavily/SerpApi research. It produces LinkedIn and X drafts and learns preferences from finalized selections.
+A Next.js writing workspace backed by FastAPI, a six-node LangGraph workflow, PostgreSQL, ChromaDB, Gemini and optional Tavily/SerpApi research. It produces LinkedIn and X drafts, learns preferences from finalized selections, and presents the writing pipeline as a motion-rich editorial workspace.
 
 ## Documentation
 
 - DEPLOYMENT_ARCHITECTURE.md: primary Render/Vercel/Supabase path, separate self-hosted path and environment matrix.
 - DEPLOYMENT.md: migration and release checks.
 - PostCraft_AI_Complete_Documentation.md: current behavior/API contracts.
-- PROJECT_STATUS_REPORT.md: historical audit of commit b31bf7d.
-- FIX_VERIFICATION.md: remediation coverage and checks for this working tree.
+- PROJECT_STATUS_REPORT.md: historical audit of the pre-redesign baseline; do not use it as a current feature list.
+- FIX_VERIFICATION.md: remediation coverage and verification for the current branch.
+- docs/: focused verification notes for the frontend redesign, motion system and generation intermission.
 - PRIVACY.md: current privacy/terms source mirrored in the frontend.
 
 ## Local development
 
 1. Copy backend/.env.example to backend/.env; supply a random JWT secret, a valid Fernet key and Gemini credentials. Never commit .env.
-2. Start local PostgreSQL and Chroma with docker compose up -d postgres chromadb. Local Compose starts three services (PostgreSQL, Chroma, backend); frontend runs separately.
-3. In backend: uv sync --frozen; uv run alembic upgrade head; uv run python -m app.core.migrate_resume_encryption; then uv run uvicorn app.main:app --reload --port 8000.
-4. In frontend: npm ci; set NEXT_PUBLIC_API_URL=http://localhost:8000; npm run dev.
+2. For the full stack, start local PostgreSQL and Chroma with `docker compose up -d postgres chromadb`. Local Compose starts PostgreSQL, Chroma and the backend; the frontend runs separately.
+3. In backend: `uv sync --frozen`; `uv run alembic upgrade head`; `uv run python -m app.core.migrate_resume_encryption`; then `uv run uvicorn app.main:app --reload --port 8000`.
+4. In frontend: `npm ci`; set `NEXT_PUBLIC_API_URL=http://localhost:8000`; run `npm run dev`.
+
+The local browser fixture used for visual work may use the disposable SQLite database under `scratch/local-runtime`; it is ignored by Git and is not a production data store.
 
 Local Compose overrides start.sh and requires manual migrations. Production containers run schema and legacy-encryption migrations before accepting traffic. Primary production is Render/Vercel/Supabase; production Compose adds frontend and Caddy as an independent alternative.
 
@@ -32,13 +35,13 @@ Signup records current agreement version/time. Usernames are case-insensitive an
 
 Private profile fields, resume text/summary, Preferences and context snapshots are Fernet encrypted. Drafts, raw thoughts, chats and style descriptions remain ordinary application data and require protected database access and backups.
 
-Only python -m app.cli.make_admin USER [--revoke] changes admin roles. No environment allowlist or role-changing API exists. Authenticated admin access/denials and CLI changes are audited; actor/target references are nulled on account deletion while audit records remain.
+Only `python -m app.cli.make_admin USER [--revoke]` changes admin roles. No environment allowlist, signup auto-promotion or HTTP role-changing API exists. Authenticated admin access/denials and CLI changes are audited; actor/target references are nulled on account deletion while audit records remain. The application does not currently provide email-based password recovery; an operator must reset credentials through the deployment's approved database/operations process.
 
 Deletion commits owned SQL deletion and a durable vector erasure job. HTTP 202 means erasure is pending and will retry every 30 seconds and after restart. Backups and external processor retention are operator responsibilities.
 
 ## Verification
 
-Backend: python -m pytest tests -q (in backend). Fixtures force disposable storage, mock providers and block outbound HTTP. Frontend: npm run lint; npx tsc --noEmit --incremental false; npm run build. See FIX_VERIFICATION.md for actual results and remaining staging checks.
+Backend: `python -m pytest tests -q` (in backend). Fixtures force disposable storage, mock providers and block outbound HTTP. Frontend: `npm run lint`; `npx tsc --noEmit --incremental false`; `npm run build`. Motion and browser checks are listed in `frontend/package.json` and `docs/`. See FIX_VERIFICATION.md for the latest recorded results and remaining staging checks.
 
 ## License
 
