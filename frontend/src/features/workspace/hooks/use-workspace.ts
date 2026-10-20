@@ -66,6 +66,7 @@ export function useWorkspace() {
     [profileDirty, setProfileDirty] = useState(false),
     [pending, setPending] = useState<(() => void) | null>(null);
   const [finalizeReview, setFinalizeReview] = useState<{ quality: FinalizeQuality; id: string; index: number } | null>(null);
+  const [draftsReady, setDraftsReady] = useState(false);
   const recordRef = useRef<GenerationFull | null>(null);
   const historyIndex = useRef(0),
     suppressPop = useRef(false),
@@ -119,6 +120,7 @@ export function useWorkspace() {
   );
   const hydrate = useCallback(
     (full: GenerationFull, index: number, v: WorkspaceView = "editor") => {
+      setDraftsReady(false);
       setRecord(full);
       setActive(index);
       setTopic(full.topic);
@@ -358,11 +360,13 @@ export function useWorkspace() {
   }, [openRecord, writeUrl]);
   const navigate = (v: WorkspaceView) =>
     request(() => {
+      setDraftsReady(false);
       setView(v);
       writeUrl(v, record?.generation_id, active);
     });
   const newPost = (thought = "") =>
     request(() => {
+      setDraftsReady(false);
       setRecord(null);
       setBuffer("");
       setExpectedVersion(null);
@@ -423,7 +427,8 @@ export function useWorkspace() {
               }
             : null,
       };
-      hydrate(full, 1, "selection");
+      hydrate(full, 1, view === "compose" ? "compose" : "selection");
+      setDraftsReady(view === "compose");
       writeUrl("selection", data.generation_id, 1);
       if (userRef.current)
         sessionStorage.removeItem(`postcraft:compose:${userRef.current.id}`);
@@ -654,6 +659,7 @@ export function useWorkspace() {
     busy,
     error,
     elapsed,
+    draftsReady,
     profileDirty,
     pending,
     setPending,

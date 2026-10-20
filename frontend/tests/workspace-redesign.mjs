@@ -152,6 +152,7 @@ try {
     assert.equal(await page.locator('#profileContext').inputValue(), expected.profile_context);
     assert.equal(await page.getByLabel('Include saved profile', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'Generate Drafts', exact: true }).click();
+    await page.getByRole('button', { name: 'View your drafts', exact: true }).click();
     await page.getByRole('heading', { name: 'Find your starting point.', exact: true }).waitFor();
     assert.deepEqual(state.generations[1], expected);
     assert.equal(await page.getByRole('heading', { name: /^Draft [123]$/ }).count(), 3);
@@ -165,6 +166,7 @@ try {
     assert.equal(await page.locator('#profileContext').inputValue(), expected.profile_context);
     await page.getByLabel('Include saved profile', { exact: true }).check();
     await page.getByRole('button', { name: 'Generate Drafts', exact: true }).click();
+    await page.getByRole('button', { name: 'View your drafts', exact: true }).click();
     await page.getByRole('heading', { name: 'Find your starting point.', exact: true }).waitFor();
     assert.deepEqual(state.generations[2], { ...expected, use_context: true });
     await page.getByRole('button', { name: 'Regenerate drafts', exact: true }).click();

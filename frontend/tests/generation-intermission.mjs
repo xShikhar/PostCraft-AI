@@ -76,11 +76,21 @@ try {
       await page.getByRole('alert').getByText('Temporary outage. Your idea is safe.').waitFor();
       assert.equal(await page.locator('#rawThoughts').inputValue(), 'Every decision deserves a clear owner.');
     } else {
+      await page.getByRole('region', { name: 'Drafts ready, keep playing' }).waitFor();
+      assert.equal(await page.locator('.thought-score b').textContent(), '01', 'Completion must preserve the game score');
+      await page.waitForTimeout(400);
+      assert.equal(await page.getByRole('heading', { name: 'Find your starting point.', exact: true }).count(), 0);
+      await page.getByRole('button', { name: 'Resume game' }).click();
+      await page.getByRole('button', { name: 'Lift the paper plane' }).waitFor();
+      await page.getByRole('button', { name: 'Pause game' }).click();
+      await page.getByRole('button', { name: 'View your drafts', exact: true }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: '../scratch/intermission/ready-mobile.png' });
+      await page.getByRole('button', { name: 'View your drafts', exact: true }).click();
       await page.getByRole('heading', { name: 'Find your starting point.', exact: true }).waitFor();
     }
     assert.deepEqual(errors, []);
     await context.close();
   }
-  console.log('Intermission passed: keyboard flight, motion, pause/resume, collision/restart, reduced-motion collection, mobile, immediate result and failure recovery.');
+  console.log('Intermission passed: flight, scoring, pause/restart, reduced motion, mobile, retained game on completion, explicit draft reveal and failure recovery.');
 } finally { await browser.close(); }
 

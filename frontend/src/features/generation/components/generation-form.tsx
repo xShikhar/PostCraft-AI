@@ -24,6 +24,8 @@ interface GenerationFormProps {
   setUseContext: (v: boolean) => void;
   loading: boolean;
   elapsed: number;
+  draftsReady: boolean;
+  onViewDrafts: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onGoProfile?: () => void;
 }
@@ -40,10 +42,12 @@ export function GenerationForm({
   setUseContext,
   loading,
   elapsed,
+  draftsReady,
+  onViewDrafts,
   onSubmit,
   onGoProfile,
 }: GenerationFormProps) {
-  if (loading) return <GenerationIntermission elapsed={elapsed} />;
+  if (loading || draftsReady) return <GenerationIntermission elapsed={elapsed} ready={draftsReady} onViewDrafts={onViewDrafts} />;
   return (
     <div className="workspace-enter">
       <PageHeading

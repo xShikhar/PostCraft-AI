@@ -60,6 +60,7 @@ function Workspace() {
     busy,
     error,
     elapsed,
+    draftsReady,
     profileDirty,
     pending,
     setPending,
@@ -138,6 +139,8 @@ function Workspace() {
                 setUseContext={setUseContext}
                 loading={busy === "generate"}
                 elapsed={elapsed}
+                draftsReady={draftsReady}
+                onViewDrafts={() => navigate("selection")}
                 onSubmit={(e) => {
                   e.preventDefault();
                   void generate();
