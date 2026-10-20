@@ -6,12 +6,13 @@ Updated 20 October 2026 for the `frontend-redesign` branch. Use DEPLOYMENT_ARCHI
 
 1. Back up PostgreSQL and verify restore access. Preserve the current Fernet key; do not replace it blindly.
 2. Supply DATABASE_URL, verified public-database TLS, random JWT_SECRET_KEY, valid RESUME_ENCRYPTION_KEY and Gemini credentials. Configure actual CORS origins/API hosts and remove ADMIN_USERNAMES.
-3. Review existing admins and revoke unintended grants with the CLI. Rotate any signing/database/provider credentials that used historical public defaults or were exposed. Encryption-key rotation needs controlled re-encryption with the old key.
-4. Resolve case-insensitive username collisions. Container startup applies a2d4e6f8b0c1 and encrypts legacy private fields before serving. A collision or corrupted ciphertext stops startup rather than losing data.
-5. Build frontend with correct NEXT_PUBLIC_API_URL and deploy both contracts together: signup consent, profile fields and the redesigned workspace UI are part of the same release.
-6. Run isolated tests and frontend lint/type/build plus the motion/intermission checks listed in frontend/package.json. In staging verify actual models/quotas, PostgreSQL locking/TLS, CORS, rate headers, account switching, finalized history and erasure retries.
-7. Supply real operator/support details and review privacy/terms for your actual processors/jurisdiction. The repository cannot invent business identity, legal review or processor agreements.
-8. Configure monitoring, backup/restore and billing alerts. Cost logs are configurable estimates, not invoices.
+3. Apply the RLS migration (`b4e7f2a1c9d0`) before exposing the Supabase project. PostCraft uses trusted server-side SQLAlchemy access; no direct browser Data API policies are currently required.
+4. Review existing admins and revoke unintended grants with the CLI. Rotate any signing/database/provider credentials that used historical public defaults or were exposed. Encryption-key rotation needs controlled re-encryption with the old key.
+5. Resolve case-insensitive username collisions. Container startup applies a2d4e6f8b0c1 and encrypts legacy private fields before serving. A collision or corrupted ciphertext stops startup rather than losing data.
+6. Build frontend with correct NEXT_PUBLIC_API_URL and deploy both contracts together: signup consent, profile fields and the redesigned workspace UI are part of the same release.
+7. Run isolated tests and frontend lint/type/build plus the motion/intermission checks listed in frontend/package.json. In staging verify actual models/quotas, PostgreSQL locking/TLS, CORS, rate headers, account switching, finalized history and erasure retries.
+8. Supply real operator/support details and review privacy/terms for your actual processors/jurisdiction. The repository cannot invent business identity, legal review or processor agreements.
+9. Configure monitoring, backup/restore and billing alerts. Cost logs are configurable estimates, not invoices.
 
 ## Managed path
 

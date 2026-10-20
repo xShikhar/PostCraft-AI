@@ -40,7 +40,7 @@ Caddy on ports 80/443 -> frontend and /api backend -> internal PostgreSQL/Chroma
 | POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB | Required production Compose credentials. |
 | POSTCRAFT_DOMAIN / POSTCRAFT_ADMIN_EMAIL | Caddy host/contact; host included in API allowed hosts. |
 
-Unknown legacy dotenv keys are ignored for upgrade compatibility. ADMIN_USERNAMES cannot grant a role and should be removed from dashboards. Encryption-key rotation requires controlled re-encryption with the old key, not blind replacement.
+Unknown legacy dotenv keys are ignored for upgrade compatibility. ADMIN_USERNAMES cannot grant a role and should be removed from dashboards. The `b4e7f2a1c9d0` migration enables RLS on every application table in `public`; because PostCraft uses trusted server-side SQLAlchemy access, it intentionally creates no browser-facing policies. Encryption-key rotation requires controlled re-encryption with the old key, not blind replacement.
 
 ## Startup/lifecycle
 

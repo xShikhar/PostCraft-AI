@@ -1,6 +1,6 @@
 # PostCraft AI implementation reference
 
-Updated 20 October 2026 for the `frontend-redesign` branch. See DEPLOYMENT_ARCHITECTURE.md for settings, DEPLOYMENT.md for release operations, PROJECT_STATUS_REPORT.md for the historical baseline audit and FIX_VERIFICATION.md for current checks.
+Updated 20 October 2026 for the `frontend-redesign` branch. See DEPLOYMENT_ARCHITECTURE.md for settings, DEPLOYMENT.md for release operations, PROJECT_STATUS_REPORT.md for the historical baseline audit and FIX_VERIFICATION.md for current checks. Supabase deployments must apply migration `b4e7f2a1c9d0`, which enables RLS on the application tables while keeping access server-side.
 
 ## Request path and learning
 
