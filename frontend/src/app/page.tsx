@@ -75,6 +75,8 @@ function Workspace() {
     refine,
     save,
     finalize,
+    finalizeReview,
+    setFinalizeReview,
     switchDraft,
     discard,
     evidence,
@@ -190,7 +192,7 @@ function Workspace() {
               busy={busy}
               onEditSubmit={refine}
               onSave={save}
-              onFinalize={finalize}
+              onFinalize={() => finalize()}
               onBack={() => navigate("selection")}
               onCopy={(text) => void copy(text)}
               renderMarkdown={renderMarkdown}
@@ -252,6 +254,22 @@ function Workspace() {
                 {busy === "save" ? "Saving…" : "Save and continue"}
               </button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!finalizeReview} onOpenChange={open => { if (!open && busy !== "finalize") setFinalizeReview(null); }}>
+        <DialogContent>
+          <DialogTitle>{finalizeReview?.quality.review_unavailable ? "Review unavailable" : "Your draft, your decision"}</DialogTitle>
+          <DialogDescription>The automated review is guidance, not a publishing restriction. You can revise your draft or finalize this version with the feedback below.</DialogDescription>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-3">
+            <p className="font-serif text-2xl">{finalizeReview?.quality.substance_score != null ? `Substance score: ${finalizeReview.quality.substance_score}/10` : "Score unavailable"}</p>
+            <p className="text-sm leading-6 whitespace-pre-wrap">{finalizeReview?.quality.result.replace(/^FAIL\s*:?\s*/i, "")}</p>
+          </div>
+          <p className="text-xs text-text-muted">Finalizing locks this draft and does not publish it to social media.</p>
+          {error && <p role="alert" className="text-sm text-error">{error}</p>}
+          <div className="flex flex-wrap justify-end gap-3">
+            <button className="btn-secondary" disabled={busy === "finalize"} onClick={() => setFinalizeReview(null)}>Keep editing</button>
+            <button className="btn-primary" disabled={busy === "finalize" || !finalizeReview?.quality.review_token} onClick={() => finalize(finalizeReview?.quality.review_token)}>{busy === "finalize" ? "Finalizing…" : "Finalize anyway"}</button>
           </div>
         </DialogContent>
       </Dialog>

@@ -22,3 +22,5 @@ class EditResponse(BaseModel):
 
 class FinalizeRequest(BaseModel):
     final_draft_index: Literal[1, 2, 3] = 1
+    accept_warnings: bool = False
+    review_token: str | None = Field(default=None, max_length=64)

@@ -1,5 +1,5 @@
 .craft-story { margin-top: 80px !important; color: rgb(var(--text-display-rgb)); border-top: 1px solid rgb(var(--border-hover-rgb)); }
-.craft-stage { position: relative; overflow: clip; background: rgb(var(--canvas-base-rgb)); padding: 26px 2px 32px; }
+.craft-stage { position: relative; overflow: clip; background: transparent; padding: 26px 2px 32px; }
 .craft-topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; position: relative; z-index: 5; }
 .craft-skip { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: rgb(var(--text-body-rgb)); padding: 10px 0 10px 12px; text-decoration: underline; text-underline-offset: 5px; }
 .craft-composition { position: relative; }

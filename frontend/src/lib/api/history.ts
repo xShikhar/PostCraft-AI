@@ -64,7 +64,7 @@ export type GenerationFull = {
   research_source?: string | null;
   research_confidence?: "low" | "medium" | "high" | null;
   research_retrieved_at?: string | null;
-  quality?: { result: string; substance_score?: number | null; scope?: "generation" | "draft"; draft_index?: number } | null;
+  quality?: { accepted_warnings?: boolean; review_unavailable?: boolean; result: string; substance_score?: number | null; scope?: "generation" | "draft"; draft_index?: number } | null;
 };
 
 export async function getGenerationFull(id: string): Promise<GenerationFull> {

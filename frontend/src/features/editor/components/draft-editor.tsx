@@ -51,6 +51,8 @@ export interface DraftEditorProps extends ResearchEvidence {
   error?: string;
   onReload: () => void;
   quality?: {
+    accepted_warnings?: boolean;
+    review_unavailable?: boolean;
     result?: string;
     substance_score?: number | null;
     scope?: string;
@@ -438,12 +440,17 @@ export function DraftEditor({
           <p className="font-serif text-xl text-text-display">
             Make the last pass yours.
           </p>
+          {applicableQuality && !dirty && <div className="mt-4 rounded-xl border border-border-subtle p-4 space-y-2" aria-label="Quality feedback">
+            <p className="text-sm font-semibold">{applicableQuality.substance_score != null ? `Substance score: ${applicableQuality.substance_score}/10` : "Score unavailable"}</p>
+            {applicableQuality.result?.toUpperCase() !== "PASS" && <p className="text-xs leading-6 whitespace-pre-wrap">{applicableQuality.result?.replace(/^FAIL\s*:?\s*/i, "")}</p>}
+            {applicableQuality.accepted_warnings && <p className="text-xs text-primary">Finalized with your approval of the review feedback.</p>}
+          </div>}
           <p className="text-xs text-text-muted mt-3 leading-relaxed">
             {dirty
               ? "Your current edits have not been evaluated. Save and review your changes before finalizing."
               : applicableQuality?.result?.toLowerCase() === "pass"
                 ? "The last automated quality review passed. Verify the specifics and read it in your own voice."
-                : "No passing quality assessment is available for this text. Finalization runs the actual review."}
+                : "Finalization reviews this text and shows any feedback. You can choose to finalize after reviewing warnings."}
           </p>
           <p className="text-[10px] text-text-muted mt-4">
             Finalizing saves your preferred draft and learns from your

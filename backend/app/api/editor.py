@@ -1,3 +1,4 @@
+import hashlib
 import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -99,7 +100,7 @@ async def quality_state(generation, project, user, candidate, session, telemetry
     state = {"generation_id": str(generation.id), "user_id": str(user.id), "platform": project.platform,
              "topic": generation.topic, "raw_thoughts": author_input,
              "profile_context": snapshot.get("profile", ""), "use_context": snapshot.get("use_context", False),
-             "research_result": ResearchResult(**generation.research_data) if generation.research_data else None,
+             "research_result": ResearchResult(**{"topic": generation.topic, "platform": project.platform, **generation.research_data}) if generation.research_data else None,
              "telemetry": telemetry,
              "drafts": GeneratedDrafts(draft_1=candidate, draft_2=candidate, draft_3=candidate)}
     result = await node_quality_check(state, pipeline.deps)
@@ -153,30 +154,54 @@ async def finalize_generation(request: Request, response: Response, gen_id: uuid
         if generation.active_draft_index == req.final_draft_index:
             return {"status": "finalized"}
         raise HTTPException(409, "A finalized draft cannot be changed")
+    if generation.status == "generating":
+        raise HTTPException(409, "This generation is still running. Wait until it finishes before finalizing.")
     final = getattr(generation, f"draft_{req.final_draft_index}")
-    if not final:
+    if not final or not final.strip():
         raise HTTPException(400, "Cannot finalize an empty draft")
+    fingerprint = hashlib.sha256(final.encode()).hexdigest()
+    previous_review = generation.quality_data or {}
+    if req.accept_warnings and not (
+        req.review_token and previous_review.get("review_token") == req.review_token
+        and previous_review.get("content_hash") == fingerprint
+        and previous_review.get("draft_index") == req.final_draft_index
+    ):
+        raise HTTPException(409, "This draft changed or has not been reviewed. Run Finalize again to review the current version.")
+    learned = None
     async with capacity(), operation_telemetry(str(gen_id), "finalize") as telemetry:
-        quality, pipeline, state = await quality_state(generation, project, current_user, final, session, telemetry, req.final_draft_index)
-        if quality["quality_results"] != "PASS":
-            raise HTTPException(409, "Draft needs review. Improve its grounding, substance or CTA before finalizing.")
+        if req.accept_warnings:
+            quality = {"quality_results": previous_review["result"], "substance_score": previous_review.get("substance_score")}
+            pipeline = PostGenerationPipeline(session)
+        else:
+            quality, pipeline, state = await quality_state(generation, project, current_user, final, session, telemetry, req.final_draft_index)
+        review = {"result": quality["quality_results"], "substance_score": quality.get("substance_score"), "scope": "draft", "draft_index": req.final_draft_index,
+                  "review_unavailable": "unavailable" in quality["quality_results"].lower()}
+        if quality["quality_results"] != "PASS" and not req.accept_warnings:
+            review.update(review_token=uuid.uuid4().hex, content_hash=fingerprint)
+            generation.quality_data = review
+            generation.status = "needs_review"
+            await session.commit()
+            await session.refresh(generation)
+            return {"status": "needs_review", "quality": review, "updated_at": generation.updated_at.isoformat()}
         prompt = "Learn WRITING STYLE ONLY, never credentials or facts. Compare the original and selected final draft. Describe the user's chosen structure, tone, pacing, storytelling, formatting and CTA as reusable preferences.\n" + json.dumps({"original": (generation.original_drafts or {}).get(f"draft_{req.final_draft_index}"), "final": final})
         try:
             learned_raw = await invoke_with_bounded_backoff(pipeline.deps.llm.with_structured_output(ExtractedPattern, include_raw=True).ainvoke, prompt, node_name="finalize", telemetry=telemetry)
             learned = learned_raw.get("parsed") if isinstance(learned_raw, dict) else learned_raw
-            if learned is None:
-                raise ValueError("Invalid learned style")
             if isinstance(learned_raw, dict) and learned_raw.get("raw"):
                 await log_cost(pipeline.deps, "finalize", learned_raw["raw"], gen_id)
         except Exception:
-            raise HTTPException(503, "Could not save learned style. Please retry finalization.") from None
-    session.add(Preference(user_id=current_user.id, platform=project.platform, preference_text=encrypt(json.dumps(learned.model_dump()))))
-    learned_profile = StyleProfile(user_id=current_user.id, platform=project.platform, **learned.model_dump())
-    session.add(learned_profile)
+            # Finalization is the author's decision; optional voice learning cannot block it.
+            learned = None
+    learned_profile = None
+    if learned is not None:
+        session.add(Preference(user_id=current_user.id, platform=project.platform, preference_text=encrypt(json.dumps(learned.model_dump()))))
+        learned_profile = StyleProfile(user_id=current_user.id, platform=project.platform, **learned.model_dump())
+        session.add(learned_profile)
     generation.active_draft_index = req.final_draft_index
     generation.status = "finalized"
-    generation.quality_data = {"result": "PASS", "substance_score": quality["substance_score"], "scope": "draft", "draft_index": req.final_draft_index}
+    generation.quality_data = {**review, "accepted_warnings": req.accept_warnings}
     await session.commit()
-    run_in_background(bg_index_style_profile(str(learned_profile.id), str(current_user.id)), task_name="index_learned_style")
-    # Voice memory is committed before returning. Chats remain intact.
-    return {"status": "finalized"}
+    if learned_profile is not None:
+        run_in_background(bg_index_style_profile(str(learned_profile.id), str(current_user.id)), task_name="index_learned_style")
+    return {"status": "finalized", "quality": generation.quality_data, "style_learned": learned is not None,
+            "warning": None if learned is not None else "Your draft is finalized. Voice learning was unavailable this time."}

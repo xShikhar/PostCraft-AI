@@ -17,6 +17,7 @@ import {
   finalizeDraft,
   saveDraft,
   type Drafts,
+  type FinalizeQuality,
   type GenerationParams,
 } from "@/lib/api/generation";
 import { getGenerationFull, type GenerationFull } from "@/lib/api/history";
@@ -64,6 +65,7 @@ export function useWorkspace() {
     [elapsed, setElapsed] = useState(0),
     [profileDirty, setProfileDirty] = useState(false),
     [pending, setPending] = useState<(() => void) | null>(null);
+  const [finalizeReview, setFinalizeReview] = useState<{ quality: FinalizeQuality; id: string; index: number } | null>(null);
   const recordRef = useRef<GenerationFull | null>(null);
   const historyIndex = useRef(0),
     suppressPop = useRef(false),
@@ -556,22 +558,32 @@ export function useWorkspace() {
     };
     request(() => void run());
   };
-  const finalize = () => {
-    if (!record || record.status === "finalized") return;
+  const finalize = (reviewToken?: string) => {
+    if (!record || record.status === "finalized" || operation.current) return;
+    if (reviewToken && (finalizeReview?.id !== record.generation_id || finalizeReview.index !== active || editorDirty)) { setFinalizeReview(null); return; }
     request(
       () =>
         void (async () => {
           setOperation("finalize");
           setError("");
           try {
-            await finalizeDraft(record.generation_id, active);
+            const result = await finalizeDraft(record.generation_id, active, reviewToken);
             if (!alive.current) return;
+            if (result.status === "needs_review" && result.quality) {
+              setRecord(prev => prev ? { ...prev, quality: result.quality, status: "needs_review", updated_at: result.updated_at || prev.updated_at } : prev);
+              if (result.updated_at) setExpectedVersion(result.updated_at);
+              setFinalizeReview({ quality: result.quality, id: record.generation_id, index: active });
+              return;
+            }
+            if (result.status !== "finalized") throw new Error("Finalization did not complete. Please try again.");
+            setFinalizeReview(null);
             setRecord((prev) =>
               prev
-                ? { ...prev, status: "finalized", active_draft_index: active }
+                ? { ...prev, status: "finalized", active_draft_index: active, quality: result.quality || prev.quality }
                 : prev,
             );
             toast.success("Draft finalized. Your refinements have been saved.");
+            if (result.warning) toast.info(result.warning);
           } catch (e) {
             if (alive.current) {
               setError(e instanceof Error ? e.message : "Finalization failed.");
@@ -657,6 +669,8 @@ export function useWorkspace() {
     refine,
     save,
     finalize,
+    finalizeReview,
+    setFinalizeReview,
     switchDraft,
     discard,
     evidence,

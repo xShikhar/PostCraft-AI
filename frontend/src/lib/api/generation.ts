@@ -57,10 +57,12 @@ export async function editDraft(generationId: string, draftIndex: number, instru
   });
 }
 
-export async function finalizeDraft(generationId: string, finalDraftIndex: number) {
-  return fetchApi<{ status: string }>(`/api/generations/${generationId}/finalize`, {
+export type FinalizeQuality = { result: string; substance_score?: number | null; scope: "draft"; draft_index: number; review_token?: string; review_unavailable?: boolean; accepted_warnings?: boolean };
+export type FinalizeResponse = { status: string; quality?: FinalizeQuality; updated_at?: string; warning?: string | null };
+export async function finalizeDraft(generationId: string, finalDraftIndex: number, reviewToken?: string) {
+  return fetchApi<FinalizeResponse>(`/api/generations/${generationId}/finalize`, {
     method: "POST",
-    body: JSON.stringify({ final_draft_index: finalDraftIndex }),
+    body: JSON.stringify({ final_draft_index: finalDraftIndex, ...(reviewToken ? { accept_warnings: true, review_token: reviewToken } : {}) }),
   });
 }
 
