@@ -137,7 +137,7 @@ function Workspace() {
                 useContext={useContext}
                 setUseContext={setUseContext}
                 loading={busy === "generate"}
-                loadingStepText={`Researching and writing your three drafts. Elapsed: ${elapsed}s. This can take a few minutes.`}
+                elapsed={elapsed}
                 onSubmit={(e) => {
                   e.preventDefault();
                   void generate();

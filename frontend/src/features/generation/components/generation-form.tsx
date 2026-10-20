@@ -10,6 +10,7 @@ import {
   Check,
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
+import { GenerationIntermission } from "./generation-intermission";
 interface GenerationFormProps {
   topic: string;
   setTopic: (v: string) => void;
@@ -22,7 +23,7 @@ interface GenerationFormProps {
   useContext: boolean;
   setUseContext: (v: boolean) => void;
   loading: boolean;
-  loadingStepText: string;
+  elapsed: number;
   onSubmit: (e: React.FormEvent) => void;
   onGoProfile?: () => void;
 }
@@ -38,10 +39,11 @@ export function GenerationForm({
   useContext,
   setUseContext,
   loading,
-  loadingStepText,
+  elapsed,
   onSubmit,
   onGoProfile,
 }: GenerationFormProps) {
+  if (loading) return <GenerationIntermission elapsed={elapsed} />;
   return (
     <div className="workspace-enter">
       <PageHeading
@@ -193,14 +195,6 @@ Bullet points, messy notes, and unfinished thoughts are welcome."
               )}
             </button>
           </div>
-          {loading && (
-            <p
-              role="status"
-              className="px-6 py-4 bg-primary/5 border-t border-border-subtle text-xs text-primary"
-            >
-              {loadingStepText}
-            </p>
-          )}
         </form>
         <aside className="space-y-5">
           <section data-motion="panel" className="paper p-6">

@@ -143,8 +143,8 @@ try {
     await capture('composer');
     const expected = { topic: 'Decision ownership', platform: 'x', raw_thoughts: 'Explicit ownership avoids stalled review.', profile_context: 'Write for product teams making async decisions.', use_context: false };
     await page.getByRole('button', { name: 'Generate Drafts', exact: true }).click();
-    await page.getByRole('button', { name: 'Writing your drafts…', exact: true }).waitFor();
-    assert.equal(await page.locator('#topic').isDisabled(), true);
+    await page.getByRole('region', { name: 'Draft generation in progress' }).waitFor();
+    assert.equal(await page.locator('#topic').count(), 0);
     await page.getByRole('alert').getByText('Fixture provider unavailable; your input is safe.', { exact: true }).waitFor();
     assert.deepEqual(state.generations[0], expected);
     assert.equal(await page.locator('#topic').inputValue(), expected.topic);
