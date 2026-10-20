@@ -3,6 +3,7 @@ import { login as apiLogin, signup as apiSignup } from "@/lib/api/auth";
 import { ApiError, getAuthToken, clearAuth } from "@/lib/api/client";
 import { toast } from "sonner";
 import { useMounted } from "@/lib/use-mounted";
+import { enterStudio } from "@/components/motion/studio-entry";
 
 function subscribeAuth(callback: () => void) {
   window.addEventListener("storage", callback);
@@ -30,9 +31,11 @@ export function useAuth() {
     try {
       setIsLoading(true);
       const data = await apiLogin(username, password, rememberMe);
-      clearAuth();
-      (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
-      window.dispatchEvent(new Event("auth-changed"));
+      await enterStudio(() => {
+        clearAuth();
+        (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
+        window.dispatchEvent(new Event("auth-changed"));
+      });
       toast.success("Welcome back!");
       return true;
     } catch (err: unknown) {
@@ -56,9 +59,11 @@ export function useAuth() {
     try {
       setIsLoading(true);
       const data = await apiSignup(username, password, rememberMe);
-      clearAuth();
-      (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
-      window.dispatchEvent(new Event("auth-changed"));
+      await enterStudio(() => {
+        clearAuth();
+        (rememberMe ? localStorage : sessionStorage).setItem("postcraft_token", data.access_token);
+        window.dispatchEvent(new Event("auth-changed"));
+      });
       toast.success("Account created successfully!");
       return true;
     } catch (err: unknown) {

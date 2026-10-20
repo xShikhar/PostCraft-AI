@@ -1,0 +1,62 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const origin = process.env.BASE_URL || 'http://127.0.0.1:3131';
+fs.mkdirSync('../scratch/living-studio', { recursive: true });
+const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('theme', 'dark');
+    window.entryTransitions = 0;
+    const native = document.startViewTransition?.bind(document);
+    if (native) document.startViewTransition = fn => { window.entryTransitions++; return native(fn); };
+  });
+  let authenticated = false;
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/auth/login') { await route.fulfill(authenticated ? { json: { access_token: 'studio-fixture' } } : { status: 401, json: { detail: 'Invalid credentials' } }); return; }
+    await route.fulfill({ json: path === '/api/users/me' ? { id: 'studio', username: 'writer', is_admin: false } : path.endsWith('/resume') ? null : path.endsWith('/metrics') ? { total: 0, finalized: 0, in_progress: 0, recent_dates: [] } : { items: [], total: 0 } });
+  });
+  await page.goto(origin);
+  await page.locator('#username').waitFor();
+  await page.waitForTimeout(2200);
+  const thread = page.locator('.living-thread').first();
+  const first = await thread.getAttribute('d');
+  await page.waitForTimeout(300);
+  assert.notEqual(await thread.getAttribute('d'), first, 'Ink should flow without input');
+  await page.getByRole('button', { name: 'A question.', exact: true }).click();
+  await page.getByText('What would you ask if there were no wrong questions?').waitFor();
+  const stage = await page.locator('.auth-stage').boundingBox();
+  await page.mouse.click(stage.x + 25, stage.y + 180);
+  await page.waitForTimeout(150);
+  assert.ok(Number(await page.locator('.living-ripple').evaluate(el => el.style.opacity)) > 0, 'Background clicks create an ink ripple');
+  await page.screenshot({ path: '../scratch/living-studio/login-dark.png' });
+  await page.locator('#username').fill('writer');
+  await page.locator('#password').fill('example-password');
+  const frozen = await thread.getAttribute('d');
+  await page.waitForTimeout(250);
+  assert.equal(await thread.getAttribute('d'), frozen, 'Typing quiets the ink');
+  await page.getByRole('button', { name: 'Sign in to PostCraft', exact: true }).click();
+  await page.getByText('Invalid credentials', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.entryTransitions), 0);
+  authenticated = true;
+  await page.getByRole('button', { name: 'Sign in to PostCraft', exact: true }).click();
+  await page.locator('#quick-thought').waitFor();
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.entryTransitions), 1, 'Only successful authentication transitions');
+  await page.screenshot({ path: '../scratch/living-studio/home-dark.png' });
+  await page.getByRole('button', { name: 'Pause motion', exact: true }).click();
+  const homeThread = page.locator('.living-thread').first();
+  const stopped = await homeThread.getAttribute('d');
+  await page.waitForTimeout(250);
+  assert.equal(await homeThread.getAttribute('d'), stopped);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  await page.screenshot({ path: '../scratch/living-studio/home-mobile.png' });
+  assert.deepEqual(errors, []);
+  await page.close();
+  console.log('Living studio passed: ambient flow, click ripple, fragment interaction, focus quieting, failed/successful auth, pause cleanup and mobile overflow.');
+} finally { await browser.close(); }

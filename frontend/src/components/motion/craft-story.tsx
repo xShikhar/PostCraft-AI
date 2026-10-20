@@ -26,9 +26,9 @@ export function CraftStory({ onNewPost }: { onNewPost: (thought?: string) => voi
     media.add("(min-width: 1024px) and (min-height: 700px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)", () => {
       section.dataset.storyMode = "pinned";
       const cards = section.querySelectorAll<HTMLElement>(".craft-paper");
-      gsap.set(cards[0], { rotation: -5, y: 12 });
-      gsap.set(cards[1], { rotation: 12, y: 680, x: 65 });
-      gsap.set(cards[2], { rotation: -14, y: 740, x: -55 });
+      gsap.set(cards[0], { rotation: -5, y: 12, transformPerspective: 1200 });
+      gsap.set(cards[1], { rotation: 12, y: 680, x: 65, rotationX: -24, z: -180, transformPerspective: 1200 });
+      gsap.set(cards[2], { rotation: -14, y: 740, x: -55, rotationX: 28, z: -240, transformPerspective: 1200 });
       const timeline = gsap.timeline({
         defaults: { ease: "none" },
         scrollTrigger: {
@@ -38,16 +38,29 @@ export function CraftStory({ onNewPost }: { onNewPost: (thought?: string) => voi
         },
       });
       timeline.to(cards[0], { rotation: -9, scale: 0.94, y: -22, duration: 1 }, 0)
-        .to(cards[1], { rotation: 4, y: 8, x: 0, duration: 0.85 }, 0.12)
+        .to(cards[1], { rotation: 4, y: 8, x: 0, rotationX: 0, z: 0, duration: 0.85 }, 0.12)
         .to(cards[1], { rotation: 8, scale: 0.96, y: -12, duration: 0.8 }, 1)
-        .to(cards[2], { rotation: -2, y: 0, x: 0, duration: 0.85 }, 1.12)
+        .to(cards[2], { rotation: -2, y: 0, x: 0, rotationX: 0, z: 0, duration: 0.85 }, 1.12)
+        .fromTo(cards[1].querySelector(".craft-paper-copy"), { clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0% 0)", duration: .5 }, .45)
+        .fromTo(cards[2].querySelector(".craft-paper-copy"), { clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0% 0)", duration: .5 }, 1.45)
         .to(".craft-word", { x: (i: number) => [18, -12, 25][i], duration: 2, stagger: 0.025 }, 0)
         .to(".craft-orbit", { rotation: 85, y: -100, duration: 2 }, 0)
         .fromTo(".craft-progress-fill", { scaleX: 0 }, { scaleX: 1, duration: 2 }, 0);
       // Font loading can change preceding dashboard height after initial setup.
       let live = true;
+      const papers = section.querySelector<HTMLElement>(".craft-papers")!;
+      const tiltX = gsap.quickTo(papers, "rotationX", { duration: .9, ease: "power3.out" });
+      const tiltY = gsap.quickTo(papers, "rotationY", { duration: .9, ease: "power3.out" });
+      gsap.set(papers, { transformPerspective: 1400 });
+      const move = (event: PointerEvent) => {
+        const box = papers.getBoundingClientRect();
+        tiltX(gsap.utils.clamp(-5, 5, -(event.clientY - box.top - box.height / 2) / box.height * 10));
+        tiltY(gsap.utils.clamp(-7, 7, (event.clientX - box.left - box.width / 2) / box.width * 14));
+      };
+      const reset = () => { tiltX(0); tiltY(0); };
+      papers.addEventListener("pointermove", move); papers.addEventListener("pointerleave", reset);
       document.fonts.ready.then(() => { if (live) ScrollTrigger.refresh(); });
-      return () => { live = false; delete section.dataset.storyMode; };
+      return () => { live = false; papers.removeEventListener("pointermove", move); papers.removeEventListener("pointerleave", reset); delete section.dataset.storyMode; };
     });
     return () => media.revert();
   }, { scope: root, dependencies: [paused], revertOnUpdate: true });

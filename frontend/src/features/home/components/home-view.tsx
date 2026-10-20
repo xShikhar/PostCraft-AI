@@ -21,6 +21,7 @@ import { CraftStory } from "@/components/motion/craft-story";
 import { WritingPrompts } from "@/components/motion/writing-prompts";
 import { prepareDraftTransition } from "@/components/motion/draft-transition";
 import { KineticText } from "@/components/motion/kinetic-text";
+import { LivingInk } from "@/components/motion/living-ink";
 
 export function HomeView({
   username,
@@ -111,7 +112,8 @@ export function HomeView({
   ];
   const complete = steps.filter((s) => s.done).length;
   return (
-    <div className="space-y-10 workspace-enter">
+    <div className="space-y-10 workspace-enter living-home">
+      <LivingInk />
       <section data-motion="heading" className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <p className="eyebrow mb-4 flex items-center gap-2">
@@ -134,7 +136,7 @@ export function HomeView({
           New post
         </button>
       </section>
-      <section data-motion="panel" className="paper !border-primary/15 relative overflow-hidden p-5 sm:p-7">
+      <section data-motion="panel" data-has-words={thought.trim().length > 0} className="paper living-scratchpad !border-primary/15 relative overflow-hidden p-5 sm:p-7">
         <div className="flex justify-between items-center mb-4">
           <span className="eyebrow !text-primary">The scratchpad</span>
           <Feather size={17} className="text-primary/50" />

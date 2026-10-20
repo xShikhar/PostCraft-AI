@@ -32,7 +32,7 @@ try {
   assert.deepEqual({ field: await field.boundingBox(), submit: await submit.boundingBox() }, before, 'Entrance does not translate form targets');
   await page.screenshot({ path: `${output}/settled-light.png`, fullPage: true });
   const stage = await page.locator('.auth-stage').boundingBox();
-  await page.mouse.move(stage.x + stage.width - 8, stage.y + stage.height - 8);
+  await page.mouse.move(stage.x + stage.width - 8, Math.min(stage.y + stage.height - 8, page.viewportSize().height - 8));
   await page.waitForTimeout(1100);
   const interactive = await page.locator('.auth-paper-front').evaluate(matrix);
   assert.ok(interactive.x > 28 && interactive.depth > 0.15, `Noticeable parallax and depth: ${JSON.stringify(interactive)}`);

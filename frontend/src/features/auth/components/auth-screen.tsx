@@ -11,6 +11,7 @@ import { useMotionPreference } from "@/components/motion/use-motion-preference";
 import { useMounted } from "@/lib/use-mounted";
 import { useAuth } from "../hooks/use-auth";
 import "./auth.css";
+import { LivingInk } from "@/components/motion/living-ink";
 
 gsap.registerPlugin(useGSAP);
 
@@ -23,6 +24,7 @@ function EditorialStage({ dark }: { dark: boolean }) {
   const stage = useRef<HTMLElement>(null);
   const paused = useMotionPreference();
   const entering = useRef(false);
+  const [fragment, setFragment] = useState(0);
   useGSAP(() => {
     if (paused || document.documentElement.dataset.motionPaused === "true") return;
     const media = gsap.matchMedia();
@@ -42,6 +44,7 @@ function EditorialStage({ dark }: { dark: boolean }) {
         .from(".auth-brand, .auth-stage-copy .auth-overline", { y: 22, opacity: 0, stagger: 0.08 }, 0)
         .from(".auth-title-line > span", { yPercent: 125, rotation: 7, stagger: 0.14, duration: 1.05 }, 0.12)
         .from(".auth-stage-description", { y: 32, opacity: 0 }, 0.55)
+        .from(".auth-fragment", { y: 45, rotation: -15, opacity: 0, stagger: .12, duration: 1.1 }, .65)
         .from(".auth-ink-plane", { scale: 0.45, rotation: -35, opacity: 0, duration: 1.5 }, 0.1)
         .to(".auth-orbit ellipse, .auth-orbit path", { strokeDashoffset: 0, duration: 1.5, stagger: 0.1 }, 0.2)
         .from(".auth-orbit circle, .auth-art-caption, .auth-stage-footer", { opacity: 0, stagger: 0.08 }, 0.8);
@@ -140,6 +143,7 @@ function EditorialStage({ dark }: { dark: boolean }) {
 
   return (
     <section className="auth-stage" ref={stage} aria-label="Your writing, with intention">
+      <LivingInk variant="auth" />
       <div className="auth-ink-plane" aria-hidden="true" />
       <div className="auth-brand auth-stage-enter">
         <span className="auth-brand-mark"><Image src={dark ? "/logo-dark.png" : "/logo-light.png"} alt="" width={38} height={38} priority /></span>
@@ -149,6 +153,10 @@ function EditorialStage({ dark }: { dark: boolean }) {
         <p className="auth-overline"><span /> A SPACE FOR YOUR PERSPECTIVE</p>
         <h2><span className="auth-title-line"><span>Good ideas.</span></span><span className="auth-title-line"><span>Your <em>voice.</em></span></span><span className="auth-title-line"><span>Lasting impact.</span></span></h2>
         <p className="auth-stage-description">Turn what you know into something<br className="auth-desktop-break" /> worth putting into words.</p>
+        <div className="auth-manuscript">
+          {["A spark.", "A question.", "A possibility."].map((label, index) => <button type="button" key={label} className="auth-fragment" aria-pressed={fragment === index} onClick={() => setFragment(index)}>{label}</button>)}
+          <span className="auth-fragment-note" aria-live="polite">{["What did you notice that everyone else missed?", "What would you ask if there were no wrong questions?", "What could happen if you shared that thought?"][fragment]}</span>
+        </div>
       </div>
       <div className="auth-art auth-stage-enter" aria-hidden="true">
         <svg className="auth-orbit" viewBox="0 0 640 330" fill="none"><ellipse cx="320" cy="165" rx="300" ry="114" transform="rotate(-19 320 165)" /><path d="M32 230h72M540 69h72M322 16v30M322 288v27" /><circle cx="590" cy="80" r="5" /><circle cx="48" cy="236" r="3" /></svg>
